@@ -1,0 +1,19 @@
+id: rules-question
+description: Viewer directly asks for the channel rules.
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-24T15:02:00.000Z"
+  actor:
+    id: viewer-1
+    login: onefuzzletorule
+    displayName: OneFuzzleToRule
+    roles: [viewer]
+  text: "@testchannel what are the rules here?"
+expected:
+  mode: social
+  allowedOutcomes: [action]
+  allowedActionKinds: [say]
+  allowedActionStatuses: [dry-run]
+  forbiddenActionKinds: [timeout]
+  replyShouldContainAny: [rules, followers, viewers, respect]

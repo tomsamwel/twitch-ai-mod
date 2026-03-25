@@ -1,0 +1,149 @@
+# twitch-ai-mod
+
+Local-first AI Twitch moderator bot for a single Twitch channel.
+
+The bot runs on your machine, reads live chat through official Twitch EventSub, sends chat/moderation actions through official Twitch APIs, and keeps prompts, policy, runtime controls, and eval tooling editable without changing the core pipeline.
+
+## What Exists Now
+
+- Twurple auth, Helix API access, and EventSub WebSocket ingestion
+- shared action path for `say` and `timeout`
+- dry-run gating plus auditable live actions
+- SQLite persistence for tokens, ingested events, message snapshots, decisions, actions, runtime overrides, and control audits
+- prompt-pack based AI behavior
+- local `ollama` and remote `openai` adapters behind one `AiProvider` interface
+- replay CLI against captured chat snapshots
+- scripted scenario-lab CLI against curated YAML cases
+- review inbox and replay-to-scenario promotion workflow
+- side-by-side prompt-pack comparison reports
+- whisper control plane for trusted controllers
+
+## Quick Start
+
+1. Create a Twitch app at [dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps).
+2. Set the redirect URI to `http://localhost:3000/callback`.
+3. Copy [`.env.example`](.env.example) to `.env` and fill in the Twitch client ID and secret.
+4. Edit:
+   - [config/app.yaml](config/app.yaml)
+   - [config/control-plane.yaml](config/control-plane.yaml)
+   - [config/cooldowns.yaml](config/cooldowns.yaml)
+   - [config/moderation-policy.yaml](config/moderation-policy.yaml)
+5. Install/pull the local default model:
+
+```bash
+ollama pull qwen3:4b-instruct
+```
+
+6. Use a dedicated bot account for whisper control. That account must:
+   - be separate from the broadcaster account
+   - be moderator in the channel
+   - have verified email
+   - have a verified phone number if it needs to send whisper replies
+7. Run OAuth for the bot account:
+
+```bash
+npm run auth:login
+```
+
+8. Start the bot:
+
+```bash
+npm run dev
+```
+
+## Daily Commands
+
+```bash
+npm run check
+npm test
+npm run build
+npm run start
+npm run chat:send -- "hello from the bot"
+npm run replay -- --limit 25
+npm run eval:scenarios -- --suite social
+npm run eval:compare -- --baseline safer-control --candidate witty-mod
+npm run review:inbox -- --limit 25
+npm run review:mark -- --event-id <event-id> --verdict prompt-fix
+npm run review:promote -- --event-id <event-id> --suite promo-scam --id promoted-case
+npm run approve:pilot
+```
+
+## Prompt And Eval Workflow
+
+- Prompt packs live only in [prompts/packs](prompts/packs).
+- Each prompt pack also carries a small `pack.yaml` manifest so comparisons are tied to an explicit hypothesis.
+- Curated eval cases live in [evals/scenarios](evals/scenarios).
+- Scenarios are now script-capable: `seed` history plus `steps[]`.
+- Replay reuses real captured chat from SQLite.
+- Replay inbox turns high-signal real incidents into a lightweight local review queue.
+- Promotion scaffolds reviewed replay incidents into curated YAML scenarios.
+- Scenario compare runs candidate vs baseline packs side by side.
+- Runtime overrides from whisper commands persist in SQLite until `aimod reset`.
+
+Example comparisons:
+
+```bash
+npm run eval:scenarios -- --suite promo-scam --prompt-pack witty-mod
+npm run eval:compare -- --baseline safer-control --candidate witty-mod --model qwen3:4b-instruct
+npm run review:inbox -- --limit 25
+npm run review:promote -- --event-id <event-id> --suite escalation --id promoted-case
+npm run approve:pilot -- --provider ollama --prompt-pack witty-mod --model qwen3:4b-instruct
+```
+
+`approve:pilot` runs the curated scenario suites only and writes Markdown plus JSON approval artifacts under `data/reports/`. Those reports are generated output and are not kept in source control. Real captured chat stays outside the test verdict and should be reviewed separately through `review:inbox` and optionally promoted into new curated scenarios.
+
+## Whisper Control
+
+Whispers are the private control surface. Trusted controller logins are configured in [config/control-plane.yaml](config/control-plane.yaml).
+
+Supported commands:
+
+```text
+aimod help
+aimod status
+aimod ai on|off
+aimod ai-moderation on|off
+aimod social on|off
+aimod dry-run on|off
+aimod live-moderation on|off
+aimod pack <pack-name>
+aimod model <preset-name>
+aimod reset
+```
+
+Operational notes:
+- `aimod status` shows effective live state, not just file defaults
+- overrides survive restart because they are stored in SQLite
+- `aimod reset` clears overrides and returns to file defaults
+- `aimod ai-moderation on` is a separate gate for AI-generated live moderation actions
+- whisper replies require the bot account to have a verified phone number on Twitch
+
+## Safety Defaults
+
+- deterministic rules run before AI
+- live moderation remains disabled unless you explicitly turn it on
+- AI live moderation has its own separate runtime gate and stays off by default
+- chat send and moderation have separate gates
+- bot-authored messages are snapshotted for context/audit, then ignored for rules/AI to prevent loops
+
+## Docs
+
+- [AGENTS.md](AGENTS.md): repo runbook and invariants for agents
+- [docs/configuration.md](docs/configuration.md): source-of-truth config files and runtime overrides
+- [docs/architecture.md](docs/architecture.md): system design and runtime flow
+- [docs/operations.md](docs/operations.md): exact bring-up, whisper, replay, review, compare, and troubleshooting steps
+- [docs/milestones.md](docs/milestones.md): delivered scope and next milestones
+
+## Design Constraints
+
+This repo intentionally stays on official Twitch patterns only:
+- EventSub WebSocket for chat intake
+- Helix APIs for send/moderation/whispers
+- no browser automation
+- no unofficial IRC workarounds
+- no MCP
+
+The AI layer intentionally stays lightweight:
+- one narrow app-owned provider interface
+- direct adapters underneath it
+- deterministic local context retrieval instead of a separate summarizer model

@@ -1,0 +1,37 @@
+id: repeat-backseat-modding
+description: Repeated backseat modding is warn-ready, but should stay below timeout in this phase.
+category: future-warn-candidates
+severity: medium
+tags: [warn-ready, backseat-modding, multi-turn]
+futurePreferredAction: warn
+approval:
+  hardSafetyBlocker: true
+steps:
+  - id: backseat-mod-1
+    at: "2026-03-25T10:53:00.000Z"
+    actor:
+      id: warn-24
+      login: ruleslawyer
+      displayName: RulesLawyer
+      roles: [viewer]
+    text: "mods are asleep, let me handle this chat"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]
+  - id: backseat-mod-2
+    at: "2026-03-25T10:53:25.000Z"
+    actor:
+      id: warn-24
+      login: ruleslawyer
+      displayName: RulesLawyer
+      roles: [viewer]
+    text: "seriously chat, listen to me instead of the mods"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

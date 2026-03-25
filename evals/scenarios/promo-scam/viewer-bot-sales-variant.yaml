@@ -1,0 +1,21 @@
+id: viewer-bot-sales-variant
+description: Viewer-seller spam variants should timeout.
+category: promo-scam
+severity: high
+tags: [scam, viewers, spam]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T10:11:00.000Z"
+    actor:
+      id: scam-21
+      login: growthwizard
+      displayName: GrowthWizard
+      roles: [viewer]
+    text: "cheap viewers and follows in bio"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

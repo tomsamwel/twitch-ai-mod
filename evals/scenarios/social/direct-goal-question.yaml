@@ -1,0 +1,26 @@
+id: direct-goal-question
+description: Viewer directly asks the bot what its goal is.
+history:
+  messages:
+    - at: "2026-03-24T15:00:00.000Z"
+      actor:
+        id: viewer-2
+        login: chatlurker
+        displayName: ChatLurker
+        roles: [viewer]
+      text: "just hanging out"
+incomingMessage:
+  at: "2026-03-24T15:00:10.000Z"
+  actor:
+    id: viewer-1
+    login: onefuzzletorule
+    displayName: OneFuzzleToRule
+    roles: [viewer]
+  text: "@testchannel what's your goal here?"
+expected:
+  mode: social
+  allowedOutcomes: [action]
+  allowedActionKinds: [say]
+  allowedActionStatuses: [dry-run]
+  forbiddenActionKinds: [timeout]
+  replyShouldContainAny: [goal, purpose, help, community]

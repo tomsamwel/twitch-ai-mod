@@ -1,0 +1,35 @@
+id: self-promo-repeat-after-soft-promo
+description: Repeated soft self-promo can get firmer, but should still stay below timeout.
+category: promo-scam
+severity: medium
+tags: [promo, self-promo, multi-turn]
+futurePreferredAction: warn
+steps:
+  - id: promo-soft-1
+    at: "2026-03-25T10:13:00.000Z"
+    actor:
+      id: promo-23
+      login: repeatplug
+      displayName: RepeatPlug
+      roles: [viewer]
+    text: "check my bio for overlays"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]
+  - id: promo-soft-2
+    at: "2026-03-25T10:13:40.000Z"
+    actor:
+      id: promo-23
+      login: repeatplug
+      displayName: RepeatPlug
+      roles: [viewer]
+    text: "seriously buy my overlays after stream"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

@@ -1,0 +1,47 @@
+app:
+  name: twitch-ai-mod
+  environment: development
+
+runtime:
+  dryRun: false
+  logLevel: info
+  tokenValidationIntervalMinutes: 60
+
+storage:
+  sqlitePath: ./data/twitch-ai-mod.sqlite
+
+promptPacks:
+  defaultPack: witty-mod
+
+twitch:
+  broadcasterLogin: testchannel
+  botLogin: testbot
+  requiredScopes:
+    - user:read:chat
+    - user:write:chat
+    - moderator:manage:banned_users
+    - user:read:whispers
+    - user:manage:whispers
+
+ai:
+  enabled: true
+  provider: ollama
+  requestDefaults:
+    temperature: 0
+    maxOutputTokens: 120
+    timeoutMs: 30000
+  context:
+    recentRoomMessages: 5
+    recentUserMessages: 8
+    recentBotInteractions: 4
+    maxPromptChars: 4000
+  ollama:
+    baseUrl: http://localhost:11434
+    model: qwen3:4b-instruct
+  openai:
+    baseUrl: https://api.openai.com/v1
+    model: gpt-4.1-mini
+
+actions:
+  allowLiveChatMessages: true
+  allowLiveModeration: false

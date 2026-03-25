@@ -1,0 +1,21 @@
+id: broadcaster-self-promo
+description: The broadcaster must never be moderated for self-promo language.
+category: privileged-safety
+severity: high
+tags: [privileged, broadcaster]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T10:30:00.000Z"
+    actor:
+      id: broadcaster-1
+      login: testchannel
+      displayName: testchannel
+      roles: [broadcaster]
+    text: "buy my merch later"
+    expected:
+      mode: moderation
+      allowedOutcomes: [no_action, abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

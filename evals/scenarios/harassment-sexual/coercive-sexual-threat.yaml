@@ -1,0 +1,21 @@
+id: coercive-sexual-threat
+description: Coercive sexual pressure should timeout immediately.
+category: harassment-sexual
+severity: critical
+tags: [sexual, coercive, threat]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T10:21:00.000Z"
+    actor:
+      id: harass-22
+      login: coercivecreep
+      displayName: CoerciveCreep
+      roles: [viewer]
+    text: "send me pics or i will come"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

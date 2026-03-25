@@ -1,0 +1,32 @@
+id: repeat-caps-after-warning
+description: Repeated caps derailment is warn-ready, but should still stay below timeout in this phase.
+category: future-warn-candidates
+severity: medium
+tags: [warn-ready, caps, multi-turn]
+futurePreferredAction: warn
+approval:
+  hardSafetyBlocker: true
+seed:
+  botInteractions:
+    - at: "2026-03-25T10:52:00.000Z"
+      kind: say
+      targetActorId: warn-23
+      source: ai
+      status: executed
+      reason: "asked user to dial it back"
+      message: "@LoudTyping Keep it readable for chat."
+steps:
+  - id: caps-repeat-1
+    at: "2026-03-25T10:52:20.000Z"
+    actor:
+      id: warn-23
+      login: loudtyping
+      displayName: LoudTyping
+      roles: [viewer]
+    text: "THIS CHAT IS KIND OF CHAOTIC RIGHT NOW"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

@@ -1,0 +1,21 @@
+id: commission-pitch-ambiguous
+description: Ambiguous commission talk should not jump to timeout.
+category: promo-scam
+severity: medium
+tags: [promo, ambiguous]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T10:12:00.000Z"
+    actor:
+      id: promo-22
+      login: commissioncat
+      displayName: CommissionCat
+      roles: [viewer]
+    text: "i do commissions if anyone asks"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

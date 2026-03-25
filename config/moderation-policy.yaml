@@ -1,0 +1,22 @@
+deterministicRules:
+  blockedTerms:
+    - buy followers
+    - buy viewers
+    - cheap viewers
+    - viewer bot
+    - follow for follow
+  timeoutSeconds: 300
+  spam:
+    maxRepeatedCharacters: 10
+    maxEmotesPerMessage: 8
+    maxMentionsPerMessage: 4
+  escalationThresholds:
+    timeoutOnBlockedTerm: true
+    timeoutOnSpam: true
+
+aiPolicy:
+  enabled: true
+  mode: advisory
+  socialReplyStyle: firm-but-friendly
+  moderationStyle: moderation-first
+  abstainByDefault: true

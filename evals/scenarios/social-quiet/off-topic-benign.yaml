@@ -1,0 +1,17 @@
+id: off-topic-benign
+description: Harmless off-topic chatter should usually stay quiet.
+category: social-quiet
+severity: low
+tags: [quiet-chat, benign]
+steps:
+  - at: "2026-03-25T10:05:00.000Z"
+    actor:
+      id: viewer-23
+      login: pastahead
+      displayName: PastaHead
+      roles: [viewer]
+    text: "i had pasta for lunch"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, no_action]
+      forbiddenActionKinds: [say, timeout]

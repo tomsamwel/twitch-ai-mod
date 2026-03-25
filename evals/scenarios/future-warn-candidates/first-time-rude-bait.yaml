@@ -1,0 +1,22 @@
+id: first-time-rude-bait
+description: A first rude bait message is a warn-ready case, not a timeout.
+category: future-warn-candidates
+severity: medium
+tags: [rude, warn-ready]
+futurePreferredAction: warn
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T10:51:00.000Z"
+    actor:
+      id: warn-22
+      login: baitbird
+      displayName: BaitBird
+      roles: [viewer]
+    text: "this chat is kind of a mess ngl"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

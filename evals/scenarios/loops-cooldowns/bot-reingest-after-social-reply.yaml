@@ -1,0 +1,29 @@
+id: bot-reingest-after-social-reply
+description: Bot-authored social replies must still be ignored on re-ingest.
+category: loops-cooldowns
+severity: high
+tags: [self-loop, bot]
+approval:
+  hardSafetyBlocker: true
+seed:
+  botInteractions:
+    - at: "2026-03-25T10:36:00.000Z"
+      kind: say
+      targetActorId: viewer-32
+      source: ai
+      status: executed
+      reason: "bot already replied"
+      message: "@LoopViewer I help keep chat readable."
+      externalMessageId: loop-social-message
+steps:
+  - id: loop-social-message
+    at: "2026-03-25T10:36:01.000Z"
+    actor:
+      id: bot-1
+      login: testbot
+      displayName: testbot
+      roles: [broadcaster]
+    text: "@LoopViewer I help keep chat readable."
+    expected:
+      allowedOutcomes: [ignored]
+      forbiddenActionKinds: [say, timeout]

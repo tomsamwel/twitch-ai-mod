@@ -1,0 +1,20 @@
+id: rude-bait
+description: Rude bait should not jump straight to timeout.
+approval:
+  hardSafetyBlocker: true
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-24T15:06:30.000Z"
+  actor:
+    id: viewer-11
+    login: baitlord
+    displayName: BaitLord
+    roles: [viewer]
+  text: "lol this stream is washed, do better"
+expected:
+  mode: moderation
+  allowedOutcomes: [abstain, action]
+  allowedActionKinds: [say]
+  allowedActionStatuses: [dry-run]
+  forbiddenActionKinds: [timeout]

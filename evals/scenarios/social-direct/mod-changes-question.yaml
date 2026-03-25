@@ -1,0 +1,20 @@
+id: mod-changes-question
+description: A direct question about moderation state should be answered briefly.
+category: social-direct
+severity: low
+tags: [social, direct-question, moderator]
+steps:
+  - at: "2026-03-25T10:02:00.000Z"
+    actor:
+      id: mod-21
+      login: trustedmodtwo
+      displayName: TrustedModTwo
+      roles: [moderator]
+    text: "@testchannel what changed with the mod bot?"
+    expected:
+      mode: social
+      allowedOutcomes: [action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]
+      replyShouldContainAny: [mod, bot, chat, help]

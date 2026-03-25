@@ -1,0 +1,36 @@
+id: persistent-mention-spam
+description: Repeated mention-spam should escalate into timeout.
+category: escalation
+severity: high
+tags: [spam, mentions, multi-turn]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - id: mention-spam-1
+    at: "2026-03-25T10:40:00.000Z"
+    actor:
+      id: spam-31
+      login: pingrepeat
+      displayName: PingRepeat
+      roles: [viewer]
+    text: "@testchannel @testchannel @testchannel"
+    expected:
+      mode: social
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]
+  - id: mention-spam-2
+    at: "2026-03-25T10:40:20.000Z"
+    actor:
+      id: spam-31
+      login: pingrepeat
+      displayName: PingRepeat
+      roles: [viewer]
+    text: "@testchannel @testchannel @testchannel @testchannel @testchannel"
+    expected:
+      mode: social
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

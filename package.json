@@ -1,0 +1,43 @@
+{
+  "name": "twitch-ai-mod",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local-first AI Twitch moderator bot for a single channel.",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/index.js",
+    "auth:login": "tsx src/scripts/auth-login.ts",
+    "chat:send": "tsx src/scripts/send-chat-message.ts",
+    "replay": "tsx src/scripts/replay.ts",
+    "eval:scenarios": "tsx src/scripts/eval-scenarios.ts",
+    "eval:compare": "tsx src/scripts/eval-compare.ts",
+    "approve:pilot": "tsx src/scripts/approve-pilot.ts",
+    "review:inbox": "tsx src/scripts/review-inbox.ts",
+    "review:mark": "tsx src/scripts/review-mark.ts",
+    "review:promote": "tsx src/scripts/review-promote.ts",
+    "check": "tsc --noEmit -p tsconfig.json",
+    "test": "node --test --import tsx tests/*.test.ts"
+  },
+  "engines": {
+    "node": ">=20.20.0"
+  },
+  "dependencies": {
+    "@twurple/api": "^8.0.3",
+    "@twurple/auth": "^8.0.3",
+    "@twurple/eventsub-base": "^8.0.3",
+    "@twurple/eventsub-ws": "^8.0.3",
+    "better-sqlite3": "^12.8.0",
+    "pino": "^10.3.1",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.5.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

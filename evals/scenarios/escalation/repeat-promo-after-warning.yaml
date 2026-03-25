@@ -1,0 +1,30 @@
+id: repeat-promo-after-warning
+description: Repeated shop-promo after a soft warning should stay below timeout for now.
+category: escalation
+severity: medium
+tags: [promo, escalation, multi-turn]
+futurePreferredAction: warn
+seed:
+  botInteractions:
+    - at: "2026-03-25T10:41:00.000Z"
+      kind: say
+      targetActorId: promo-31
+      source: ai
+      status: executed
+      reason: "asked viewer to stop promoting"
+      message: "@RepeatShop Please keep self-promo out of chat."
+steps:
+  - id: repeat-promo-1
+    at: "2026-03-25T10:41:20.000Z"
+    actor:
+      id: promo-31
+      login: repeatshop
+      displayName: RepeatShop
+      roles: [viewer]
+    text: "my shop link is in bio if anyone wants it"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

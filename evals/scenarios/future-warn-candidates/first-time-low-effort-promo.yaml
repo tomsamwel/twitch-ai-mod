@@ -1,0 +1,22 @@
+id: first-time-low-effort-promo
+description: First-time low-effort promo is a future warn candidate, but should stay below timeout now.
+category: future-warn-candidates
+severity: medium
+tags: [promo, warn-ready]
+futurePreferredAction: warn
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T10:50:00.000Z"
+    actor:
+      id: warn-21
+      login: tinyplug
+      displayName: TinyPlug
+      roles: [viewer]
+    text: "yo my art page is pretty cool btw"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

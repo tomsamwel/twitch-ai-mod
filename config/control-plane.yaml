@@ -1,0 +1,18 @@
+enabled: true
+commandPrefix: aimod
+trustedControllerLogins:
+  - testchannel
+  - testmod
+broadcasterAlwaysAllowed: true
+allowedPromptPacks:
+  - witty-mod
+  - safer-control
+modelPresets:
+  local-default:
+    provider: ollama
+    baseUrl: http://localhost:11434
+    model: qwen3:4b-instruct
+  local-fast:
+    provider: ollama
+    baseUrl: http://localhost:11434
+    model: qwen2.5:1.5b

@@ -1,0 +1,249 @@
+import type { Logger } from "pino";
+
+import type { BotDatabase } from "../storage/database.js";
+import type {
+  ConfigSnapshot,
+  EffectiveRuntimeSettings,
+  PromptSnapshot,
+  RuntimeOverrideKey,
+  RuntimeOverrideSnapshot,
+} from "../types.js";
+
+function matchesModelPreset(
+  config: ConfigSnapshot,
+  preset: { provider: "ollama" | "openai"; baseUrl: string; model: string },
+): boolean {
+  const providerConfig = preset.provider === "ollama" ? config.ai.ollama : config.ai.openai;
+  return (
+    config.ai.provider === preset.provider &&
+    providerConfig.baseUrl === preset.baseUrl &&
+    providerConfig.model === preset.model
+  );
+}
+
+export interface RuntimeSettingsAccessor {
+  getEffectiveSettings(): EffectiveRuntimeSettings;
+}
+
+export function buildEffectiveRuntimeSettings(
+  baseConfig: ConfigSnapshot,
+  promptPacks: Map<string, PromptSnapshot>,
+  overrides: RuntimeOverrideSnapshot,
+): EffectiveRuntimeSettings {
+  const promptPackName = overrides.promptPack ?? baseConfig.ai.promptPack;
+  const prompts = promptPacks.get(promptPackName) ?? baseConfig.prompts;
+  const selectedPreset = resolveModelPresetName(baseConfig, overrides.modelPreset);
+  const preset = selectedPreset ? baseConfig.controlPlane.modelPresets[selectedPreset] : null;
+  const provider = preset?.provider ?? baseConfig.ai.provider;
+  const providerBaseUrl =
+    preset?.baseUrl ?? (provider === "ollama" ? baseConfig.ai.ollama.baseUrl : baseConfig.ai.openai.baseUrl);
+  const model = preset?.model ?? (provider === "ollama" ? baseConfig.ai.ollama.model : baseConfig.ai.openai.model);
+
+  return {
+    aiEnabled: overrides.aiEnabled ?? baseConfig.ai.enabled,
+    aiModerationEnabled: overrides.aiModerationEnabled ?? false,
+    socialRepliesEnabled: overrides.socialRepliesEnabled ?? true,
+    dryRun: overrides.dryRun ?? baseConfig.runtime.dryRun,
+    liveModerationEnabled: overrides.liveModerationEnabled ?? baseConfig.actions.allowLiveModeration,
+    promptPack: promptPackName,
+    prompts,
+    modelPreset: selectedPreset,
+    provider,
+    providerBaseUrl,
+    model,
+    lastOverrideAt: overrides.updatedAt,
+    lastOverrideByLogin: overrides.updatedByLogin,
+  };
+}
+
+export function createEffectiveConfig(
+  baseConfig: ConfigSnapshot,
+  settings: EffectiveRuntimeSettings,
+): ConfigSnapshot {
+  return {
+    ...baseConfig,
+    runtime: {
+      ...baseConfig.runtime,
+      dryRun: settings.dryRun,
+    },
+    prompts: settings.prompts,
+    ai: {
+      ...baseConfig.ai,
+      enabled: settings.aiEnabled,
+      promptPack: settings.promptPack,
+      provider: settings.provider,
+      ollama:
+        settings.provider === "ollama"
+          ? {
+              ...baseConfig.ai.ollama,
+              baseUrl: settings.providerBaseUrl,
+              model: settings.model,
+            }
+          : baseConfig.ai.ollama,
+      openai:
+        settings.provider === "openai"
+          ? {
+              ...baseConfig.ai.openai,
+              baseUrl: settings.providerBaseUrl,
+              model: settings.model,
+            }
+          : baseConfig.ai.openai,
+    },
+    actions: {
+      ...baseConfig.actions,
+      allowLiveModeration: settings.liveModerationEnabled,
+    },
+  };
+}
+
+export function createFixedRuntimeSettings(
+  config: ConfigSnapshot,
+  overrides: Partial<EffectiveRuntimeSettings> = {},
+): RuntimeSettingsAccessor {
+  const defaultSettings = buildEffectiveRuntimeSettings(
+    config,
+    new Map([[config.ai.promptPack, config.prompts]]),
+    {
+      updatedAt: null,
+      updatedByUserId: null,
+      updatedByLogin: null,
+    },
+  );
+  const settings: EffectiveRuntimeSettings = {
+    ...defaultSettings,
+    ...overrides,
+  };
+
+  return {
+    getEffectiveSettings() {
+      return settings;
+    },
+  };
+}
+
+function resolveModelPresetName(
+  config: ConfigSnapshot,
+  explicitModelPreset: string | undefined,
+): string | null {
+  if (explicitModelPreset) {
+    return explicitModelPreset;
+  }
+
+  for (const [presetName, preset] of Object.entries(config.controlPlane.modelPresets)) {
+    if (matchesModelPreset(config, preset)) {
+      return presetName;
+    }
+  }
+
+  return null;
+}
+
+export class RuntimeSettingsStore {
+  private overrides: RuntimeOverrideSnapshot;
+
+  public constructor(
+    private readonly baseConfig: ConfigSnapshot,
+    private readonly logger: Logger,
+    private readonly database: Pick<BotDatabase, "listRuntimeOverrides" | "setRuntimeOverride" | "clearRuntimeOverrides">,
+    private readonly promptPacks: Map<string, PromptSnapshot>,
+  ) {
+    this.overrides = this.loadOverridesFromDatabase();
+  }
+
+  public getEffectiveSettings(): EffectiveRuntimeSettings {
+    return buildEffectiveRuntimeSettings(this.baseConfig, this.promptPacks, this.overrides);
+  }
+
+  public listAvailablePromptPacks(): string[] {
+    return [...this.promptPacks.keys()].sort();
+  }
+
+  public listAvailableModelPresets(): string[] {
+    return Object.keys(this.baseConfig.controlPlane.modelPresets).sort();
+  }
+
+  public getOverrides(): RuntimeOverrideSnapshot {
+    return { ...this.overrides };
+  }
+
+  public setOverride(
+    key: RuntimeOverrideKey,
+    value: boolean | string,
+    actor: { userId: string; login: string },
+  ): void {
+    this.validateOverride(key, value);
+    this.database.setRuntimeOverride(key, value, actor);
+    this.overrides = this.loadOverridesFromDatabase();
+    this.logger.info({ key, value, actorLogin: actor.login }, "updated runtime override");
+  }
+
+  public reset(actor: { userId: string; login: string }): void {
+    this.database.clearRuntimeOverrides();
+    this.overrides = this.loadOverridesFromDatabase();
+    this.logger.warn({ actorLogin: actor.login }, "cleared runtime overrides");
+  }
+
+  private validateOverride(key: RuntimeOverrideKey, value: boolean | string): void {
+    switch (key) {
+      case "promptPack":
+        if (typeof value !== "string") {
+          throw new Error("Prompt pack overrides must be strings.");
+        }
+        if (!this.promptPacks.has(value)) {
+          throw new Error(`Unknown prompt pack: ${value}`);
+        }
+        break;
+      case "modelPreset":
+        if (typeof value !== "string") {
+          throw new Error("Model preset overrides must be strings.");
+        }
+        if (!(value in this.baseConfig.controlPlane.modelPresets)) {
+          throw new Error(`Unknown model preset: ${value}`);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  private loadOverridesFromDatabase(): RuntimeOverrideSnapshot {
+    const rows = this.database.listRuntimeOverrides();
+    const snapshot: RuntimeOverrideSnapshot = {
+      updatedAt: null,
+      updatedByUserId: null,
+      updatedByLogin: null,
+    };
+
+    for (const row of rows) {
+      switch (row.key) {
+        case "aiEnabled":
+          snapshot.aiEnabled = row.value as boolean;
+          break;
+        case "aiModerationEnabled":
+          snapshot.aiModerationEnabled = row.value as boolean;
+          break;
+        case "socialRepliesEnabled":
+          snapshot.socialRepliesEnabled = row.value as boolean;
+          break;
+        case "dryRun":
+          snapshot.dryRun = row.value as boolean;
+          break;
+        case "liveModerationEnabled":
+          snapshot.liveModerationEnabled = row.value as boolean;
+          break;
+        case "promptPack":
+          snapshot.promptPack = row.value as string;
+          break;
+        case "modelPreset":
+          snapshot.modelPreset = row.value as string;
+          break;
+      }
+
+      snapshot.updatedAt = row.updatedAt;
+      snapshot.updatedByUserId = row.updatedByUserId;
+      snapshot.updatedByLogin = row.updatedByLogin;
+    }
+
+    return snapshot;
+  }
+}

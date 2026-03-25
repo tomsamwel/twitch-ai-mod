@@ -1,0 +1,25 @@
+id: cooldown-suppression
+description: A fresh prior bot reply to the same user should suppress another immediate chat reply.
+history:
+  messages: []
+  botInteractions:
+    - at: "2026-03-24T15:10:00.000Z"
+      kind: say
+      source: ai
+      status: executed
+      reason: "bot just replied"
+      message: "@OneFuzzleToRule already answered that one."
+incomingMessage:
+  at: "2026-03-24T15:10:05.000Z"
+  actor:
+    id: viewer-1
+    login: onefuzzletorule
+    displayName: OneFuzzleToRule
+    roles: [viewer]
+  text: "@testchannel please help again"
+expected:
+  mode: social
+  allowedOutcomes: [action]
+  allowedActionKinds: [say]
+  allowedActionStatuses: [skipped]
+  forbiddenActionKinds: [timeout]

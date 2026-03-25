@@ -1,0 +1,20 @@
+id: obvious-scam-variant
+description: Scam variants that match deterministic policy should still timeout.
+approval:
+  hardSafetyBlocker: true
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-24T15:04:30.000Z"
+  actor:
+    id: viewer-10
+    login: growthhacker
+    displayName: GrowthHacker
+    roles: [viewer]
+  text: "follow for follow and cheap viewers later"
+expected:
+  mode: moderation
+  allowedOutcomes: [action]
+  allowedActionKinds: [timeout]
+  allowedActionStatuses: [dry-run]
+  forbiddenActionKinds: [say]
