@@ -1,6 +1,6 @@
 import { loadConfig } from "../config/load-config.js";
 import { runReplayEvaluation } from "../replay/replay-runner.js";
-import { applyNonLiveScriptOverrides, getActiveModel } from "./script-support.js";
+import { applyNonLiveScriptOverrides, ensureLlamaServer, getActiveModel } from "./script-support.js";
 import { BotDatabase } from "../storage/database.js";
 import { createLogger } from "../storage/logger.js";
 import type { AiProviderKind } from "../types.js";
@@ -95,6 +95,7 @@ async function main(): Promise<void> {
   });
   const config = applyNonLiveScriptOverrides(loadedConfig, options);
   const logger = createLogger(config.runtime.logLevel, `${config.app.name}-replay`);
+  const llamaServer = await ensureLlamaServer(config, logger);
   const database = new BotDatabase(config.storage.sqlitePath);
   const snapshots = database.listMessageSnapshots(options.limit);
 
@@ -138,6 +139,7 @@ async function main(): Promise<void> {
     "completed replay run",
   );
   database.close();
+  await llamaServer?.stop();
 }
 
 void main().catch((error) => {

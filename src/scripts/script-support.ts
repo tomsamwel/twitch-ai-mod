@@ -1,7 +1,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { Logger } from "pino";
 
 import { getConfiguredModel } from "../ai/provider-config.js";
+import { LlamaServerManager } from "../admin/llama-server-manager.js";
 import type { AiProviderKind, ConfigSnapshot } from "../types.js";
 
 export interface NonLiveScriptOptions {
@@ -36,6 +38,25 @@ export function applyNonLiveScriptOverrides(
 
 export function getActiveModel(config: Pick<ConfigSnapshot, "ai">): string {
   return getConfiguredModel(config);
+}
+
+export async function ensureLlamaServer(
+  config: ConfigSnapshot,
+  logger: Logger,
+): Promise<LlamaServerManager | null> {
+  if (config.ai.provider !== "llama-cpp" || !config.ai.llamaCpp?.managed) {
+    return null;
+  }
+
+  const manager = new LlamaServerManager({
+    logger,
+    modelTag: config.ai.llamaCpp.model,
+    port: Number(new URL(config.ai.llamaCpp.baseUrl).port),
+    dataDir: config.paths.dataDir,
+  });
+
+  await manager.start();
+  return manager;
 }
 
 export async function writeTimestampedReportArtifacts(

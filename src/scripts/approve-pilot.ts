@@ -9,7 +9,7 @@ import {
 import { loadConfig } from "../config/load-config.js";
 import { loadScenarios } from "../eval/load-scenarios.js";
 import { runScenarioEvaluation } from "../eval/scenario-runner.js";
-import { applyNonLiveScriptOverrides, getActiveModel, writeTimestampedReportArtifacts } from "./script-support.js";
+import { applyNonLiveScriptOverrides, ensureLlamaServer, getActiveModel, writeTimestampedReportArtifacts } from "./script-support.js";
 import { createLogger } from "../storage/logger.js";
 import type { AiProviderKind } from "../types.js";
 
@@ -80,6 +80,8 @@ async function main(): Promise<void> {
   const config = applyNonLiveScriptOverrides(loadedConfig, options);
 
   const logger = createLogger(config.runtime.logLevel, `${config.app.name}-pilot-approval`);
+  const llamaServer = await ensureLlamaServer(config, logger);
+  try {
   const aiProvider = await createAiProvider(config, logger);
   const loadedScenarios = await loadScenarios(path.resolve(config.paths.rootDir, "evals/scenarios"));
   const scenarioResults = [];
@@ -123,6 +125,9 @@ async function main(): Promise<void> {
 
   if (!report.approved) {
     process.exitCode = 1;
+  }
+  } finally {
+    await llamaServer?.stop();
   }
 }
 
