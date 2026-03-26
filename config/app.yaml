@@ -27,7 +27,7 @@ twitch:
 
 ai:
   enabled: true
-  provider: ollama
+  provider: llama-cpp
   requestDefaults:
     temperature: 0
     maxOutputTokens: 200
@@ -40,10 +40,20 @@ ai:
   ollama:
     baseUrl: http://localhost:11434
     model: qwen3:4b-instruct
+    numCtx: 2048
+    keepAlive: -1
   openai:
     baseUrl: https://api.openai.com/v1
     model: gpt-4o-mini
+  llamaCpp:
+    baseUrl: http://localhost:8081
+    model: qwen3:4b-instruct
+    managed: true
+
+admin:
+  enabled: true
+  port: 3001
 
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
+  allowLiveModeration: true

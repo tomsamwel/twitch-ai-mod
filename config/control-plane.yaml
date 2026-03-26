@@ -9,6 +9,10 @@ allowedPromptPacks:
   - safer-control
 modelPresets:
   local-default:
+    provider: llama-cpp
+    baseUrl: http://localhost:8081
+    model: qwen3:4b-instruct
+  local-ollama:
     provider: ollama
     baseUrl: http://localhost:11434
     model: qwen3:4b-instruct

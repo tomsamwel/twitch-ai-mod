@@ -7,3 +7,4 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 data/reports/
 coverage/
+data/.llama-server.pid

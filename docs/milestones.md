@@ -13,7 +13,7 @@ The repo now supports:
 - dry-run gating for all actions
 - structured logs plus SQLite audit trails
 - prompt-pack based behavior tuning
-- real `ollama` and `openai` adapters behind one provider interface
+- `llama-cpp` (default), `ollama`, and `openai` adapters behind one provider interface
 - deterministic SQLite-backed AI context retrieval
 - deterministic large visual-spam / ASCII-art detection
 - replay against captured chat snapshots

@@ -115,7 +115,7 @@ Scenario eval is for curated prompt/policy iteration, not Twitch integration tes
 
 - The app owns a narrow `AiProvider` interface.
 - Provider creation is centralized behind the provider registry/factory path.
-- `ollama` and `openai` use the same decision schema.
+- `llama-cpp`, `ollama`, and `openai` use the same decision schema.
 - Prompt packs are first-class and selected by name.
 - Prompt-pack manifests make baseline vs candidate comparisons explicit.
 - The moderation action contract is intentionally narrow:

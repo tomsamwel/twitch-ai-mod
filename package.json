@@ -18,6 +18,7 @@
     "review:inbox": "tsx src/scripts/review-inbox.ts",
     "review:mark": "tsx src/scripts/review-mark.ts",
     "review:promote": "tsx src/scripts/review-promote.ts",
+    "db:reset": "rm -f ./data/twitch-ai-mod.sqlite && echo 'Database reset. Run npm run auth:login to re-authenticate.'",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "node --test --import tsx tests/*.test.ts"
   },

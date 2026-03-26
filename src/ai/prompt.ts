@@ -49,57 +49,51 @@ function hasRecentBotCorrectiveInteraction(context: AiContextSnapshot): boolean 
   );
 }
 
-function formatRecentRoomContext(context: AiContextSnapshot): string {
-  if (context.recentRoomMessages.length === 0) {
-    return "none";
-  }
+function formatRelativeTime(isoTimestamp: string, nowMs: number): string {
+  const deltaMs = nowMs - new Date(isoTimestamp).getTime();
+  if (deltaMs < 0) return "now";
+  const seconds = Math.floor(deltaMs / 1000);
+  if (seconds < 60) return `-${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `-${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `-${hours}h${minutes % 60}m`;
+}
 
+function formatRoles(roles: string[]): string {
+  const nonDefault = roles.filter((r) => r !== "viewer");
+  return nonDefault.length > 0 ? ` [${nonDefault.join(",")}]` : "";
+}
+
+function formatRecentRoomContext(context: AiContextSnapshot, nowMs: number): string {
   return context.recentRoomMessages
     .map(
       (entry) =>
-        `- [${entry.receivedAt}] @${entry.chatterLogin}${entry.isBotMessage ? " (bot)" : ""} roles=${entry.roles.join(",")} text=${JSON.stringify(entry.text)}`,
+        `- [${formatRelativeTime(entry.receivedAt, nowMs)}] ${entry.chatterLogin}${entry.isBotMessage ? " (bot)" : ""}${formatRoles(entry.roles)} ${JSON.stringify(entry.text)}`,
     )
     .join("\n");
 }
 
-function formatRecentUserContext(context: AiContextSnapshot): string {
-  if (context.recentUserMessages.length === 0) {
-    return "none";
-  }
-
+function formatRecentUserContext(context: AiContextSnapshot, nowMs: number): string {
   return context.recentUserMessages
     .map(
       (entry) =>
-        `- [${entry.receivedAt}] @${entry.chatterLogin} roles=${entry.roles.join(",")} text=${JSON.stringify(entry.text)}`,
+        `- [${formatRelativeTime(entry.receivedAt, nowMs)}] ${entry.chatterLogin}${formatRoles(entry.roles)} ${JSON.stringify(entry.text)}`,
     )
     .join("\n");
 }
 
-function formatRecentBotInteractions(context: AiContextSnapshot): string {
-  if (context.recentBotInteractions.length === 0) {
-    return "none";
-  }
-
+function formatRecentBotInteractions(context: AiContextSnapshot, nowMs: number): string {
   return context.recentBotInteractions
     .map((entry) => {
       const payload =
         entry.kind === "say" || entry.kind === "warn"
-          ? `message=${formatQuoted(entry.message)}`
-          : `durationSeconds=${entry.durationSeconds ?? "default"}`;
+          ? `msg=${formatQuoted(entry.message)}`
+          : `dur=${entry.durationSeconds ?? "default"}`;
 
-      return `- [${entry.createdAt}] ${entry.kind} status=${entry.status} source=${entry.source} ${payload} reason=${JSON.stringify(entry.reason)}`;
+      return `- [${formatRelativeTime(entry.createdAt, nowMs)}] ${entry.kind} ${entry.status} ${payload}`;
     })
     .join("\n");
-}
-
-function formatModerationPolicySummary(config: ConfigSnapshot): string {
-  const policy = config.moderationPolicy;
-  return [
-    `- privileged users (broadcaster, moderator, vip, trusted) are never timed out`,
-    `- ai posture: abstain by default, timeout only with high confidence`,
-    `- live timeout gate: minimumConfidence=${policy.aiPolicy.liveTimeouts.minimumConfidence.toFixed(2)}, categories=${policy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}`,
-    `- deterministic rules handle blocked terms and spam automatically`,
-  ].join("\n");
 }
 
 function formatDerivedSignals(
@@ -140,15 +134,9 @@ function formatDecisionExamples(mode: AiMode): string {
     'input: roles=vip "follow for follow" -> abstain, category=none, conf=0.95 (privileged user, never timeout)',
     'input: "@bot*5" after prior bot warn -> [timeout, warn], category=spam-escalation, conf=0.95 (repeated after correction)',
     'input: "shut up bot kys" -> [timeout, warn], category=targeted-harassment, conf=0.99 (kys is always a hard violation)',
-    'input: visual spam borderline -> warn, category=spam-escalation, conf=0.76 (disruptive but not extreme)',
-    'input: copypasta text wall with heavy repetition -> warn, category=spam-escalation, conf=0.82 (disruptive repetitive spam)',
     "",
     "False-positive examples (do NOT flag these):",
     'input: "gonna headshot that noob lol" -> abstain (game violence discussion, not real threat)',
-    'input: "this stream is so bad its good lmao" -> abstain (positive sentiment despite negative words)',
-    'input: "someone said a slur earlier can mods ban them" -> abstain (reporting a violation, not committing one)',
-    "",
-    'Full output shape: {"outcome":"action","reason":"...","confidence":0.95,"mode":"moderation","moderationCategory":"spam-escalation","actions":[{"kind":"timeout","reason":"..."},{"kind":"warn","reason":"...","message":"..."}]}',
   ].join("\n");
 }
 
@@ -213,6 +201,7 @@ export function composeAiPrompt(
   botIdentity: TwitchIdentity,
   signals: AiModeSignals,
   context: AiContextSnapshot,
+  nowMs: number = Date.now(),
 ): AiPromptPayload {
   const modePrompt =
     mode === "social" ? config.prompts.socialPersona.trim() : config.prompts.moderation.trim();
@@ -221,9 +210,9 @@ export function composeAiPrompt(
     config.prompts.system.trim(),
     "</role>",
     "",
-    `<mode_instructions mode="${mode}">`,
+    `<mode mode="${mode}">`,
     modePrompt,
-    "</mode_instructions>",
+    "</mode>",
     "",
     "<style>",
     config.prompts.responseStyle.trim(),
@@ -233,11 +222,11 @@ export function composeAiPrompt(
     config.prompts.safetyRules.trim(),
     "</safety>",
     "",
-    "<decision_examples>",
+    "<examples>",
     formatDecisionExamples(mode),
-    "</decision_examples>",
+    "</examples>",
     "",
-    "<decision_contract>",
+    "<contract>",
     "- Return one JSON object only. No markdown or prose outside it.",
     `- Set mode="${mode}" exactly.`,
     mode === "social"
@@ -250,55 +239,49 @@ export function composeAiPrompt(
     "- spam-escalation timeout requires prior evidence (repeated user messages or prior bot correction in history). Without evidence, use warn.",
     "- If unsure, abstain.",
     `- Hard violations that ALWAYS require action: ${HARD_VIOLATION_KEYWORDS.map((k) => `"${k}"`).join(", ")}. These are never borderline — always [timeout, warn] or warn.`,
-    "</decision_contract>",
+    "</contract>",
   ].join("\n");
 
   const user = [
-    "<conversation_context>",
+    "<ctx>",
     `<bot>@${botIdentity.login}</bot>`,
     `<channel>@${config.twitch.broadcasterLogin}</channel>`,
     `<current_mode>${mode}</current_mode>`,
     "<message>",
-    `event_id: ${message.eventId}`,
-    `chatter_id: ${message.chatterId}`,
     `chatter_login: @${message.chatterLogin}`,
     `display_name: ${message.chatterDisplayName}`,
     `roles: ${message.roles.join(",")}`,
     `privileged: ${formatYesNo(message.isPrivileged)}`,
     `text: ${JSON.stringify(message.text)}`,
-    `message_type: ${message.messageType}`,
-    `is_reply: ${formatYesNo(message.isReply)}`,
-    `reply_parent_user: ${formatQuoted(message.replyParentUserLogin)}`,
-    `is_cheer: ${formatYesNo(message.isCheer)}`,
-    `bits: ${message.bits}`,
-    `is_redemption: ${formatYesNo(message.isRedemption)}`,
-    `reward_id: ${formatQuoted(message.rewardId)}`,
+    ...(message.isReply ? [`is_reply: yes`, `reply_parent_user: ${formatQuoted(message.replyParentUserLogin)}`] : []),
+    ...(message.isCheer ? [`is_cheer: yes`, `bits: ${message.bits}`] : []),
+    ...(message.isRedemption ? [`is_redemption: yes`, `reward_id: ${formatQuoted(message.rewardId)}`] : []),
     "</message>",
-    "<mode_signals>",
-    `mentioned_bot: ${formatYesNo(signals.mentionedBot)}`,
-    `textual_mention: ${formatYesNo(signals.textualMention)}`,
-    `replied_to_bot: ${formatYesNo(signals.repliedToBot)}`,
-    `threaded_with_bot: ${formatYesNo(signals.threadedWithBot)}`,
-    `reward_triggered: ${formatYesNo(signals.rewardTriggered)}`,
-    `broadcaster_addressed: ${formatYesNo(signals.broadcasterAddressed)}`,
-    "</mode_signals>",
-    "<recent_room_context>",
-    formatRecentRoomContext(context),
-    "</recent_room_context>",
-    "<recent_same_user_history>",
-    formatRecentUserContext(context),
-    "</recent_same_user_history>",
-    "<recent_bot_interactions>",
-    formatRecentBotInteractions(context),
-    "</recent_bot_interactions>",
-    "<derived_signals>",
+    ...(mode === "social"
+      ? [
+          "<mode_sig>",
+          `mentioned_bot: ${formatYesNo(signals.mentionedBot)}`,
+          `textual_mention: ${formatYesNo(signals.textualMention)}`,
+          `replied_to_bot: ${formatYesNo(signals.repliedToBot)}`,
+          `threaded_with_bot: ${formatYesNo(signals.threadedWithBot)}`,
+          `reward_triggered: ${formatYesNo(signals.rewardTriggered)}`,
+          `broadcaster_addressed: ${formatYesNo(signals.broadcasterAddressed)}`,
+          "</mode_sig>",
+        ]
+      : []),
+    ...(context.recentRoomMessages.length > 0
+      ? ["<room>", formatRecentRoomContext(context, nowMs), "</room>"]
+      : []),
+    ...(context.recentUserMessages.length > 0
+      ? ["<user_hist>", formatRecentUserContext(context, nowMs), "</user_hist>"]
+      : []),
+    ...(context.recentBotInteractions.length > 0
+      ? ["<bot_hist>", formatRecentBotInteractions(context, nowMs), "</bot_hist>"]
+      : []),
+    "<signals>",
     formatDerivedSignals(message, context, config),
-    "</derived_signals>",
-    "</conversation_context>",
-    "",
-    "<policy_summary>",
-    formatModerationPolicySummary(config),
-    "</policy_summary>",
+    "</signals>",
+    "</ctx>",
     "",
     "<task>",
     mode === "social"

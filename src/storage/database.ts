@@ -984,4 +984,34 @@ export class BotDatabase {
       createdAt: row.created_at,
     }));
   }
+
+  public getRecentDecisionsForAdmin(limit: number): Array<Record<string, unknown>> {
+    const rows = this.database
+      .prepare(
+        `SELECT d.event_id, d.chatter_login, d.outcome, d.reason, d.stage, d.created_at,
+                json_extract(d.payload_json, '$.mode') as mode,
+                json_extract(d.payload_json, '$.confidence') as confidence,
+                json_extract(d.payload_json, '$.moderationCategory') as category,
+                substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet
+         FROM decisions d
+         LEFT JOIN message_snapshots m ON m.event_id = d.event_id
+         WHERE d.stage IN ('ai', 'rules')
+         ORDER BY d.created_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Array<Record<string, unknown>>;
+
+    return rows.map((row) => ({
+      eventId: row.event_id,
+      chatter: row.chatter_login,
+      text: row.text_snippet ?? null,
+      outcome: row.outcome,
+      mode: row.mode ?? null,
+      reason: row.reason,
+      confidence: row.confidence ?? null,
+      category: row.category ?? null,
+      stage: row.stage,
+      createdAt: row.created_at,
+    }));
+  }
 }

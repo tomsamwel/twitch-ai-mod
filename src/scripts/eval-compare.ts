@@ -7,7 +7,7 @@ import { loadPromptPackManifest } from "../ai/prompt-pack-manifest.js";
 import { loadConfig } from "../config/load-config.js";
 import { loadScenarios } from "../eval/load-scenarios.js";
 import { runScenarioEvaluation, type ScenarioEvaluationResult } from "../eval/scenario-runner.js";
-import { applyNonLiveScriptOverrides, writeTimestampedReportArtifacts } from "./script-support.js";
+import { applyNonLiveScriptOverrides, ensureLlamaServer, writeTimestampedReportArtifacts } from "./script-support.js";
 import { createLogger } from "../storage/logger.js";
 import type { AiProviderKind } from "../types.js";
 
@@ -128,8 +128,8 @@ function parseArgs(argv: string[]): EvalCompareCliOptions {
         break;
       case "--provider": {
         const value = argv[index + 1];
-        if (value !== "ollama" && value !== "openai") {
-          throw new Error("--provider must be either ollama or openai");
+        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, or llama-cpp");
         }
         options.provider = value;
         index += 1;
@@ -278,6 +278,8 @@ async function main(): Promise<void> {
   const baselineConfig = applyNonLiveScriptOverrides(baselineLoadedConfig, options);
   const candidateConfig = applyNonLiveScriptOverrides(candidateLoadedConfig, options);
   const logger = createLogger(baselineConfig.runtime.logLevel, `${baselineConfig.app.name}-eval-compare`);
+  const llamaServer = await ensureLlamaServer(baselineConfig, logger);
+  try {
   const aiProvider = await createAiProvider(baselineConfig, logger);
   const loadedScenarios = await loadScenarios(path.resolve(baselineConfig.paths.rootDir, "evals/scenarios"), {
     ...(options.suite ? { suite: options.suite } : {}),
@@ -400,6 +402,9 @@ async function main(): Promise<void> {
   );
   console.log(`Markdown report: ${artifacts.markdownPath}`);
   console.log(`JSON report: ${artifacts.jsonPath}`);
+  } finally {
+    await llamaServer?.stop();
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

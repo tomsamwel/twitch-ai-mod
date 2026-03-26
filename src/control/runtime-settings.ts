@@ -9,11 +9,22 @@ import type {
   RuntimeOverrideSnapshot,
 } from "../types.js";
 
+function getProviderConfig(
+  config: ConfigSnapshot,
+  provider: ConfigSnapshot["ai"]["provider"],
+): { baseUrl: string; model: string } | undefined {
+  if (provider === "ollama") return config.ai.ollama;
+  if (provider === "llama-cpp") return config.ai.llamaCpp;
+  if (provider === "openai") return config.ai.openai;
+  return undefined;
+}
+
 function matchesModelPreset(
   config: ConfigSnapshot,
-  preset: { provider: "ollama" | "openai"; baseUrl: string; model: string },
+  preset: { provider: ConfigSnapshot["ai"]["provider"]; baseUrl: string; model: string },
 ): boolean {
-  const providerConfig = preset.provider === "ollama" ? config.ai.ollama : config.ai.openai;
+  const providerConfig = getProviderConfig(config, preset.provider);
+  if (!providerConfig) return false;
   return (
     config.ai.provider === preset.provider &&
     providerConfig.baseUrl === preset.baseUrl &&
@@ -35,9 +46,9 @@ export function buildEffectiveRuntimeSettings(
   const selectedPreset = resolveModelPresetName(baseConfig, overrides.modelPreset);
   const preset = selectedPreset ? baseConfig.controlPlane.modelPresets[selectedPreset] : null;
   const provider = preset?.provider ?? baseConfig.ai.provider;
-  const providerBaseUrl =
-    preset?.baseUrl ?? (provider === "ollama" ? baseConfig.ai.ollama.baseUrl : baseConfig.ai.openai.baseUrl);
-  const model = preset?.model ?? (provider === "ollama" ? baseConfig.ai.ollama.model : baseConfig.ai.openai.model);
+  const defaultProviderConfig = getProviderConfig(baseConfig, provider);
+  const providerBaseUrl = preset?.baseUrl ?? defaultProviderConfig?.baseUrl ?? baseConfig.ai.ollama.baseUrl;
+  const model = preset?.model ?? defaultProviderConfig?.model ?? baseConfig.ai.ollama.model;
 
   return {
     aiEnabled: overrides.aiEnabled ?? baseConfig.ai.enabled,
@@ -88,6 +99,14 @@ export function createEffectiveConfig(
               model: settings.model,
             }
           : baseConfig.ai.openai,
+      llamaCpp:
+        settings.provider === "llama-cpp" && baseConfig.ai.llamaCpp
+          ? {
+              ...baseConfig.ai.llamaCpp,
+              baseUrl: settings.providerBaseUrl,
+              model: settings.model,
+            }
+          : baseConfig.ai.llamaCpp,
     },
     actions: {
       ...baseConfig.actions,

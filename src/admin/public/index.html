@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>twitch-ai-mod</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0e0e10; color: #efeff1; padding: 1.5rem; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 1.2rem; color: #9147ff; margin-bottom: 1.5rem; }
+  h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: #adadb8; margin-bottom: 0.75rem; }
+  section { background: #18181b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #2f2f35; }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label { font-size: 0.85rem; }
+  .toggle-label small { color: #adadb8; display: block; font-size: 0.75rem; }
+  .toggle-btn { background: #2f2f35; border: none; color: #efeff1; padding: 0.35rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; min-width: 50px; }
+  .toggle-btn.on { background: #00c853; color: #000; }
+  .toggle-btn.off { background: #c62828; color: #fff; }
+  select { background: #2f2f35; border: 1px solid #3f3f46; color: #efeff1; padding: 0.35rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
+  .reset-btn { background: #c62828; border: none; color: #fff; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-top: 0.5rem; }
+  .reset-btn:hover { background: #e53935; }
+  .status-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.8rem; }
+  .status-value { color: #adadb8; }
+  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .status-dot.green { background: #00c853; }
+  .status-dot.red { background: #c62828; }
+  .activity-item { padding: 0.5rem 0; border-bottom: 1px solid #2f2f35; font-size: 0.8rem; }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-meta { color: #adadb8; font-size: 0.7rem; margin-top: 0.2rem; }
+  .badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
+  .badge-abstain { background: #2f2f35; color: #adadb8; }
+  .badge-action { background: #9147ff; color: #fff; }
+  .badge-ignored { background: #2f2f35; color: #666; }
+  .badge-no_action { background: #2f2f35; color: #adadb8; }
+  .error { color: #c62828; font-size: 0.8rem; padding: 0.5rem; }
+</style>
+</head>
+<body>
+
+<h1>twitch-ai-mod admin</h1>
+
+<section id="llama-section">
+  <h2>LLM Server</h2>
+  <div id="llama-status">Loading...</div>
+</section>
+
+<section>
+  <h2>Settings</h2>
+  <div id="settings">Loading...</div>
+</section>
+
+<section>
+  <h2>Pack / Model</h2>
+  <div id="selectors">Loading...</div>
+</section>
+
+<section>
+  <h2>Recent Activity</h2>
+  <div id="activity">Loading...</div>
+</section>
+
+<script>
+const API = '';
+
+async function fetchStatus() {
+  try {
+    const res = await fetch(API + '/api/status');
+    if (!res.ok) throw new Error('fetch failed');
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+async function setSetting(key, value) {
+  await fetch(API + '/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, value }),
+  });
+  refresh();
+}
+
+async function resetAll() {
+  if (!confirm('Reset all overrides to defaults?')) return;
+  await fetch(API + '/api/reset', { method: 'POST' });
+  refresh();
+}
+
+function renderToggle(key, label, description, value) {
+  return `<div class="toggle-row">
+    <div class="toggle-label">${label}<small>${description}</small></div>
+    <button class="toggle-btn ${value ? 'on' : 'off'}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button>
+  </div>`;
+}
+
+function renderLlama(llama) {
+  if (!llama) {
+    document.getElementById('llama-section').style.display = 'none';
+    return;
+  }
+  document.getElementById('llama-section').style.display = '';
+  const dot = llama.running ? 'green' : 'red';
+  document.getElementById('llama-status').innerHTML = `
+    <div class="status-row"><span><span class="status-dot ${dot}"></span>${llama.running ? 'Running' : 'Stopped'}</span><span class="status-value">PID ${llama.pid || '-'}</span></div>
+    <div class="status-row"><span>Model</span><span class="status-value">${llama.model}</span></div>
+    <div class="status-row"><span>Port</span><span class="status-value">${llama.port}</span></div>
+  `;
+}
+
+function renderSettings(s) {
+  document.getElementById('settings').innerHTML = [
+    renderToggle('aiEnabled', 'AI Enabled', 'Master AI toggle', s.aiEnabled),
+    renderToggle('aiModerationEnabled', 'AI Moderation', 'Allow AI to propose timeouts and warns', s.aiModerationEnabled),
+    renderToggle('socialRepliesEnabled', 'Social Replies', 'Allow social chat responses', s.socialRepliesEnabled),
+    renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled),
+    renderToggle('dryRun', 'Dry Run', 'Prevent all real actions', s.dryRun),
+    `<button class="reset-btn" onclick="resetAll()">Reset All Overrides</button>`,
+  ].join('');
+}
+
+function renderSelectors(data) {
+  const packOptions = data.availablePacks.map(p =>
+    `<option value="${p}" ${data.settings.promptPack === p ? 'selected' : ''}>${p}</option>`
+  ).join('');
+  const modelOptions = data.availableModels.map(m =>
+    `<option value="${m}" ${data.settings.modelPreset === m ? 'selected' : ''}>${m}</option>`
+  ).join('');
+  document.getElementById('selectors').innerHTML = `
+    <div class="toggle-row">
+      <div class="toggle-label">Prompt Pack</div>
+      <select onchange="setSetting('promptPack', this.value)">${packOptions}</select>
+    </div>
+    <div class="toggle-row">
+      <div class="toggle-label">Model Preset</div>
+      <select onchange="setSetting('modelPreset', this.value)">
+        <option value="">default</option>
+        ${modelOptions}
+      </select>
+    </div>
+  `;
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return s + 's ago';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  return Math.floor(m / 60) + 'h ago';
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function renderActivity(items) {
+  if (!items || items.length === 0) {
+    document.getElementById('activity').innerHTML = '<div class="activity-meta">No recent activity</div>';
+    return;
+  }
+  document.getElementById('activity').innerHTML = items.map(a => {
+    const badge = `<span class="badge badge-${esc(a.outcome)}">${esc(a.outcome)}</span>`;
+    const text = a.text ? `"${esc(a.text)}"` : '';
+    const conf = a.confidence ? ` conf=${esc(String(a.confidence))}` : '';
+    const cat = a.category && a.category !== 'none' ? ` [${esc(a.category)}]` : '';
+    return `<div class="activity-item">
+      ${badge} <strong>@${esc(a.chatter)}</strong> ${text}
+      <div class="activity-meta">${esc(a.mode || a.stage)}${conf}${cat} &mdash; ${esc(a.reason)} &mdash; ${timeAgo(a.createdAt)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function refresh() {
+  const data = await fetchStatus();
+  if (!data) {
+    document.getElementById('settings').innerHTML = '<div class="error">Failed to connect to bot</div>';
+    return;
+  }
+  renderLlama(data.llamaServer);
+  renderSettings(data.settings);
+  renderSelectors(data);
+  renderActivity(data.recentActivity);
+}
+
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

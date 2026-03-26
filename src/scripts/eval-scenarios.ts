@@ -1,7 +1,7 @@
 import { loadConfig } from "../config/load-config.js";
 import { loadScenarios } from "../eval/load-scenarios.js";
 import { runScenarioEvaluation } from "../eval/scenario-runner.js";
-import { applyNonLiveScriptOverrides, getActiveModel } from "./script-support.js";
+import { applyNonLiveScriptOverrides, ensureLlamaServer, getActiveModel } from "./script-support.js";
 import { createLogger } from "../storage/logger.js";
 import type { AiProviderKind } from "../types.js";
 
@@ -56,8 +56,8 @@ function parseArgs(argv: string[]): ScenarioEvalCliOptions {
       case "--provider": {
         const value = argv[index + 1];
 
-        if (value !== "ollama" && value !== "openai") {
-          throw new Error("--provider must be either ollama or openai");
+        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, or llama-cpp");
         }
 
         options.provider = value;
@@ -123,6 +123,8 @@ async function main(): Promise<void> {
   });
   const config = applyNonLiveScriptOverrides(loadedConfig, options);
   const logger = createLogger(config.runtime.logLevel, `${config.app.name}-scenario-eval`);
+  const llamaServer = await ensureLlamaServer(config, logger);
+  try {
   const scenarios = await loadScenarios(`${config.paths.rootDir}/evals/scenarios`, {
     ...(options.suite ? { suite: options.suite } : {}),
     ...(options.scenarioId ? { scenarioId: options.scenarioId } : {}),
@@ -154,6 +156,9 @@ async function main(): Promise<void> {
 
   if (failedCount > 0) {
     process.exitCode = 1;
+  }
+  } finally {
+    await llamaServer?.stop();
   }
 }
 
