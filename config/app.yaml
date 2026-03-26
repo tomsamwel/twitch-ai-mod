@@ -56,4 +56,4 @@ admin:
 
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: true
+  allowLiveModeration: false
