@@ -13,6 +13,17 @@ export function getConfiguredProviderInfo(config: Pick<ConfigSnapshot, "ai">): {
     };
   }
 
+  if (config.ai.provider === "llama-cpp") {
+    if (!config.ai.llamaCpp) {
+      throw new Error("ai.llamaCpp configuration is required when provider is llama-cpp");
+    }
+    return {
+      provider: "llama-cpp",
+      baseUrl: config.ai.llamaCpp.baseUrl,
+      model: config.ai.llamaCpp.model,
+    };
+  }
+
   return {
     provider: "openai",
     baseUrl: config.ai.openai.baseUrl,

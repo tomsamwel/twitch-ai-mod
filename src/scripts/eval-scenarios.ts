@@ -56,8 +56,8 @@ function parseArgs(argv: string[]): ScenarioEvalCliOptions {
       case "--provider": {
         const value = argv[index + 1];
 
-        if (value !== "ollama" && value !== "openai") {
-          throw new Error("--provider must be either ollama or openai");
+        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, or llama-cpp");
         }
 
         options.provider = value;

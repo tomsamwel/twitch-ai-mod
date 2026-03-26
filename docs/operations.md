@@ -14,9 +14,10 @@ http://localhost:3000/callback
    - [config/control-plane.yaml](config/control-plane.yaml)
    - [config/cooldowns.yaml](config/cooldowns.yaml)
    - [config/moderation-policy.yaml](config/moderation-policy.yaml)
-4. Pull the default local model:
+4. Install llama-server and pull the model:
 
 ```bash
+brew install llama.cpp
 ollama pull qwen3:4b-instruct
 ```
 
@@ -28,7 +29,13 @@ ollama pull qwen3:4b-instruct
 npm run auth:login
 ```
 
-8. Start the app:
+8. Start llama-server (keep this terminal open):
+
+```bash
+./scripts/start-llama-server.sh
+```
+
+9. Start the bot (in a second terminal):
 
 ```bash
 npm run dev
@@ -146,7 +153,7 @@ Recommended use:
 Run the approval pass before any AI-assisted live moderation:
 
 ```bash
-npm run approve:pilot -- --provider ollama --model qwen3:4b-instruct
+npm run approve:pilot -- --model qwen3:4b-instruct
 ```
 
 What it does:
@@ -269,6 +276,6 @@ npm run build
 npm run eval:scenarios -- --model qwen3:4b-instruct
 npm run eval:scenarios -- --model qwen2.5:1.5b
 npm run eval:compare -- --baseline safer-control --candidate witty-mod --model qwen3:4b-instruct
-npm run approve:pilot -- --provider ollama --model qwen3:4b-instruct
+npm run approve:pilot -- --model qwen3:4b-instruct
 npm run review:inbox -- --limit 25
 ```

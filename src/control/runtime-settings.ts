@@ -9,11 +9,22 @@ import type {
   RuntimeOverrideSnapshot,
 } from "../types.js";
 
+function getProviderConfig(
+  config: ConfigSnapshot,
+  provider: ConfigSnapshot["ai"]["provider"],
+): { baseUrl: string; model: string } | undefined {
+  if (provider === "ollama") return config.ai.ollama;
+  if (provider === "llama-cpp") return config.ai.llamaCpp;
+  if (provider === "openai") return config.ai.openai;
+  return undefined;
+}
+
 function matchesModelPreset(
   config: ConfigSnapshot,
-  preset: { provider: "ollama" | "openai"; baseUrl: string; model: string },
+  preset: { provider: ConfigSnapshot["ai"]["provider"]; baseUrl: string; model: string },
 ): boolean {
-  const providerConfig = preset.provider === "ollama" ? config.ai.ollama : config.ai.openai;
+  const providerConfig = getProviderConfig(config, preset.provider);
+  if (!providerConfig) return false;
   return (
     config.ai.provider === preset.provider &&
     providerConfig.baseUrl === preset.baseUrl &&

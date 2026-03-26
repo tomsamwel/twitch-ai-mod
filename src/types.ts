@@ -3,7 +3,7 @@ import { z } from "zod";
 export const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
 export type LogLevel = z.infer<typeof logLevelSchema>;
 
-export type AiProviderKind = "ollama" | "openai";
+export type AiProviderKind = "ollama" | "openai" | "llama-cpp";
 export type AiMode = "social" | "moderation";
 export const moderationCategorySchema = z.enum([
   "none",
@@ -255,11 +255,17 @@ export interface ConfigSnapshot {
     ollama: {
       baseUrl: string;
       model: string;
+      numCtx?: number | undefined;
+      keepAlive?: number | undefined;
     };
     openai: {
       baseUrl: string;
       model: string;
     };
+    llamaCpp?: {
+      baseUrl: string;
+      model: string;
+    } | undefined;
   };
   actions: {
     allowLiveChatMessages: boolean;

@@ -9,7 +9,7 @@ The bot should:
 - read chat continuously
 - speak rarely but usefully
 - moderate conservatively and audibly
-- support both local and remote LLM backends behind one narrow interface
+- support local (llama-cpp, ollama) and remote (openai) LLM backends behind one narrow interface
 
 ## Product Intent
 

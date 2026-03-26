@@ -37,7 +37,7 @@ export const appConfigSchema = z.object({
   }),
   ai: z.object({
     enabled: z.boolean(),
-    provider: z.enum(["ollama", "openai"]),
+    provider: z.enum(["ollama", "openai", "llama-cpp"]),
     requestDefaults: z.object({
       temperature: z.number().min(0).max(2),
       maxOutputTokens: z.number().int().positive(),
@@ -52,11 +52,17 @@ export const appConfigSchema = z.object({
     ollama: z.object({
       baseUrl: z.url(),
       model: z.string().min(1),
+      numCtx: z.number().int().positive().optional(),
+      keepAlive: z.number().int().optional(),
     }),
     openai: z.object({
       baseUrl: z.url(),
       model: z.string().min(1),
     }),
+    llamaCpp: z.object({
+      baseUrl: z.url(),
+      model: z.string().min(1),
+    }).optional(),
   }),
   actions: z.object({
     allowLiveChatMessages: z.boolean(),
@@ -73,7 +79,7 @@ export const controlPlaneSchema = z.object({
   modelPresets: z.record(
     z.string().min(1),
     z.object({
-      provider: z.enum(["ollama", "openai"]),
+      provider: z.enum(["ollama", "openai", "llama-cpp"]),
       baseUrl: z.url(),
       model: z.string().min(1),
     }),

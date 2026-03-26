@@ -151,9 +151,16 @@ Typical override targets:
 
 ## AI Providers
 
+`ai.provider: llama-cpp` (default)
+- runs against llama-server (`brew install llama.cpp`)
+- OpenAI-compatible `/v1/chat/completions` API
+- KV cache prefix reuse via `--checkpoint-every-n-tokens` (critical for qwen3 hybrid models)
+- start with `./scripts/start-llama-server.sh`
+- configured through `ai.llamaCpp.baseUrl` and `ai.llamaCpp.model`
+
 `ai.provider: ollama`
-- local HTTP runtime
-- current default model: `qwen3:4b-instruct`
+- local Ollama HTTP runtime (KV cache broken for qwen3 hybrid models — slower)
+- configured through `ai.ollama.baseUrl` and `ai.ollama.model`
 - useful fallback preset: `qwen2.5:1.5b`
 
 `ai.provider: openai`
@@ -269,7 +276,7 @@ Replay:
 - tags replay decisions/actions separately from live runs
 
 Optional overrides:
-- `--provider ollama|openai`
+- `--provider llama-cpp|ollama|openai`
 - `--model <model-name>`
 - `--prompt-pack <pack-name>`
 
@@ -291,7 +298,7 @@ Scenario eval:
 Optional overrides:
 - `--suite <name>`
 - `--scenario <id>`
-- `--provider ollama|openai`
+- `--provider llama-cpp|ollama|openai`
 - `--model <model-name>`
 - `--prompt-pack <pack-name>`
 
@@ -359,7 +366,7 @@ Comparison runs:
 ## Pilot Approval
 
 ```bash
-npm run approve:pilot -- --provider ollama --model qwen3:4b-instruct
+npm run approve:pilot -- --model qwen3:4b-instruct
 ```
 
 Approval runs:

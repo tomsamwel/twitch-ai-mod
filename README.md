@@ -12,7 +12,7 @@ The bot runs on your machine, reads live chat through official Twitch EventSub, 
 - moderation-only public warning notices that stay separate from social replies
 - SQLite persistence for tokens, ingested events, message snapshots, decisions, actions, runtime overrides, and control audits
 - prompt-pack based AI behavior
-- local `ollama` and remote `openai` adapters behind one `AiProvider` interface
+- local `llama-cpp` (via llama-server with KV cache checkpointing), `ollama`, and remote `openai` adapters behind one `AiProvider` interface
 - deterministic large visual-spam / ASCII-art timeout detection
 - replay CLI against captured chat snapshots
 - scripted scenario-lab CLI against curated YAML cases
@@ -30,28 +30,43 @@ The bot runs on your machine, reads live chat through official Twitch EventSub, 
    - [config/control-plane.yaml](config/control-plane.yaml)
    - [config/cooldowns.yaml](config/cooldowns.yaml)
    - [config/moderation-policy.yaml](config/moderation-policy.yaml)
-5. Install/pull the local default model:
+5. Install llama-server and pull the model:
 
 ```bash
+brew install llama.cpp
 ollama pull qwen3:4b-instruct
 ```
 
-6. Use a dedicated bot account for whisper control. That account must:
+6. Start llama-server (keep this terminal open):
+
+```bash
+./scripts/start-llama-server.sh
+```
+
+7. Use a dedicated bot account for whisper control. That account must:
    - be separate from the broadcaster account
    - be moderator in the channel
    - have verified email
    - have a verified phone number if it needs to send whisper replies
-7. Run OAuth for the bot account:
+8. Run OAuth for the bot account:
 
 ```bash
 npm run auth:login
 ```
 
-8. Start the bot:
+9. Start the bot (in a second terminal):
 
 ```bash
 npm run dev
 ```
+
+## Why llama-server Instead of Ollama?
+
+The default model (`qwen3:4b-instruct`) uses a hybrid attention architecture that breaks Ollama's KV cache prefix reuse. Every request reprocesses the full prompt from scratch, adding 2-4 seconds of latency.
+
+`llama-server` from llama.cpp b8458+ includes `--checkpoint-every-n-tokens` which creates recurrent state checkpoints, enabling prefix caching. With our prompts, ~88% of the system prompt is reused across requests, reducing prompt eval from ~2-4s to ~0.9s.
+
+The `ollama` provider is still available as a fallback via `aimod model local-ollama`.
 
 ## Daily Commands
 
@@ -90,7 +105,7 @@ npm run eval:scenarios -- --suite promo-scam --prompt-pack witty-mod
 npm run eval:compare -- --baseline safer-control --candidate witty-mod --model qwen3:4b-instruct
 npm run review:inbox -- --limit 25
 npm run review:promote -- --event-id <event-id> --suite escalation --id promoted-case
-npm run approve:pilot -- --provider ollama --prompt-pack witty-mod --model qwen3:4b-instruct
+npm run approve:pilot -- --prompt-pack witty-mod --model qwen3:4b-instruct
 ```
 
 `approve:pilot` runs the curated scenario suites only and writes Markdown plus JSON approval artifacts under `data/reports/`. Those reports are generated output and are not kept in source control. Real captured chat stays outside the test verdict and should be reviewed separately through `review:inbox` and optionally promoted into new curated scenarios.

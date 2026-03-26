@@ -48,8 +48,8 @@ function parseArgs(argv: string[]): ApprovePilotCliOptions {
       }
       case "--provider": {
         const value = argv[index + 1];
-        if (value !== "ollama" && value !== "openai") {
-          throw new Error("--provider must be either ollama or openai");
+        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, or llama-cpp");
         }
         options.provider = value;
         index += 1;

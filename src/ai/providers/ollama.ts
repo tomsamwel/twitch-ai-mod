@@ -60,9 +60,11 @@ export class OllamaAiProvider implements AiProvider {
           model: input.config.ai.ollama.model,
           stream: false,
           format: aiDecisionJsonSchema,
+          keep_alive: input.config.ai.ollama.keepAlive ?? -1,
           options: {
             temperature: input.config.ai.requestDefaults.temperature,
             num_predict: input.config.ai.requestDefaults.maxOutputTokens,
+            ...(input.config.ai.ollama.numCtx ? { num_ctx: input.config.ai.ollama.numCtx } : {}),
           },
           messages: [
             {
