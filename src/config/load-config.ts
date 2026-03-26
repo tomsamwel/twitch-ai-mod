@@ -120,6 +120,7 @@ export async function loadConfig(
       ...appConfig.ai,
       promptPack,
     },
+    admin: appConfig.admin,
     actions: appConfig.actions,
     cooldowns,
     moderationPolicy,
