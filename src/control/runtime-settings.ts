@@ -46,9 +46,9 @@ export function buildEffectiveRuntimeSettings(
   const selectedPreset = resolveModelPresetName(baseConfig, overrides.modelPreset);
   const preset = selectedPreset ? baseConfig.controlPlane.modelPresets[selectedPreset] : null;
   const provider = preset?.provider ?? baseConfig.ai.provider;
-  const providerBaseUrl =
-    preset?.baseUrl ?? (provider === "ollama" ? baseConfig.ai.ollama.baseUrl : baseConfig.ai.openai.baseUrl);
-  const model = preset?.model ?? (provider === "ollama" ? baseConfig.ai.ollama.model : baseConfig.ai.openai.model);
+  const defaultProviderConfig = getProviderConfig(baseConfig, provider);
+  const providerBaseUrl = preset?.baseUrl ?? defaultProviderConfig?.baseUrl ?? baseConfig.ai.ollama.baseUrl;
+  const model = preset?.model ?? defaultProviderConfig?.model ?? baseConfig.ai.ollama.model;
 
   return {
     aiEnabled: overrides.aiEnabled ?? baseConfig.ai.enabled,
@@ -99,6 +99,14 @@ export function createEffectiveConfig(
               model: settings.model,
             }
           : baseConfig.ai.openai,
+      llamaCpp:
+        settings.provider === "llama-cpp" && baseConfig.ai.llamaCpp
+          ? {
+              ...baseConfig.ai.llamaCpp,
+              baseUrl: settings.providerBaseUrl,
+              model: settings.model,
+            }
+          : baseConfig.ai.llamaCpp,
     },
     actions: {
       ...baseConfig.actions,

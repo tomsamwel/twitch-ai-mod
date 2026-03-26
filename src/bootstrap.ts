@@ -46,7 +46,7 @@ export async function createAppServices(): Promise<AppServices> {
           logger,
           modelTag: config.ai.llamaCpp.model,
           port: Number(new URL(config.ai.llamaCpp.baseUrl).port),
-          dataDir: config.paths.rootDir + "/data",
+          dataDir: config.paths.dataDir,
         })
       : null;
 

@@ -71,7 +71,7 @@ export class LlamaServerManager {
   }
 
   public async start(): Promise<void> {
-    this.killStaleProcess();
+    await this.killStaleProcess();
 
     const blobPath = resolveGgufBlobPath(this.modelTag);
 
@@ -139,7 +139,6 @@ export class LlamaServerManager {
 
     this.child = null;
     this.startedAt = null;
-    this.removePidFile();
   }
 
   public getStatus(): LlamaServerStatus {
@@ -164,7 +163,7 @@ export class LlamaServerManager {
           return;
         }
       } catch {
-        // Not ready yet
+        // Expected while server is still loading the model.
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
@@ -172,31 +171,47 @@ export class LlamaServerManager {
     throw new Error(`llama-server did not become ready within ${timeoutMs}ms`);
   }
 
-  private killStaleProcess(): void {
-    if (!fs.existsSync(this.pidFilePath)) return;
+  private async killStaleProcess(): Promise<void> {
+    let stalePid: number;
+    try {
+      stalePid = Number.parseInt(fs.readFileSync(this.pidFilePath, "utf8").trim(), 10);
+    } catch {
+      return;
+    }
 
-    const stalePid = Number.parseInt(fs.readFileSync(this.pidFilePath, "utf8").trim(), 10);
     if (Number.isNaN(stalePid)) {
       this.removePidFile();
       return;
     }
 
     try {
-      process.kill(stalePid, 0); // Check if process exists
-      this.logger.info({ pid: stalePid }, "killing stale llama-server process");
-      process.kill(stalePid, "SIGTERM");
+      process.kill(stalePid, 0);
     } catch {
-      // Process doesn't exist, clean up PID file
+      this.removePidFile();
+      return;
     }
 
+    this.logger.info({ pid: stalePid }, "killing stale llama-server process");
+    process.kill(stalePid, "SIGTERM");
     this.removePidFile();
+
+    // Wait for the process to exit so the port is released.
+    for (let i = 0; i < 20; i++) {
+      try {
+        process.kill(stalePid, 0);
+      } catch {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    this.logger.warn({ pid: stalePid }, "stale llama-server did not exit after 5s, proceeding anyway");
   }
 
   private removePidFile(): void {
     try {
       fs.unlinkSync(this.pidFilePath);
     } catch {
-      // Already removed
+      // ENOENT is fine — file was already cleaned up.
     }
   }
 }

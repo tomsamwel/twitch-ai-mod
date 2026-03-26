@@ -86,14 +86,24 @@ export class AdminServer {
 
   private serveHtml(res: http.ServerResponse): void {
     if (!this.cachedHtml) {
-      // Resolve from source dir (works for both tsx dev and compiled dist)
       const thisDir = path.dirname(fileURLToPath(import.meta.url));
-      let htmlPath = path.join(thisDir, "public", "index.html");
-      if (!fs.existsSync(htmlPath)) {
-        // Compiled mode: navigate from dist/src/admin/ to src/admin/public/
-        htmlPath = path.resolve(thisDir, "../../../src/admin/public/index.html");
+      const candidates = [
+        path.join(thisDir, "public", "index.html"),
+        path.resolve(thisDir, "../../../src/admin/public/index.html"),
+      ];
+      for (const candidate of candidates) {
+        try {
+          this.cachedHtml = fs.readFileSync(candidate, "utf8");
+          break;
+        } catch {
+          continue;
+        }
       }
-      this.cachedHtml = fs.readFileSync(htmlPath, "utf8");
+      if (!this.cachedHtml) {
+        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.end("Admin HTML not found");
+        return;
+      }
     }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
     res.end(this.cachedHtml);

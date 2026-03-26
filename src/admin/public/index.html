@@ -151,19 +151,25 @@ function timeAgo(iso) {
   return Math.floor(m / 60) + 'h ago';
 }
 
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 function renderActivity(items) {
   if (!items || items.length === 0) {
     document.getElementById('activity').innerHTML = '<div class="activity-meta">No recent activity</div>';
     return;
   }
   document.getElementById('activity').innerHTML = items.map(a => {
-    const badge = `<span class="badge badge-${a.outcome}">${a.outcome}</span>`;
-    const text = a.text ? `"${a.text}"` : '';
-    const conf = a.confidence ? ` conf=${a.confidence}` : '';
-    const cat = a.category && a.category !== 'none' ? ` [${a.category}]` : '';
+    const badge = `<span class="badge badge-${esc(a.outcome)}">${esc(a.outcome)}</span>`;
+    const text = a.text ? `"${esc(a.text)}"` : '';
+    const conf = a.confidence ? ` conf=${esc(String(a.confidence))}` : '';
+    const cat = a.category && a.category !== 'none' ? ` [${esc(a.category)}]` : '';
     return `<div class="activity-item">
-      ${badge} <strong>@${a.chatter}</strong> ${text}
-      <div class="activity-meta">${a.mode || a.stage}${conf}${cat} &mdash; ${a.reason} &mdash; ${timeAgo(a.createdAt)}</div>
+      ${badge} <strong>@${esc(a.chatter)}</strong> ${text}
+      <div class="activity-meta">${esc(a.mode || a.stage)}${conf}${cat} &mdash; ${esc(a.reason)} &mdash; ${timeAgo(a.createdAt)}</div>
     </div>`;
   }).join('');
 }

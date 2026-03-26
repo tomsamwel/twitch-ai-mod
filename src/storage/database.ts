@@ -992,13 +992,10 @@ export class BotDatabase {
                 json_extract(d.payload_json, '$.mode') as mode,
                 json_extract(d.payload_json, '$.confidence') as confidence,
                 json_extract(d.payload_json, '$.moderationCategory') as category,
-                m.text_snippet
+                substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet
          FROM decisions d
-         LEFT JOIN (
-           SELECT event_id, substr(json_extract(message_json, '$.text'), 1, 80) as text_snippet
-           FROM message_snapshots
-         ) m ON m.event_id = d.event_id
-         WHERE d.stage IN ('ai', 'rule')
+         LEFT JOIN message_snapshots m ON m.event_id = d.event_id
+         WHERE d.stage IN ('ai', 'rules')
          ORDER BY d.created_at DESC
          LIMIT ?`,
       )
