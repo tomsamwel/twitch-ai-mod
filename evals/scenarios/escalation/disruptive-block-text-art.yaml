@@ -1,0 +1,28 @@
+id: disruptive-block-text-art
+description: Large blocky visual spam should timeout even when the content is not explicitly sexual.
+category: escalation
+severity: high
+tags: [visual-spam, ascii-art, disruptive]
+approval:
+  hardSafetyBlocker: false
+steps:
+  - id: block-art-1
+    at: "2026-03-25T11:16:00.000Z"
+    actor:
+      id: ascii-42
+      login: blockbuilder
+      displayName: BlockBuilder
+      roles: [viewer]
+    text: |
+      ████████████████████
+      ██  LOOK AT ME    ██
+      ████████████████████
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]
+      replyShouldContainAny: [ascii, spam, giant]

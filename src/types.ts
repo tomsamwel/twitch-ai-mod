@@ -1,7 +1,21 @@
-export type LogLevel = "fatal" | "error" | "warn" | "info" | "debug" | "trace";
+import { z } from "zod";
+
+export const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
+export type LogLevel = z.infer<typeof logLevelSchema>;
 
 export type AiProviderKind = "ollama" | "openai";
 export type AiMode = "social" | "moderation";
+export const moderationCategorySchema = z.enum([
+  "none",
+  "scam",
+  "targeted-harassment",
+  "sexual-harassment",
+  "spam-escalation",
+  "soft-promo",
+  "rude-disruption",
+  "other",
+]);
+export type ModerationCategory = z.infer<typeof moderationCategorySchema>;
 export type ProcessingMode = "live" | "replay" | "scenario";
 export type RuntimeOverrideKey =
   | "aiEnabled"
@@ -12,7 +26,7 @@ export type RuntimeOverrideKey =
   | "promptPack"
   | "modelPreset";
 
-export type ActionKind = "say" | "timeout";
+export type ActionKind = "say" | "warn" | "timeout";
 export type ReviewVerdict =
   | "ignore"
   | "keep-for-monitoring"
@@ -82,6 +96,7 @@ export interface AiDecision {
   reason: string;
   confidence: number;
   mode: AiMode;
+  moderationCategory: ModerationCategory;
   actions: ProposedAction[];
   metadata?: Record<string, unknown>;
 }
@@ -254,13 +269,16 @@ export interface ConfigSnapshot {
     chat: {
       minimumSecondsBetweenBotMessages: number;
       minimumSecondsBetweenBotRepliesToSameUser: number;
+      minimumSecondsBetweenModerationNotices: number;
+      minimumSecondsBetweenModerationNoticesPerUser: number;
     };
     moderation: {
       minimumSecondsBetweenModerationActionsPerUser: number;
       minimumSecondsBetweenEquivalentActions: number;
     };
     ai: {
-      minimumSecondsBetweenAiReviewsForSameUser: number;
+      minimumSecondsBetweenAiModerationReviewsForSameUser: number;
+      minimumSecondsBetweenAiSocialReviewsForSameUser: number;
     };
   };
   moderationPolicy: {
@@ -272,10 +290,28 @@ export interface ConfigSnapshot {
         maxEmotesPerMessage: number;
         maxMentionsPerMessage: number;
       };
+      visualSpam: {
+        enabled: boolean;
+        minimumHighConfidenceScore: number;
+        minimumBorderlineScore: number;
+        minimumVisibleCharacters: number;
+        minimumLineCount: number;
+        minimumLongestLineLength: number;
+        minimumDenseSymbolRunLength: number;
+        minimumRepeatedVisualLines: number;
+        minimumSymbolDensity: number;
+        maximumNaturalWordRatio: number;
+      };
       escalationThresholds: {
         timeoutOnBlockedTerm: boolean;
         timeoutOnSpam: boolean;
       };
+    };
+    publicNotices: {
+      blockedTerm: string;
+      spamHeuristic: string;
+      visualSpamAsciiArt: string;
+      generic: string;
     };
     aiPolicy: {
       enabled: boolean;
@@ -283,6 +319,11 @@ export interface ConfigSnapshot {
       socialReplyStyle: string;
       moderationStyle: string;
       abstainByDefault: boolean;
+      liveTimeouts: {
+        mode: "hard-gated";
+        minimumConfidence: number;
+        allowedCategories: ModerationCategory[];
+      };
     };
   };
   prompts: PromptSnapshot;

@@ -1,10 +1,13 @@
 chat:
   minimumSecondsBetweenBotMessages: 10
   minimumSecondsBetweenBotRepliesToSameUser: 20
+  minimumSecondsBetweenModerationNotices: 5
+  minimumSecondsBetweenModerationNoticesPerUser: 15
 
 moderation:
   minimumSecondsBetweenModerationActionsPerUser: 300
   minimumSecondsBetweenEquivalentActions: 30
 
 ai:
-  minimumSecondsBetweenAiReviewsForSameUser: 10
+  minimumSecondsBetweenAiModerationReviewsForSameUser: 10
+  minimumSecondsBetweenAiSocialReviewsForSameUser: 5

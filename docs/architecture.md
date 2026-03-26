@@ -11,7 +11,7 @@
 4. `src/ai/`
    Prompt composition, prompt packs, decision schema parsing, deterministic context retrieval, provider adapters, provider registry.
 5. `src/actions/`
-   Shared execution path for `say` and `timeout`.
+   Shared execution path for `say`, `warn`, and `timeout`.
 6. `src/control/`
    Whisper command parsing, controller authorization, runtime override storage, effective runtime settings.
 7. `src/storage/`
@@ -64,7 +64,7 @@ This keeps live, replay, and eval behavior aligned instead of hand-rolling mode-
 7. Ignore bot-authored chat after snapshotting to avoid self-reply loops while preserving audit/context value.
 8. Run deterministic rules.
 9. If rules abstain and AI is enabled, build deterministic SQLite-backed context and call the active AI provider.
-10. Execute resulting actions through the shared action executor.
+10. Execute resulting actions through the shared action executor, including moderation-notice cooldowns and the live AI timeout precision gate.
 11. Persist decisions/actions and emit structured logs.
 
 ## Whisper Control Flow
@@ -97,7 +97,7 @@ Replay is for real captured chat history.
 3. Seed scenario history into SQLite.
 4. Run the same rule/AI/action pipeline step by step.
 5. Force all actions to dry-run.
-6. Aggregate per-step pass/fail into one scenario result.
+6. Aggregate per-step blocking/advisory issues plus pass/fail into one scenario result.
 7. Print a human-readable pass/fail report.
 
 Scenario eval is for curated prompt/policy iteration, not Twitch integration testing.
@@ -106,7 +106,8 @@ Scenario eval is for curated prompt/policy iteration, not Twitch integration tes
 
 1. Read recent SQLite message snapshots.
 2. Join related decisions, actions, and prior review verdicts.
-3. Rank high-signal incidents such as timeout candidates, AI replies, provider failures, cooldown suppressions, privileged cases, self-loops, and repeated-user sequences.
+3. Rank high-signal incidents such as timeout candidates, precision-gated timeout skips, AI replies, provider failures, cooldown suppressions, privileged cases, self-loops, and repeated-user sequences.
+   Review reports also surface `warn-issued`, `timeout-notice-skipped`, and `visual-spam-candidate` reasons for moderation tuning.
 4. Write Markdown plus JSON review reports under `data/reports/`.
 5. Optionally mark incidents locally or scaffold them into new scripted scenarios.
 
@@ -117,11 +118,19 @@ Scenario eval is for curated prompt/policy iteration, not Twitch integration tes
 - `ollama` and `openai` use the same decision schema.
 - Prompt packs are first-class and selected by name.
 - Prompt-pack manifests make baseline vs candidate comparisons explicit.
+- The moderation action contract is intentionally narrow:
+  moderation can abstain, emit a public `warn`, or emit ordered `[timeout, warn]`; social mode only emits `say`.
 - Context enrichment is deterministic and local-first; there is no separate summarizer or long-term memory model.
 
 ## Operational Notes
 
 - Twurple `8.x` is ESM-only, so the project uses `NodeNext`/ESM.
 - Real moderation requires both `dryRun: false` and `allowLiveModeration: true`.
+- Live AI timeout execution is narrower than general AI moderation:
+  only allowlisted moderation categories with sufficient confidence can execute, and spam-escalation also needs repeat evidence or a recent corrective interaction.
+- Scenario approval is precision-first:
+  wrongful timeouts, blocking missed required timeouts, and provider failures block approval; abstains and reply-quality misses are advisory unless a scenario explicitly marks the missed timeout as blocking.
+- Large high-confidence visual spam can be timed out deterministically before AI.
+- Public moderation notes use `warn`, default to replying to the offending message, and stay auditable even when skipped.
 - Chat send and moderation share the same action executor and audit trail.
 - Bot-authored messages remain available for context and history even though they are skipped for live decisioning.

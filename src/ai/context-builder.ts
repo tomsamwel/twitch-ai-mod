@@ -1,3 +1,4 @@
+import type { BotDatabase } from "../storage/database.js";
 import type {
   AiContextInteraction,
   AiContextMessage,
@@ -8,21 +9,6 @@ import type {
   PersistedMessageSnapshot,
   TwitchIdentity,
 } from "../types.js";
-
-interface ContextStore {
-  listRecentRoomMessageSnapshots(
-    beforeReceivedAt: string,
-    excludeEventId: string,
-    limit: number,
-  ): PersistedMessageSnapshot[];
-  listRecentUserMessageSnapshots(
-    chatterId: string,
-    beforeReceivedAt: string,
-    excludeEventId: string,
-    limit: number,
-  ): PersistedMessageSnapshot[];
-  listRecentBotInteractions(targetUserId: string, beforeCreatedAt: string, limit: number): PersistedActionRecord[];
-}
 
 function trimText(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
@@ -69,6 +55,9 @@ function estimateContextSize(snapshot: AiContextSnapshot): number {
   return JSON.stringify(snapshot).length;
 }
 
+// Iteratively removes the least-important context entries until the snapshot
+// fits within the budget. JSON.stringify per iteration is acceptable here
+// because context arrays are small (typically < 20 entries total).
 function pruneContextToBudget(snapshot: AiContextSnapshot, maxPromptChars: number): AiContextSnapshot {
   const nextSnapshot: AiContextSnapshot = {
     recentRoomMessages: [...snapshot.recentRoomMessages],
@@ -101,7 +90,10 @@ function pruneContextToBudget(snapshot: AiContextSnapshot, maxPromptChars: numbe
 export class AiContextBuilder {
   public constructor(
     private readonly config: Pick<ConfigSnapshot, "ai">,
-    private readonly database: ContextStore,
+    private readonly database: Pick<
+      BotDatabase,
+      "listRecentRoomMessageSnapshots" | "listRecentUserMessageSnapshots" | "listRecentBotInteractions"
+    >,
   ) {}
 
   public build(message: NormalizedChatMessage, botIdentity: TwitchIdentity): AiContextSnapshot {
@@ -111,6 +103,8 @@ export class AiContextBuilder {
       this.config.ai.context.recentRoomMessages,
     );
     const roomEventIds = new Set(roomSnapshots.map((snapshot) => snapshot.eventId));
+    // Over-fetch user messages to account for overlap with room messages, then
+    // deduplicate and trim to the configured limit.
     const userSnapshots = this.database
       .listRecentUserMessageSnapshots(
         message.chatterId,

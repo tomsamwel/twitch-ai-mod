@@ -10,9 +10,26 @@ deterministicRules:
     maxRepeatedCharacters: 10
     maxEmotesPerMessage: 8
     maxMentionsPerMessage: 4
+  visualSpam:
+    enabled: true
+    minimumHighConfidenceScore: 8
+    minimumBorderlineScore: 5
+    minimumVisibleCharacters: 24
+    minimumLineCount: 2
+    minimumLongestLineLength: 18
+    minimumDenseSymbolRunLength: 8
+    minimumRepeatedVisualLines: 2
+    minimumSymbolDensity: 0.45
+    maximumNaturalWordRatio: 0.35
   escalationThresholds:
     timeoutOnBlockedTerm: true
     timeoutOnSpam: true
+
+publicNotices:
+  blockedTerm: "Scam pitches get timed out. Try a better hobby."
+  spamHeuristic: "Cut the spam. Chat is not your drywall."
+  visualSpamAsciiArt: "Keep giant ASCII art out of chat. This is not cave painting hour."
+  generic: "That crossed the line. Dial it back."
 
 aiPolicy:
   enabled: true
@@ -20,3 +37,11 @@ aiPolicy:
   socialReplyStyle: firm-but-friendly
   moderationStyle: moderation-first
   abstainByDefault: true
+  liveTimeouts:
+    mode: hard-gated
+    minimumConfidence: 0.9
+    allowedCategories:
+      - scam
+      - targeted-harassment
+      - sexual-harassment
+      - spam-escalation

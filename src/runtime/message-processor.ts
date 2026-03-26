@@ -39,6 +39,52 @@ interface OutboundMessageTrackerLike {
   consume(messageId: string, now?: number): boolean;
 }
 
+function annotateAiActionForExecution(
+  action: AiDecision["actions"][number],
+  decision: AiDecision,
+  message: NormalizedChatMessage,
+  context: ReturnType<AiContextBuilder["build"]>,
+  botIdentity: TwitchIdentity,
+): AiDecision["actions"][number] {
+  if (action.kind !== "timeout") {
+    return action;
+  }
+
+  return {
+    ...action,
+    metadata: {
+      ...(action.metadata ?? {}),
+      aiConfidence: decision.confidence,
+      moderationCategory: decision.moderationCategory,
+      targetIsPrivileged: message.isPrivileged,
+      targetIsSelfAuthored: message.chatterId === botIdentity.id,
+      hasRepeatedUserEvidence: context.recentUserMessages.length > 0,
+      hasRecentBotCorrectiveInteraction: context.recentBotInteractions.some(
+        (interaction) =>
+          (interaction.kind === "say" || interaction.kind === "warn") && interaction.status !== "failed",
+      ),
+    },
+  };
+}
+
+function annotateWarnCompanionForExecution(
+  action: RuleDecision["actions"][number] | AiDecision["actions"][number],
+  previousTimeoutStatus: ActionResult["status"] | null,
+): RuleDecision["actions"][number] | AiDecision["actions"][number] {
+  if (action.kind !== "warn" || !previousTimeoutStatus) {
+    return action;
+  }
+
+  return {
+    ...action,
+    metadata: {
+      ...(action.metadata ?? {}),
+      timeoutCompanion: true,
+      companionTimeoutStatus: previousTimeoutStatus,
+    },
+  };
+}
+
 export class MessageProcessor {
   public constructor(
     private readonly config: ConfigSnapshot,
@@ -140,19 +186,14 @@ export class MessageProcessor {
     const actionResults: ActionResult[] = [];
 
     if (ruleDecision.actions.length > 0) {
-      for (const action of ruleDecision.actions) {
-        const actionRequest = this.actionExecutor.createActionRequest(action, {
-          source: "rules",
-          sourceEventId: message.eventId,
-          sourceMessageId: message.sourceMessageId,
-          processingMode,
-          ...(options.runId ? { runId: options.runId } : {}),
-          ...(options.forceDryRun ? { dryRun: true } : {}),
-          initiatedAt: new Date(nowMs).toISOString(),
-        });
-
-        actionResults.push(await this.actionExecutor.execute(actionRequest));
-      }
+      await this.executeActions(ruleDecision.actions, actionResults, {
+        source: "rules",
+        message,
+        processingMode,
+        runId: options.runId,
+        forceDryRun: options.forceDryRun,
+        nowMs,
+      });
 
       return {
         status: "processed",
@@ -204,9 +245,9 @@ export class MessageProcessor {
       };
     }
 
-    if (!this.cooldowns.canReviewWithAi(message.chatterId, nowMs)) {
+    if (!this.cooldowns.canReviewWithAi(message.chatterId, aiMode.mode, nowMs)) {
       this.logger.debug(
-        { chatterId: message.chatterId, eventId: message.eventId, processingMode },
+        { chatterId: message.chatterId, eventId: message.eventId, processingMode, mode: aiMode.mode },
         "skipping AI review due to cooldown",
       );
 
@@ -218,7 +259,7 @@ export class MessageProcessor {
       };
     }
 
-    this.cooldowns.recordAiReview(message.chatterId, nowMs);
+    this.cooldowns.recordAiReview(message.chatterId, aiMode.mode, nowMs);
 
     const context = this.contextBuilder.build(message, options.botIdentity);
     const aiInput = buildAiDecisionInput(message, context, effectiveConfig, options.botIdentity, aiMode);
@@ -262,19 +303,18 @@ export class MessageProcessor {
       };
     }
 
-    for (const action of aiDecision.actions) {
-      const actionRequest = this.actionExecutor.createActionRequest(action, {
-        source: "ai",
-        sourceEventId: message.eventId,
-        sourceMessageId: message.sourceMessageId,
-        processingMode,
-        ...(options.runId ? { runId: options.runId } : {}),
-        ...(options.forceDryRun ? { dryRun: true } : {}),
-        initiatedAt: new Date(nowMs).toISOString(),
-      });
+    const annotatedActions = aiDecision.actions.map((action) =>
+      annotateAiActionForExecution(action, aiDecision, message, context, options.botIdentity),
+    );
 
-      actionResults.push(await this.actionExecutor.execute(actionRequest));
-    }
+    await this.executeActions(annotatedActions, actionResults, {
+      source: "ai",
+      message,
+      processingMode,
+      runId: options.runId,
+      forceDryRun: options.forceDryRun,
+      nowMs,
+    });
 
     return {
       status: "processed",
@@ -282,6 +322,43 @@ export class MessageProcessor {
       aiDecision,
       actionResults,
     };
+  }
+
+  private async executeActions(
+    actions: Array<RuleDecision["actions"][number] | AiDecision["actions"][number]>,
+    results: ActionResult[],
+    context: {
+      source: "rules" | "ai";
+      message: NormalizedChatMessage;
+      processingMode: ProcessingMode;
+      runId?: string | undefined;
+      forceDryRun?: boolean | undefined;
+      nowMs: number;
+    },
+  ): Promise<void> {
+    let previousTimeoutStatus: ActionResult["status"] | null = null;
+
+    for (const action of actions) {
+      const actionRequest = this.actionExecutor.createActionRequest(
+        annotateWarnCompanionForExecution(action, previousTimeoutStatus),
+        {
+          source: context.source,
+          sourceEventId: context.message.eventId,
+          sourceMessageId: context.message.sourceMessageId,
+          processingMode: context.processingMode,
+          ...(context.runId ? { runId: context.runId } : {}),
+          ...(context.forceDryRun ? { dryRun: true } : {}),
+          initiatedAt: new Date(context.nowMs).toISOString(),
+        },
+      );
+
+      const actionResult = await this.actionExecutor.execute(actionRequest);
+      results.push(actionResult);
+
+      if (action.kind === "timeout") {
+        previousTimeoutStatus = actionResult.status;
+      }
+    }
   }
 
   private resolveNowMs(message: NormalizedChatMessage, nowMs: number | undefined): number {

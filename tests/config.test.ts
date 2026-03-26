@@ -50,11 +50,14 @@ modelPresets:
 chat:
   minimumSecondsBetweenBotMessages: 45
   minimumSecondsBetweenBotRepliesToSameUser: 120
+  minimumSecondsBetweenModerationNotices: 20
+  minimumSecondsBetweenModerationNoticesPerUser: 45
 moderation:
   minimumSecondsBetweenModerationActionsPerUser: 300
   minimumSecondsBetweenEquivalentActions: 30
 ai:
-  minimumSecondsBetweenAiReviewsForSameUser: 10
+  minimumSecondsBetweenAiModerationReviewsForSameUser: 10
+  minimumSecondsBetweenAiSocialReviewsForSameUser: 5
 `,
   );
   await writeFile(
@@ -68,15 +71,39 @@ deterministicRules:
     maxRepeatedCharacters: 10
     maxEmotesPerMessage: 8
     maxMentionsPerMessage: 4
+  visualSpam:
+    enabled: true
+    minimumHighConfidenceScore: 8
+    minimumBorderlineScore: 5
+    minimumVisibleCharacters: 24
+    minimumLineCount: 2
+    minimumLongestLineLength: 18
+    minimumDenseSymbolRunLength: 8
+    minimumRepeatedVisualLines: 2
+    minimumSymbolDensity: 0.45
+    maximumNaturalWordRatio: 0.35
   escalationThresholds:
     timeoutOnBlockedTerm: true
     timeoutOnSpam: true
+publicNotices:
+  blockedTerm: Scam pitches get timed out. Try a better hobby.
+  spamHeuristic: Cut the spam. Chat is not your drywall.
+  visualSpamAsciiArt: Keep giant ASCII art out of chat. This is not cave painting hour.
+  generic: That crossed the line. Dial it back.
 aiPolicy:
   enabled: true
   mode: advisory
   socialReplyStyle: firm-but-friendly
   moderationStyle: moderation-first
   abstainByDefault: true
+  liveTimeouts:
+    mode: hard-gated
+    minimumConfidence: 0.9
+    allowedCategories:
+      - scam
+      - targeted-harassment
+      - sexual-harassment
+      - spam-escalation
 `,
   );
 
@@ -150,8 +177,8 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 120
-    timeoutMs: 30000
+    maxOutputTokens: 100
+    timeoutMs: 45000
   context:
     recentRoomMessages: 5
     recentUserMessages: 8
@@ -162,7 +189,7 @@ ai:
     model: qwen3:4b-instruct
   openai:
     baseUrl: https://api.openai.com/v1
-    model: gpt-4.1-mini
+    model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
   allowLiveModeration: false
@@ -214,8 +241,8 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 120
-    timeoutMs: 30000
+    maxOutputTokens: 100
+    timeoutMs: 45000
   context:
     recentRoomMessages: 5
     recentUserMessages: 8
@@ -226,7 +253,7 @@ ai:
     model: qwen3:4b-instruct
   openai:
     baseUrl: https://api.openai.com/v1
-    model: gpt-4.1-mini
+    model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
   allowLiveModeration: false
@@ -273,8 +300,8 @@ ai:
   provider: openai
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 120
-    timeoutMs: 30000
+    maxOutputTokens: 100
+    timeoutMs: 45000
   context:
     recentRoomMessages: 5
     recentUserMessages: 8
@@ -285,7 +312,7 @@ ai:
     model: qwen3:4b-instruct
   openai:
     baseUrl: https://api.openai.com/v1
-    model: gpt-4.1-mini
+    model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
   allowLiveModeration: false
@@ -333,8 +360,8 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 120
-    timeoutMs: 30000
+    maxOutputTokens: 100
+    timeoutMs: 45000
   context:
     recentRoomMessages: 5
     recentUserMessages: 8
@@ -345,7 +372,7 @@ ai:
     model: qwen3:4b-instruct
   openai:
     baseUrl: https://api.openai.com/v1
-    model: gpt-4.1-mini
+    model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
   allowLiveModeration: false
@@ -395,8 +422,8 @@ ai:
   promptPack: safer-control
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 120
-    timeoutMs: 30000
+    maxOutputTokens: 100
+    timeoutMs: 45000
   context:
     recentRoomMessages: 5
     recentUserMessages: 8
@@ -407,7 +434,7 @@ ai:
     model: qwen3:4b-instruct
   openai:
     baseUrl: https://api.openai.com/v1
-    model: gpt-4.1-mini
+    model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
   allowLiveModeration: false
@@ -455,8 +482,8 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 120
-    timeoutMs: 30000
+    maxOutputTokens: 100
+    timeoutMs: 45000
   context:
     recentRoomMessages: 5
     recentUserMessages: 8
@@ -467,7 +494,7 @@ ai:
     model: qwen3:4b-instruct
   openai:
     baseUrl: https://api.openai.com/v1
-    model: gpt-4.1-mini
+    model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
   allowLiveModeration: false

@@ -1,12 +1,15 @@
 Moderation buckets:
 
 1. Hard violations
-- obvious scams, follower or viewer selling, repeated spam, or clearly abusive content
+- explicit follower or viewer selling, explicit sexual demands or coercive threats, repeated spam after a correction, or clearly abusive content
 - timeout is allowed only when the message is clearly actionable
+- timeout cases should also include one short public warn after the timeout
 
-2. Soft problems
-- minor friction or low-effort disruption that does not justify timeout
-- allow at most one short corrective say message
+2. First-step escalation and soft problems
+- first mention bursts, fuzzy growth hints, suggestive but non-explicit sexual chatter, low-effort self-promo, and minor friction stay below timeout
+- use one short corrective warn when it helps; otherwise abstain
 
 3. Ambiguous behavior
 - if intent is unclear, abstain
+
+Never timeout ordinary commercial self-promo, first-pass suggestive chatter, or one-off nuisance.

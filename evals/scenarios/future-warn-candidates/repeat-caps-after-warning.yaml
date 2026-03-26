@@ -1,5 +1,5 @@
 id: repeat-caps-after-warning
-description: Repeated caps derailment is warn-ready, but should still stay below timeout in this phase.
+description: Repeated caps derailment should stay below timeout but produce a public warn.
 category: future-warn-candidates
 severity: medium
 tags: [warn-ready, caps, multi-turn]
@@ -9,7 +9,7 @@ approval:
 seed:
   botInteractions:
     - at: "2026-03-25T10:52:00.000Z"
-      kind: say
+      kind: warn
       targetActorId: warn-23
       source: ai
       status: executed
@@ -27,6 +27,7 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
+      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]

@@ -1,10 +1,18 @@
 import { z } from "zod";
 
-import type { AiDecisionInput, AiMode, AiProviderKind, ProposedAction } from "../types.js";
+import {
+  moderationCategorySchema,
+  type AiDecision,
+  type AiDecisionInput,
+  type AiMode,
+  type AiProviderKind,
+  type ModerationCategory,
+  type ProposedAction,
+} from "../types.js";
 
 const aiActionPayloadBaseSchema = z
   .object({
-    kind: z.enum(["say", "timeout"]),
+    kind: z.enum(["say", "warn", "timeout"]),
     reason: z.string().min(1),
     message: z.string().min(1).optional(),
     targetUserId: z.string().min(1).optional(),
@@ -20,15 +28,16 @@ const aiDecisionPayloadBaseSchema = z
     reason: z.string().min(1),
     confidence: z.number().min(0).max(1),
     mode: z.enum(["social", "moderation"]),
+    moderationCategory: moderationCategorySchema,
     actions: z.array(aiActionPayloadBaseSchema),
   })
   .strict();
 
 export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((payload, context) => {
-  if (payload.actions.length > 1) {
+  if (payload.actions.length > 2) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "actions may contain at most one item",
+      message: "actions may contain at most two items",
       path: ["actions"],
     });
   }
@@ -41,32 +50,93 @@ export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((
     });
   }
 
-  if (payload.outcome === "action" && payload.actions.length !== 1) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "action outcomes must include exactly one action",
-      path: ["actions"],
-    });
-  }
-
   const firstAction = payload.actions[0];
+  const secondAction = payload.actions[1];
+
+  if (payload.outcome === "action") {
+    if (payload.mode === "social" && payload.actions.length !== 1) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "social action outcomes must include exactly one action",
+        path: ["actions"],
+      });
+    }
+
+    if (payload.mode === "moderation" && payload.actions.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "moderation action outcomes must include at least one action",
+        path: ["actions"],
+      });
+    }
+  }
 
   if (!firstAction) {
     return;
   }
 
-  if (firstAction.kind === "say" && !firstAction.message) {
+  if ((firstAction.kind === "say" || firstAction.kind === "warn") && !firstAction.message) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "say actions must include a message",
+      message: `${firstAction.kind} actions must include a message`,
       path: ["actions", 0, "message"],
     });
+  }
+
+  if (secondAction && (secondAction.kind === "say" || secondAction.kind === "warn") && !secondAction.message) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `${secondAction.kind} actions must include a message`,
+      path: ["actions", 1, "message"],
+    });
+  }
+
+  if (payload.mode === "social" && payload.moderationCategory !== "none") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'social decisions must use moderationCategory "none"',
+      path: ["moderationCategory"],
+    });
+  }
+
+  if (payload.outcome === "abstain") {
+    return;
+  }
+
+  if (payload.mode === "social") {
+    if (firstAction.kind !== "say") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'social actions must use kind "say"',
+        path: ["actions", 0, "kind"],
+      });
+    }
+
+    return;
+  }
+
+  if (payload.actions.length === 1 && firstAction.kind !== "warn") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'single moderation actions must use kind "warn"',
+      path: ["actions", 0, "kind"],
+    });
+  }
+
+  if (payload.actions.length === 2) {
+    if (firstAction.kind !== "timeout" || secondAction?.kind !== "warn") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'two-action moderation decisions must use the ordered shape ["timeout", "warn"]',
+        path: ["actions"],
+      });
+    }
   }
 });
 
 export type AiDecisionPayload = z.infer<typeof aiDecisionPayloadSchema>;
 
-function stripSchemaMeta(value: unknown): unknown {
+export const aiDecisionJsonSchema = (function stripSchemaMeta(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stripSchemaMeta);
   }
@@ -80,13 +150,7 @@ function stripSchemaMeta(value: unknown): unknown {
   }
 
   return value;
-}
-
-export const aiDecisionJsonSchema = stripSchemaMeta(
-  z.toJSONSchema(aiDecisionPayloadBaseSchema, {
-    reused: "inline",
-  }),
-) as Record<string, unknown>;
+})(z.toJSONSchema(aiDecisionPayloadBaseSchema, { reused: "inline" })) as Record<string, unknown>;
 
 export function buildAbstainDecision(
   source: AiProviderKind,
@@ -100,6 +164,7 @@ export function buildAbstainDecision(
     reason,
     confidence: 0,
     mode,
+    moderationCategory: "none" as ModerationCategory,
     actions: [],
     ...(metadata ? { metadata } : {}),
   };
@@ -109,18 +174,11 @@ export function payloadToAiDecision(
   payload: AiDecisionPayload,
   source: AiProviderKind,
   input: AiDecisionInput,
-): {
-  source: AiProviderKind;
-  outcome: "abstain" | "action";
-  reason: string;
-  confidence: number;
-  mode: AiMode;
-  actions: ProposedAction[];
-} {
-  const actions = payload.actions.map((action) => {
-    if (action.kind === "say") {
+): AiDecision {
+  const actions = payload.actions.map((action): ProposedAction => {
+    if (action.kind === "say" || action.kind === "warn") {
       return {
-        kind: "say" as const,
+        kind: action.kind,
         reason: action.reason,
         message: action.message!,
         targetUserId: action.targetUserId ?? input.message.chatterId,
@@ -130,7 +188,7 @@ export function payloadToAiDecision(
     }
 
     return {
-      kind: "timeout" as const,
+      kind: "timeout",
       reason: action.reason,
       targetUserId: action.targetUserId ?? input.message.chatterId,
       targetUserName: action.targetUserName ?? input.message.chatterLogin,
@@ -145,6 +203,7 @@ export function payloadToAiDecision(
     reason: payload.reason,
     confidence: payload.confidence,
     mode: input.mode,
+    moderationCategory: input.mode === "social" ? "none" : payload.moderationCategory,
     actions,
     ...(payload.mode !== input.mode
       ? {

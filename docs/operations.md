@@ -66,6 +66,7 @@ npm run chat:send -- "hello from the bot"
    - startup
    - EventSub WebSocket connected
    - processed action request for `say`
+   - or, during moderation tests, processed action requests for `warn` and `timeout`
 
 ## Whisper Control Test
 
@@ -91,6 +92,7 @@ For curated prompt/policy iteration:
 npm run eval:scenarios -- --suite social-direct
 npm run eval:scenarios -- --suite promo-scam --prompt-pack safer-control
 npm run eval:compare -- --baseline safer-control --candidate witty-mod --model qwen3:4b-instruct
+npm run eval:scenarios -- --model qwen2.5:1.5b
 ```
 
 For real captured chat:
@@ -102,13 +104,26 @@ npm run review:inbox -- --limit 25
 
 Recommended order:
 1. scenario eval
-2. compare against baseline
+2. compare against baseline with the precision-first report
 3. replay
 4. review inbox
 5. promote any must-keep replay cases into curated scenarios
 6. pilot approval report
 7. short live social test
 8. only then consider live moderation rehearsal
+
+Current installed local comparison set:
+- `qwen3:4b-instruct`
+- `qwen2.5:1.5b`
+
+Deferred follow-up once additional models are installed:
+- rerun the same eval loop on `qwen3:8b`
+- rerun the same eval loop on `gemma3:12b`
+
+During prompt tuning, include the active public-warning and visual-spam cases in the loop:
+- standalone `warn` scenarios should stay `warn`, not slide back to social `say`
+- obvious large visual spam should stay deterministic `timeout` plus `warn`
+- borderline symbol floods should avoid wrongful timeouts
 
 ## Replay Review Loop
 
@@ -137,10 +152,15 @@ npm run approve:pilot -- --provider ollama --model qwen3:4b-instruct
 What it does:
 - runs all scenario suites
 - writes Markdown and JSON reports to `data/reports/`
+- treats wrongful timeouts, blocking missed timeouts, and provider failures as approval blockers
+- keeps pass rates and social misses visible, but advisory
+- keeps missing or skipped public notices visible in reports, but advisory unless a scenario explicitly requires them
 
 Only enable AI live moderation after:
 - the approval report passes
-- moderation suites stay at or above 90%
+- there are no wrongful timeout blockers
+- there are no blocking missed-timeout blockers
+- there are no provider failures
 - recent real-chat cases from `review:inbox` were reviewed manually
 - you still explicitly choose to enable the AI moderation gate
 
@@ -162,6 +182,8 @@ Required settings:
 - `actions.allowLiveModeration: true`
 
 Prefer a short timeout duration during rehearsal and use a test chatter account in a controlled session.
+Remember that live AI timeouts are still hard-gated by confidence, moderation category, privileged/self protection, and spam-escalation repeat evidence.
+If live chat messages are enabled, timeout flows may also emit a follow-up public `warn`. If the timeout is skipped or live chat messages are disabled, the skipped notice is still recorded for audit.
 
 ## Troubleshooting
 
@@ -220,6 +242,21 @@ Check both gates:
 - if the timeout came from AI, `aimod ai-moderation on`
 
 Also verify the rule or AI path actually produced a moderation action.
+If the timeout came from AI, also verify:
+- the AI confidence met the configured minimum
+- the moderation category is allowlisted for live timeout
+- the target was not privileged
+- spam-escalation cases had repeat evidence or a recent corrective bot interaction
+- `review:inbox` does not show repeated `precision-gated-timeout` skips for that pattern
+
+### Timeout happens but no public warning appears
+
+Check:
+- `actions.allowLiveChatMessages: true`
+- moderation-notice cooldowns in [config/cooldowns.yaml](config/cooldowns.yaml)
+- whether the timeout itself was skipped, precision-gated, or failed
+
+Use `review:inbox` to confirm whether the event was recorded as `warn-issued` or `timeout-notice-skipped`.
 
 ## Verification Commands
 
@@ -229,5 +266,9 @@ Use this set after meaningful changes:
 npm run check
 npm test
 npm run build
+npm run eval:scenarios -- --model qwen3:4b-instruct
+npm run eval:scenarios -- --model qwen2.5:1.5b
+npm run eval:compare -- --baseline safer-control --candidate witty-mod --model qwen3:4b-instruct
+npm run approve:pilot -- --provider ollama --model qwen3:4b-instruct
 npm run review:inbox -- --limit 25
 ```

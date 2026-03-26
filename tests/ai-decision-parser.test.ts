@@ -17,6 +17,7 @@ test("parseAiDecisionText maps valid say action JSON into an AiDecision", () => 
       reason: "friendly reply is helpful",
       confidence: 0.8,
       mode: "social",
+      moderationCategory: "none",
       actions: [
         {
           kind: "say",
@@ -86,6 +87,7 @@ test("parseAiDecisionText normalizes abstain payloads that incorrectly include a
       reason: "The current message does not need intervention.",
       confidence: 1,
       mode: "moderation",
+      moderationCategory: "none",
       actions: [
         {
           kind: "say",
@@ -123,6 +125,7 @@ test("parseAiDecisionText preserves the application-selected mode even if the pr
       reason: "direct question deserves a short answer",
       confidence: 0.8,
       mode: "moderation",
+      moderationCategory: "none",
       actions: [
         {
           kind: "say",
@@ -149,5 +152,175 @@ test("parseAiDecisionText preserves the application-selected mode even if the pr
   assert.deepEqual(decision.metadata, {
     providerMode: "moderation",
     normalizedMode: "social",
+  });
+});
+
+test("parseAiDecisionText maps moderation warn actions into an AiDecision", () => {
+  const config = createTestConfig();
+  const message = normalizeChatMessage(createChatEvent({ messageText: "buy my overlays" }));
+  const logger = createLogger("info", "test");
+
+  const decision = parseAiDecisionText(
+    JSON.stringify({
+      outcome: "action",
+      reason: "soft promo gets a public warning",
+      confidence: 0.82,
+      mode: "moderation",
+      moderationCategory: "soft-promo",
+      actions: [
+        {
+          kind: "warn",
+          reason: "brief promo warning",
+          message: "Please keep self-promo out of chat.",
+        },
+      ],
+    }),
+    "ollama",
+    {
+      mode: "moderation",
+      message,
+      context: createEmptyContext(),
+      config,
+      prompt: {
+        system: "system",
+        user: "user",
+      },
+    },
+    logger,
+  );
+
+  assert.equal(decision.outcome, "action");
+  assert.equal(decision.actions[0]?.kind, "warn");
+  assert.equal(decision.actions[0]?.replyParentMessageId, message.sourceMessageId);
+});
+
+test("parseAiDecisionText accepts ordered timeout plus warn moderation actions", () => {
+  const config = createTestConfig();
+  const message = normalizeChatMessage(createChatEvent({ messageText: "buy followers now" }));
+  const logger = createLogger("info", "test");
+
+  const decision = parseAiDecisionText(
+    JSON.stringify({
+      outcome: "action",
+      reason: "explicit scam",
+      confidence: 0.98,
+      mode: "moderation",
+      moderationCategory: "scam",
+      actions: [
+        {
+          kind: "timeout",
+          reason: "explicit scam",
+        },
+        {
+          kind: "warn",
+          reason: "public timeout notice",
+          message: "Follower-selling scams get timed out.",
+        },
+      ],
+    }),
+    "ollama",
+    {
+      mode: "moderation",
+      message,
+      context: createEmptyContext(),
+      config,
+      prompt: {
+        system: "system",
+        user: "user",
+      },
+    },
+    logger,
+  );
+
+  assert.equal(decision.outcome, "action");
+  assert.deepEqual(
+    decision.actions.map((action) => action.kind),
+    ["timeout", "warn"],
+  );
+});
+
+test("parseAiDecisionText fills a generic warn fallback when moderation timeout output omits it", () => {
+  const config = createTestConfig();
+  const message = normalizeChatMessage(createChatEvent({ messageText: "buy followers now" }));
+  const logger = createLogger("info", "test");
+
+  const decision = parseAiDecisionText(
+    JSON.stringify({
+      outcome: "action",
+      reason: "explicit scam",
+      confidence: 0.98,
+      mode: "moderation",
+      moderationCategory: "scam",
+      actions: [
+        {
+          kind: "timeout",
+          reason: "explicit scam",
+        },
+      ],
+    }),
+    "ollama",
+    {
+      mode: "moderation",
+      message,
+      context: createEmptyContext(),
+      config,
+      prompt: {
+        system: "system",
+        user: "user",
+      },
+    },
+    logger,
+  );
+
+  assert.deepEqual(
+    decision.actions.map((action) => action.kind),
+    ["timeout", "warn"],
+  );
+  assert.equal(decision.actions[1]?.message, config.moderationPolicy.publicNotices.generic);
+});
+
+test("parseAiDecisionText rejects invalid moderation action combos such as say plus warn", () => {
+  const config = createTestConfig();
+  const message = normalizeChatMessage(createChatEvent({ messageText: "buy followers now" }));
+  const logger = createLogger("info", "test");
+
+  const decision = parseAiDecisionText(
+    JSON.stringify({
+      outcome: "action",
+      reason: "invalid combo",
+      confidence: 0.8,
+      mode: "moderation",
+      moderationCategory: "scam",
+      actions: [
+        {
+          kind: "say",
+          reason: "bad first action",
+          message: "nope",
+        },
+        {
+          kind: "warn",
+          reason: "bad second action",
+          message: "still nope",
+        },
+      ],
+    }),
+    "ollama",
+    {
+      mode: "moderation",
+      message,
+      context: createEmptyContext(),
+      config,
+      prompt: {
+        system: "system",
+        user: "user",
+      },
+    },
+    logger,
+  );
+
+  assert.equal(decision.outcome, "abstain");
+  assert.deepEqual(decision.metadata, {
+    failureKind: "invalid_output",
+    errorType: "ZodError",
   });
 });

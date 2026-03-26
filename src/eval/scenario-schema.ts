@@ -21,7 +21,7 @@ const scenarioBotInteractionSchema = z
   .object({
     id: z.string().min(1).optional(),
     at: z.string().min(1),
-    kind: z.enum(["say", "timeout"]),
+    kind: z.enum(["say", "warn", "timeout"]),
     targetActorId: z.string().min(1).optional(),
     source: z.enum(["rules", "ai"]).default("ai"),
     status: z.enum(["executed", "dry-run", "skipped", "failed"]).default("executed"),
@@ -31,10 +31,10 @@ const scenarioBotInteractionSchema = z
     externalMessageId: z.string().min(1).optional(),
   })
   .superRefine((interaction, context) => {
-    if (interaction.kind === "say" && !interaction.message) {
+    if ((interaction.kind === "say" || interaction.kind === "warn") && !interaction.message) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "say interactions must include a message",
+        message: `${interaction.kind} interactions must include a message`,
         path: ["message"],
       });
     }
@@ -43,11 +43,18 @@ const scenarioBotInteractionSchema = z
 const scenarioExpectedSchema = z.object({
   mode: z.enum(["social", "moderation"]).optional(),
   allowedOutcomes: z.array(z.enum(["no_action", "suppressed", "abstain", "action", "ignored"])).min(1),
-  allowedActionKinds: z.array(z.enum(["say", "timeout"])).default([]),
+  allowedActionKinds: z.array(z.enum(["say", "warn", "timeout"])).default([]),
+  requiredActionKinds: z.array(z.enum(["say", "warn", "timeout"])).default([]),
+  requiredActionOrder: z.array(z.enum(["say", "warn", "timeout"])).optional(),
   allowedActionStatuses: z.array(z.enum(["executed", "dry-run", "skipped", "failed"])).default([]),
-  forbiddenActionKinds: z.array(z.enum(["say", "timeout"])).default([]),
+  forbiddenActionKinds: z.array(z.enum(["say", "warn", "timeout"])).default([]),
   replyShouldContainAny: z.array(z.string().min(1)).optional(),
   replyShouldNotContainAny: z.array(z.string().min(1)).optional(),
+  scoring: z
+    .object({
+      missedTimeoutSeverity: z.enum(["advisory", "blocking"]).optional(),
+    })
+    .optional(),
 });
 
 const scenarioStepSchema = scenarioMessageSchema.extend({
@@ -109,7 +116,7 @@ export const scenarioInputSchema = z.union([scriptedScenarioSchema, legacyScenar
 
 export const scenarioFileSchema = scriptedScenarioSchema;
 
-export type ScenarioInputFile = z.infer<typeof scenarioInputSchema>;
+export type ScenarioInputFile = z.input<typeof scenarioInputSchema>;
 export type ScenarioFile = z.infer<typeof scenarioFileSchema>;
 export type ScenarioMessageSpec = z.infer<typeof scenarioMessageSchema>;
 export type ScenarioBotInteractionSpec = z.infer<typeof scenarioBotInteractionSchema>;
@@ -130,8 +137,8 @@ export function normalizeScenarioFile(input: ScenarioInputFile): ScenarioFile {
     futurePreferredAction: input.futurePreferredAction,
     approval: input.approval,
     seed: {
-      messages: input.history.messages,
-      botInteractions: input.history.botInteractions,
+      messages: input.history?.messages ?? [],
+      botInteractions: input.history?.botInteractions ?? [],
     },
     steps: [
       {

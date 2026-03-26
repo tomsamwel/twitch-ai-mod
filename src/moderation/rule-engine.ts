@@ -1,5 +1,6 @@
 import type { ConfigSnapshot, NormalizedChatMessage, ProposedAction, RuleDecision } from "../types.js";
 import { CooldownManager } from "./cooldown-manager.js";
+import { analyzeVisualSpam } from "./visual-spam.js";
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -68,6 +69,20 @@ export class RuleEngine {
       });
     }
 
+    const visualSpamAnalysis = analyzeVisualSpam(message.text, this.config.moderationPolicy.deterministicRules.visualSpam);
+
+    if (visualSpamAnalysis.highConfidence) {
+      return this.buildTimeoutDecision(
+        message,
+        "visual_spam_ascii_art",
+        "large disruptive ASCII art or visual spam",
+        now,
+        {
+          visualSpamAnalysis,
+        },
+      );
+    }
+
     return {
       source: "rules",
       outcome: "no_action",
@@ -104,15 +119,40 @@ export class RuleEngine {
       durationSeconds: this.config.moderationPolicy.deterministicRules.timeoutSeconds,
       ...(metadata ? { metadata } : {}),
     };
+    const warn: ProposedAction = {
+      kind: "warn",
+      reason: `${matchedRule} public notice`,
+      message: this.getPublicNoticeTemplate(matchedRule),
+      targetUserId: message.chatterId,
+      targetUserName: message.chatterLogin,
+      replyParentMessageId: message.sourceMessageId,
+      metadata: {
+        timeoutCompanion: true,
+        timeoutRule: matchedRule,
+      },
+    };
 
     return {
       source: "rules",
       outcome: "action",
       reason,
       matchedRule,
-      actions: [action],
+      actions: [action, warn],
       ...(metadata ? { metadata } : {}),
     };
+  }
+
+  private getPublicNoticeTemplate(matchedRule: string): string {
+    switch (matchedRule) {
+      case "blocked_term":
+        return this.config.moderationPolicy.publicNotices.blockedTerm;
+      case "spam_heuristic":
+        return this.config.moderationPolicy.publicNotices.spamHeuristic;
+      case "visual_spam_ascii_art":
+        return this.config.moderationPolicy.publicNotices.visualSpamAsciiArt;
+      default:
+        return this.config.moderationPolicy.publicNotices.generic;
+    }
   }
 
   private findBlockedTerm(text: string): string | null {

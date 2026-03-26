@@ -84,14 +84,32 @@ function parseArgs(argv: string[]): ReviewPromoteCliOptions {
 
 function inferExpected(snapshotText: string, actions: ReturnType<BotDatabase["listActionsForEventIds"]>) {
   const timeoutAction = actions.find((action) => action.kind === "timeout");
+  const warnAction = actions.find((action) => action.kind === "warn");
   const sayAction = actions.find((action) => action.kind === "say");
 
   if (timeoutAction) {
     return {
       allowedOutcomes: ["action"],
-      allowedActionKinds: ["timeout"],
+      allowedActionKinds: warnAction ? ["timeout", "warn"] : ["timeout"],
+      requiredActionKinds: warnAction ? ["timeout", "warn"] : [],
+      ...(warnAction ? { requiredActionOrder: ["timeout", "warn"] } : {}),
       allowedActionStatuses: ["dry-run"],
       forbiddenActionKinds: ["say"],
+      ...(warnAction ? { replyShouldContainAny: [warnAction.payload.message?.split(/\s+/u)[0]!.toLowerCase()] } : {}),
+    };
+  }
+
+  if (warnAction) {
+    return {
+      allowedOutcomes: ["action"],
+      allowedActionKinds: ["warn"],
+      requiredActionKinds: ["warn"],
+      allowedActionStatuses: ["dry-run"],
+      forbiddenActionKinds: ["timeout"],
+      replyShouldContainAny:
+        warnAction.payload.message && warnAction.payload.message.length > 0
+          ? [warnAction.payload.message.split(/\s+/u)[0]!.toLowerCase()]
+          : undefined,
     };
   }
 

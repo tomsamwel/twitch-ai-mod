@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
+import { logLevelSchema, moderationCategorySchema } from "../types.js";
 
 export const envSchema = z.object({
   TWITCH_CLIENT_ID: z.string().min(1, "TWITCH_CLIENT_ID is required"),
@@ -82,13 +82,16 @@ export const cooldownsSchema = z.object({
   chat: z.object({
     minimumSecondsBetweenBotMessages: z.number().int().nonnegative(),
     minimumSecondsBetweenBotRepliesToSameUser: z.number().int().nonnegative(),
+    minimumSecondsBetweenModerationNotices: z.number().int().nonnegative(),
+    minimumSecondsBetweenModerationNoticesPerUser: z.number().int().nonnegative(),
   }),
   moderation: z.object({
     minimumSecondsBetweenModerationActionsPerUser: z.number().int().nonnegative(),
     minimumSecondsBetweenEquivalentActions: z.number().int().nonnegative(),
   }),
   ai: z.object({
-    minimumSecondsBetweenAiReviewsForSameUser: z.number().int().nonnegative(),
+    minimumSecondsBetweenAiModerationReviewsForSameUser: z.number().int().nonnegative(),
+    minimumSecondsBetweenAiSocialReviewsForSameUser: z.number().int().nonnegative(),
   }),
 });
 
@@ -101,10 +104,28 @@ export const moderationPolicySchema = z.object({
       maxEmotesPerMessage: z.number().int().positive(),
       maxMentionsPerMessage: z.number().int().positive(),
     }),
+    visualSpam: z.object({
+      enabled: z.boolean(),
+      minimumHighConfidenceScore: z.number().int().nonnegative(),
+      minimumBorderlineScore: z.number().int().nonnegative(),
+      minimumVisibleCharacters: z.number().int().nonnegative(),
+      minimumLineCount: z.number().int().positive(),
+      minimumLongestLineLength: z.number().int().positive(),
+      minimumDenseSymbolRunLength: z.number().int().positive(),
+      minimumRepeatedVisualLines: z.number().int().positive(),
+      minimumSymbolDensity: z.number().min(0).max(1),
+      maximumNaturalWordRatio: z.number().min(0).max(1),
+    }),
     escalationThresholds: z.object({
       timeoutOnBlockedTerm: z.boolean(),
       timeoutOnSpam: z.boolean(),
     }),
+  }),
+  publicNotices: z.object({
+    blockedTerm: z.string().min(1),
+    spamHeuristic: z.string().min(1),
+    visualSpamAsciiArt: z.string().min(1),
+    generic: z.string().min(1),
   }),
   aiPolicy: z.object({
     enabled: z.boolean(),
@@ -112,6 +133,11 @@ export const moderationPolicySchema = z.object({
     socialReplyStyle: z.string().min(1),
     moderationStyle: z.string().min(1),
     abstainByDefault: z.boolean(),
+    liveTimeouts: z.object({
+      mode: z.literal("hard-gated"),
+      minimumConfidence: z.number().min(0).max(1),
+      allowedCategories: z.array(moderationCategorySchema).min(1),
+    }),
   }),
 });
 

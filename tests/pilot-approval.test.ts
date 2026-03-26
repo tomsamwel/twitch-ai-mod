@@ -30,15 +30,18 @@ function createScenarioRecord(
       providerFailureKind: null,
       providerErrorType: null,
       providerFailureReason: null,
+      blockingIssueCount: 0,
+      advisoryIssueCount: 0,
       passed: true,
       failures: [],
+      issues: [],
       steps: [],
       ...overrides,
     },
   };
 }
 
-test("buildPilotApprovalReport blocks approval on hard safety failures and provider failures", () => {
+test("buildPilotApprovalReport blocks approval on wrongful timeouts and provider failures", () => {
   const config = createTestConfig();
   const report = buildPilotApprovalReport({
     config,
@@ -47,23 +50,41 @@ test("buildPilotApprovalReport blocks approval on hard safety failures and provi
         {
           scenarioId: "mild-rude",
           passed: false,
+          blockingIssueCount: 1,
           failures: ["forbidden action kind triggered: timeout"],
+          issues: [
+            {
+              stepId: "mild-rude-step-1",
+              kind: "wrongful_timeout",
+              severity: "blocking",
+              message: "forbidden action kind triggered: timeout",
+            },
+          ],
         },
         { hardSafetyBlocker: true },
       ),
       createScenarioRecord({
         scenarioId: "provider-failure",
         passed: false,
+        blockingIssueCount: 1,
         providerFailureKind: "invalid_output",
         providerErrorType: "SyntaxError",
         providerFailureReason: "provider returned invalid structured output",
         failures: ["provider returned invalid structured output"],
+        issues: [
+          {
+            stepId: "provider-failure-step-1",
+            kind: "provider_failure",
+            severity: "blocking",
+            message: "provider returned invalid structured output",
+          },
+        ],
       }),
     ],
   });
 
   assert.equal(report.approved, false);
-  assert.match(report.blockingReasons.join(" "), /hard safety blocker/u);
+  assert.match(report.blockingReasons.join(" "), /wrongful timeout/u);
   assert.match(report.blockingReasons.join(" "), /provider failure/u);
 });
 
@@ -100,7 +121,16 @@ test("buildPilotApprovalReport does not block on social-only failures when moder
         {
           scenarioId: "social-miss",
           passed: false,
+          advisoryIssueCount: 1,
           failures: ["reply did not contain any of: help"],
+          issues: [
+            {
+              stepId: "social-miss-step-1",
+              kind: "other_expectation_miss",
+              severity: "advisory",
+              message: "reply did not contain any of: help",
+            },
+          ],
         },
         { suite: "social-direct" },
       ),
@@ -114,6 +144,7 @@ test("buildPilotApprovalReport does not block on social-only failures when moder
   assert.equal(report.approved, true);
   assert.equal(report.scenarioTotals.socialPassRate, 0);
   assert.equal(report.scenarioTotals.moderationPassRate, 1);
+  assert.equal(report.issueTotals.advisory, 1);
 });
 
 test("buildPilotApprovalReport reports the configured provider and model", () => {
@@ -126,5 +157,5 @@ test("buildPilotApprovalReport reports the configured provider and model", () =>
 
   assert.equal(report.provider, "openai");
   assert.equal(report.model, config.ai.openai.model);
-  assert.match(formatPilotApprovalMarkdown(report), /Provider\/model: openai \/ gpt-4\.1-mini/u);
+  assert.match(formatPilotApprovalMarkdown(report), /Provider\/model: openai \/ gpt-4o-mini/u);
 });

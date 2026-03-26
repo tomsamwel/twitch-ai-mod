@@ -12,6 +12,27 @@ interface OutboundMessageRecorder {
   note(messageId: string): void;
 }
 
+function resolveActionTimestamp(action: ActionRequest): number {
+  const parsed = Date.parse(action.initiatedAt);
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+}
+
+function buildResult(
+  action: ActionRequest,
+  status: ActionResult["status"],
+  extra?: { reason?: string; externalMessageId?: string; error?: string },
+): ActionResult {
+  return {
+    id: action.id,
+    kind: action.kind,
+    status,
+    dryRun: status === "dry-run" ? true : action.dryRun,
+    reason: extra?.reason ?? action.reason,
+    ...(extra?.externalMessageId ? { externalMessageId: extra.externalMessageId } : {}),
+    ...(extra?.error ? { error: extra.error } : {}),
+  };
+}
+
 export class ActionExecutor {
   public constructor(
     private readonly config: ConfigSnapshot,
@@ -35,8 +56,12 @@ export class ActionExecutor {
       initiatedAt?: string;
     },
   ): ActionRequest {
+    const replyParentMessageId =
+      action.replyParentMessageId ?? (action.kind === "warn" ? input.sourceMessageId : undefined);
+
     return {
       ...action,
+      ...(replyParentMessageId ? { replyParentMessageId } : {}),
       id: crypto.randomUUID(),
       source: input.source,
       sourceEventId: input.sourceEventId,
@@ -56,24 +81,21 @@ export class ActionExecutor {
         case "say":
           result = await this.executeSay(action);
           break;
+        case "warn":
+          result = await this.executeWarn(action);
+          break;
         case "timeout":
           result = await this.executeTimeout(action);
           break;
       }
     } catch (error) {
-      result = {
-        id: action.id,
-        kind: action.kind,
-        status: "failed",
-        dryRun: action.dryRun,
-        reason: action.reason,
+      result = buildResult(action, "failed", {
         error: error instanceof Error ? error.message : "unknown action execution error",
-      };
+      });
     }
 
-    if (result.status !== "failed") {
-      const actionTimestamp = Date.parse(action.initiatedAt);
-      this.cooldowns.recordAction(action, Number.isNaN(actionTimestamp) ? Date.now() : actionTimestamp);
+    if (result.status === "executed" || result.status === "dry-run") {
+      this.cooldowns.recordAction(action, resolveActionTimestamp(action));
     }
 
     this.database.recordAction(action, result);
@@ -96,51 +118,73 @@ export class ActionExecutor {
       throw new Error("say action is missing a message payload");
     }
 
-    const actionTimestamp = Date.parse(action.initiatedAt);
-    const now = Number.isNaN(actionTimestamp) ? Date.now() : actionTimestamp;
+    const now = resolveActionTimestamp(action);
     const chatGate = this.cooldowns.canSendMessage(action.targetUserId, now);
 
     if (!chatGate.allowed) {
-      return {
-        id: action.id,
-        kind: action.kind,
-        status: "skipped",
-        dryRun: action.dryRun,
-        reason: chatGate.reason ?? "chat cooldown active",
-      };
+      return buildResult(action, "skipped", { reason: chatGate.reason ?? "chat cooldown active" });
     }
 
     if (action.dryRun) {
-      return {
-        id: action.id,
-        kind: action.kind,
-        status: "dry-run",
-        dryRun: true,
-        reason: action.reason,
-      };
+      return buildResult(action, "dry-run");
     }
 
     if (!this.config.actions.allowLiveChatMessages) {
-      return {
-        id: action.id,
-        kind: action.kind,
-        status: "skipped",
-        dryRun: false,
-        reason: "live chat messages are disabled in config",
-      };
+      return buildResult(action, "skipped", { reason: "live chat messages are disabled in config" });
     }
 
     const sentMessage = await this.twitchGateway.sendChatMessage(action.message, action.replyParentMessageId);
     this.outboundMessages?.note(sentMessage.id);
 
-    return {
-      id: action.id,
-      kind: action.kind,
-      status: "executed",
-      dryRun: false,
-      reason: action.reason,
-      externalMessageId: sentMessage.id,
-    };
+    return buildResult(action, "executed", { externalMessageId: sentMessage.id });
+  }
+
+  private async executeWarn(action: ActionRequest): Promise<ActionResult> {
+    if (!action.message) {
+      throw new Error("warn action is missing a message payload");
+    }
+
+    const metadata =
+      action.metadata && typeof action.metadata === "object" && !Array.isArray(action.metadata)
+        ? (action.metadata as Record<string, unknown>)
+        : null;
+    const timeoutCompanion = metadata?.timeoutCompanion === true;
+    const companionTimeoutStatus =
+      metadata?.companionTimeoutStatus &&
+      typeof metadata.companionTimeoutStatus === "string"
+        ? metadata.companionTimeoutStatus
+        : null;
+
+    if (
+      timeoutCompanion &&
+      companionTimeoutStatus &&
+      companionTimeoutStatus !== "executed" &&
+      companionTimeoutStatus !== "dry-run"
+    ) {
+      return buildResult(action, "skipped", {
+        reason: "timeout notice skipped because the preceding timeout did not execute",
+      });
+    }
+
+    const now = resolveActionTimestamp(action);
+    const chatGate = this.cooldowns.canSendModerationNotice(action.targetUserId, now);
+
+    if (!chatGate.allowed) {
+      return buildResult(action, "skipped", { reason: chatGate.reason ?? "moderation notice cooldown active" });
+    }
+
+    if (action.dryRun) {
+      return buildResult(action, "dry-run");
+    }
+
+    if (!this.config.actions.allowLiveChatMessages) {
+      return buildResult(action, "skipped", { reason: "live chat messages are disabled in config" });
+    }
+
+    const sentMessage = await this.twitchGateway.sendChatMessage(action.message, action.replyParentMessageId);
+    this.outboundMessages?.note(sentMessage.id);
+
+    return buildResult(action, "executed", { externalMessageId: sentMessage.id });
   }
 
   private async executeTimeout(action: ActionRequest): Promise<ActionResult> {
@@ -152,60 +196,77 @@ export class ActionExecutor {
       throw new Error("timeout action is missing a valid durationSeconds");
     }
 
-    const actionTimestamp = Date.parse(action.initiatedAt);
-    const now = Number.isNaN(actionTimestamp) ? Date.now() : actionTimestamp;
+    const now = resolveActionTimestamp(action);
     const moderationGate = this.cooldowns.canModerateUser(action.targetUserId, action.kind, now);
 
     if (!moderationGate.allowed) {
-      return {
-        id: action.id,
-        kind: action.kind,
-        status: "skipped",
-        dryRun: action.dryRun,
-        reason: moderationGate.reason ?? "moderation cooldown active",
-      };
+      return buildResult(action, "skipped", { reason: moderationGate.reason ?? "moderation cooldown active" });
     }
 
     if (action.dryRun) {
-      return {
-        id: action.id,
-        kind: action.kind,
-        status: "dry-run",
-        dryRun: true,
-        reason: action.reason,
-      };
+      return buildResult(action, "dry-run");
     }
 
     const runtimeSettings = this.runtimeSettings.getEffectiveSettings();
 
     if (!runtimeSettings.liveModerationEnabled) {
-      return {
-        id: action.id,
-        kind: action.kind,
-        status: "skipped",
-        dryRun: false,
-        reason: "live moderation actions are disabled in config",
-      };
+      return buildResult(action, "skipped", { reason: "live moderation actions are disabled in config" });
     }
 
     if (action.source === "ai" && !runtimeSettings.aiModerationEnabled) {
-      return {
-        id: action.id,
-        kind: action.kind,
-        status: "skipped",
-        dryRun: false,
-        reason: "AI live moderation actions are disabled by runtime control",
-      };
+      return buildResult(action, "skipped", { reason: "AI live moderation actions are disabled by runtime control" });
+    }
+
+    if (action.source === "ai") {
+      const precisionGateFailure = this.getAiTimeoutPrecisionGateFailure(action);
+
+      if (precisionGateFailure) {
+        return buildResult(action, "skipped", { reason: "AI timeout blocked by precision gate" });
+      }
     }
 
     await this.twitchGateway.timeoutUser(action.targetUserId, action.durationSeconds, action.reason);
 
-    return {
-      id: action.id,
-      kind: action.kind,
-      status: "executed",
-      dryRun: false,
-      reason: action.reason,
-    };
+    return buildResult(action, "executed");
+  }
+
+  private getAiTimeoutPrecisionGateFailure(action: ActionRequest): string | null {
+    const metadata = action.metadata;
+
+    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+      return "missing ai timeout precision metadata";
+    }
+
+    const candidate = metadata as Record<string, unknown>;
+    const confidence = typeof candidate.aiConfidence === "number" ? candidate.aiConfidence : null;
+    const moderationCategory =
+      typeof candidate.moderationCategory === "string" ? candidate.moderationCategory : null;
+    const targetIsPrivileged = candidate.targetIsPrivileged === true;
+    const targetIsSelfAuthored = candidate.targetIsSelfAuthored === true;
+    const hasRepeatedUserEvidence = candidate.hasRepeatedUserEvidence === true;
+    const hasRecentBotCorrectiveInteraction = candidate.hasRecentBotCorrectiveInteraction === true;
+    const liveTimeouts = this.config.moderationPolicy.aiPolicy.liveTimeouts;
+
+    if (confidence === null || confidence < liveTimeouts.minimumConfidence) {
+      return "ai confidence below live timeout minimum";
+    }
+
+    if (!moderationCategory || !liveTimeouts.allowedCategories.includes(moderationCategory as never)) {
+      return "moderation category is not allowlisted for live timeout";
+    }
+
+    if (targetIsPrivileged || targetIsSelfAuthored) {
+      return "target is privileged or self-authored";
+    }
+
+    if (
+      moderationCategory === "spam-escalation" &&
+      !hasRepeatedUserEvidence &&
+      !hasRecentBotCorrectiveInteraction
+    ) {
+      return "spam escalation lacks repeat evidence or a prior corrective interaction";
+    }
+
+    return null;
   }
 }

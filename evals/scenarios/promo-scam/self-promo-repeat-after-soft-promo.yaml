@@ -16,7 +16,7 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]
   - id: promo-soft-2
@@ -30,6 +30,6 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]

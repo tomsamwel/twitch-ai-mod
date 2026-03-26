@@ -130,6 +130,7 @@ async function main(): Promise<void> {
       aiActions: summary.aiActions,
       aiAbstains: summary.aiAbstains,
       sayActions: summary.sayActions,
+      warnActions: summary.warnActions,
       timeoutActions: summary.timeoutActions,
       providerFailures: summary.providerFailures.length,
       timeoutCandidates: summary.timeoutCandidates.length,

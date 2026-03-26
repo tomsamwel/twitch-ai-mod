@@ -7,7 +7,7 @@ futurePreferredAction: warn
 seed:
   botInteractions:
     - at: "2026-03-25T10:41:00.000Z"
-      kind: say
+      kind: warn
       targetActorId: promo-31
       source: ai
       status: executed
@@ -25,6 +25,7 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
+      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]

@@ -1,4 +1,3 @@
-import { aiDecisionJsonSchema } from "./decision-schema.js";
 import type {
   AiContextSnapshot,
   AiDecisionInput,
@@ -8,6 +7,7 @@ import type {
   NormalizedChatMessage,
   TwitchIdentity,
 } from "../types.js";
+import { analyzeVisualSpam } from "../moderation/visual-spam.js";
 
 interface AiModeSignals {
   mode: AiMode;
@@ -22,6 +22,120 @@ interface AiModeSignals {
 export interface AiModeSelection {
   mode: AiMode;
   signals: AiModeSignals;
+}
+
+function formatYesNo(value: boolean): string {
+  return value ? "yes" : "no";
+}
+
+function formatQuoted(value: string | null | undefined): string {
+  return value ? JSON.stringify(value) : "none";
+}
+
+function countMentions(message: NormalizedChatMessage): number {
+  return message.parts.filter((part) => part.type === "mention").length;
+}
+
+function hasRecentBotCorrectiveInteraction(context: AiContextSnapshot): boolean {
+  return context.recentBotInteractions.some(
+    (interaction) => (interaction.kind === "say" || interaction.kind === "warn") && interaction.status !== "failed",
+  );
+}
+
+function formatRecentRoomContext(context: AiContextSnapshot): string {
+  if (context.recentRoomMessages.length === 0) {
+    return "none";
+  }
+
+  return context.recentRoomMessages
+    .map(
+      (entry) =>
+        `- [${entry.receivedAt}] @${entry.chatterLogin}${entry.isBotMessage ? " (bot)" : ""} roles=${entry.roles.join(",")} text=${JSON.stringify(entry.text)}`,
+    )
+    .join("\n");
+}
+
+function formatRecentUserContext(context: AiContextSnapshot): string {
+  if (context.recentUserMessages.length === 0) {
+    return "none";
+  }
+
+  return context.recentUserMessages
+    .map(
+      (entry) =>
+        `- [${entry.receivedAt}] @${entry.chatterLogin} roles=${entry.roles.join(",")} text=${JSON.stringify(entry.text)}`,
+    )
+    .join("\n");
+}
+
+function formatRecentBotInteractions(context: AiContextSnapshot): string {
+  if (context.recentBotInteractions.length === 0) {
+    return "none";
+  }
+
+  return context.recentBotInteractions
+    .map((entry) => {
+      const payload =
+        entry.kind === "say" || entry.kind === "warn"
+          ? `message=${formatQuoted(entry.message)}`
+          : `durationSeconds=${entry.durationSeconds ?? "default"}`;
+
+      return `- [${entry.createdAt}] ${entry.kind} status=${entry.status} source=${entry.source} ${payload} reason=${JSON.stringify(entry.reason)}`;
+    })
+    .join("\n");
+}
+
+function formatModerationPolicySummary(config: ConfigSnapshot): string {
+  const policy = config.moderationPolicy;
+  return [
+    `- privileged users (broadcaster, moderator, vip, trusted) are never timed out`,
+    `- ai posture: abstain by default, timeout only with high confidence`,
+    `- live timeout gate: minimumConfidence=${policy.aiPolicy.liveTimeouts.minimumConfidence.toFixed(2)}, categories=${policy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}`,
+    `- deterministic rules handle blocked terms and spam automatically`,
+  ].join("\n");
+}
+
+function formatDerivedSignals(
+  message: NormalizedChatMessage,
+  context: AiContextSnapshot,
+  config: ConfigSnapshot,
+): string {
+  const visualSpam = analyzeVisualSpam(message.text, config.moderationPolicy.deterministicRules.visualSpam);
+
+  return [
+    `mention_count: ${countMentions(message)}`,
+    `recent_same_user_messages: ${context.recentUserMessages.length}`,
+    `recent_bot_correction: ${formatYesNo(hasRecentBotCorrectiveInteraction(context))}`,
+    `visual_spam_score: ${visualSpam.score}`,
+    `visual_spam_high_confidence: ${formatYesNo(visualSpam.highConfidence)}`,
+    `visual_spam_borderline: ${formatYesNo(visualSpam.borderline)}`,
+  ].join("\n");
+}
+
+function formatDecisionExamples(mode: AiMode): string {
+  if (mode === "social") {
+    return [
+      'input: "@bot what\'s your goal?" -> action, say "My goal is to help keep chat friendly.", conf=0.88',
+      'input: "@bot please help" -> action, say "I\'m here to help keep chat friendly.", conf=0.86',
+      'input: "@bot @bot @bot" first burst -> action, say "Please stop spamming mentions.", conf=0.82',
+      "",
+      'Full output shape: {"outcome":"action","reason":"...","confidence":0.88,"mode":"social","moderationCategory":"none","actions":[{"kind":"say","reason":"...","message":"..."}]}',
+    ].join("\n");
+  }
+
+  return [
+    'input: "@bot @bot @bot" no prior warning -> action, warn "Please stop spamming mentions.", category=spam-escalation, conf=0.78',
+    'input: "@bot*5" repeated after bot correction -> action, [timeout, warn "Mention spam gets timed out."], category=spam-escalation, conf=0.95',
+    'input: "maybe help people get followers" -> abstain, category=scam, conf=0.69',
+    'input: "you should totally dm me later" -> abstain, category=sexual-harassment, conf=0.72',
+    'input: "lol this stream is washed" -> action, warn "Keep it civil.", category=rude-disruption, conf=0.74',
+    'input: "shut up bot, kill yourself" -> action, [timeout, warn "Harassment gets timed out."], category=targeted-harassment, conf=0.99',
+    'input: "send me pics or i will come" -> action, [timeout, warn "Coercive sexual comments get timed out."], category=sexual-harassment, conf=0.99',
+    'input: roles=vip "follow for follow" -> abstain, category=none, conf=0.95 (privileged user exempt)',
+    'input: visual spam borderline symbols -> action, warn "Keep visual spam out of chat.", category=spam-escalation, conf=0.76',
+    "",
+    'Full output shape: {"outcome":"action","reason":"...","confidence":0.95,"mode":"moderation","moderationCategory":"spam-escalation","actions":[{"kind":"timeout","reason":"..."},{"kind":"warn","reason":"...","message":"..."}]}',
+  ].join("\n");
 }
 
 function detectAiModeSignals(
@@ -88,105 +202,94 @@ export function composeAiPrompt(
 ): AiPromptPayload {
   const modePrompt =
     mode === "social" ? config.prompts.socialPersona.trim() : config.prompts.moderation.trim();
-
-  const roomContextBlock =
-    context.recentRoomMessages.length > 0
-      ? context.recentRoomMessages
-          .map(
-            (entry) =>
-              `- [${entry.receivedAt}] @${entry.chatterLogin}${entry.isBotMessage ? " (bot)" : ""}: ${entry.text}`,
-          )
-          .join("\n")
-      : "- none";
-  const userHistoryBlock =
-    context.recentUserMessages.length > 0
-      ? context.recentUserMessages
-          .map((entry) => `- [${entry.receivedAt}] @${entry.chatterLogin}: ${entry.text}`)
-          .join("\n")
-      : "- none";
-  const botInteractionBlock =
-    context.recentBotInteractions.length > 0
-      ? context.recentBotInteractions
-          .map((entry) => {
-            const details =
-              entry.kind === "say"
-                ? entry.message
-                  ? `message="${entry.message}"`
-                  : "message=<none>"
-                : `durationSeconds=${entry.durationSeconds ?? "default"}`;
-
-            return `- [${entry.createdAt}] ${entry.kind} status=${entry.status} source=${entry.source} ${details} reason="${entry.reason}"`;
-          })
-          .join("\n")
-      : "- none";
-
   const system = [
+    "<role>",
     config.prompts.system.trim(),
+    "</role>",
+    "",
+    `<mode_instructions mode="${mode}">`,
     modePrompt,
+    "</mode_instructions>",
+    "",
+    "<style>",
     config.prompts.responseStyle.trim(),
+    "</style>",
+    "",
+    "<safety>",
     config.prompts.safetyRules.trim(),
-    [
-      "Decision instructions:",
-      "- Deterministic rules already ran and did not take action for this message.",
-      "- Return only valid JSON, with no markdown and no explanation outside the JSON object.",
-      "- Prefer abstaining when confidence is low.",
-      "- The current mode is already decided by the application. Echo that exact mode in the mode field.",
-      "- If outcome is abstain, actions must be [].",
-      "- Use at most one action.",
-      "- Allowed action kinds are say and timeout.",
-      "- If you choose say, provide a short chat-safe message.",
-      "- If you choose timeout, you may omit targetUserId, targetUserName, and durationSeconds to apply defaults to the current chatter.",
-      "- Do not include placeholder or contradictory actions.",
-      "- If current mode is social and the message directly addresses the bot with a clear question or help request, prefer one short say reply over abstaining.",
-      "- If the broadcaster login and bot login are the same, mentions of the channel handle also count as direct bot mentions.",
-      '- Valid abstain example: {"outcome":"abstain","reason":"no intervention needed","confidence":0.9,"mode":"moderation","actions":[]}.',
-      '- Valid say example: {"outcome":"action","reason":"brief clarification helps","confidence":0.7,"mode":"social","actions":[{"kind":"say","reason":"short helpful reply","message":"I only step in when it helps chat."}]}.',
-    ].join("\n"),
-  ].join("\n\n");
+    "</safety>",
+    "",
+    "<decision_contract>",
+    "- Return one JSON object only. No markdown or prose outside it.",
+    `- Set mode="${mode}" exactly.`,
+    mode === "social"
+      ? '- Social: outcome "action" requires exactly one "say" action. moderationCategory must be "none".'
+      : '- Moderation: outcome "action" requires either one "warn" or the ordered pair ["timeout", "warn"].',
+    '- outcome "abstain" requires actions=[].',
+    '- moderationCategory values: "none", "scam", "targeted-harassment", "sexual-harassment", "spam-escalation", "soft-promo", "rude-disruption", "other".',
+    `- Only propose timeout for: ${config.moderationPolicy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}.`,
+    "- If unsure, abstain.",
+    "</decision_contract>",
+    "",
+    "<decision_examples>",
+    formatDecisionExamples(mode),
+    "</decision_examples>",
+  ].join("\n");
 
   const user = [
-    `Current mode: ${mode}`,
-    `Bot identity: @${botIdentity.login}`,
-    `Channel: @${config.twitch.broadcasterLogin}`,
-    "Current message context:",
-    JSON.stringify(
-      {
-        eventId: message.eventId,
-        chatterId: message.chatterId,
-        chatterLogin: message.chatterLogin,
-        chatterDisplayName: message.chatterDisplayName,
-        text: message.text,
-        messageType: message.messageType,
-        badges: message.badges,
-        roles: message.roles,
-        isReply: message.isReply,
-        isCheer: message.isCheer,
-        bits: message.bits,
-        isRedemption: message.isRedemption,
-        rewardId: message.rewardId,
-      },
-      null,
-      2,
-    ),
-    "Mode trigger signals:",
-    JSON.stringify(signals, null, 2),
-    "Recent room context:",
-    roomContextBlock,
-    "Recent same-user history:",
-    userHistoryBlock,
-    "Recent bot interactions toward this user:",
-    botInteractionBlock,
-    "Moderation policy snapshot:",
-    JSON.stringify(config.moderationPolicy, null, 2),
-    "Required JSON schema:",
-    JSON.stringify(aiDecisionJsonSchema, null, 2),
-    [
-      "Mode guidance:",
-      mode === "social"
-        ? "- In social mode, the bot was directly addressed or otherwise invited in. Prefer one brief helpful say reply when a clear question or help request is present."
-        : "- In moderation mode, prefer abstain or a timeout only when intervention is useful.",
-    ].join("\n"),
-  ].join("\n\n");
+    "<conversation_context>",
+    `<bot>@${botIdentity.login}</bot>`,
+    `<channel>@${config.twitch.broadcasterLogin}</channel>`,
+    `<current_mode>${mode}</current_mode>`,
+    "<message>",
+    `event_id: ${message.eventId}`,
+    `chatter_id: ${message.chatterId}`,
+    `chatter_login: @${message.chatterLogin}`,
+    `display_name: ${message.chatterDisplayName}`,
+    `roles: ${message.roles.join(",")}`,
+    `privileged: ${formatYesNo(message.isPrivileged)}`,
+    `text: ${JSON.stringify(message.text)}`,
+    `message_type: ${message.messageType}`,
+    `is_reply: ${formatYesNo(message.isReply)}`,
+    `reply_parent_user: ${formatQuoted(message.replyParentUserLogin)}`,
+    `is_cheer: ${formatYesNo(message.isCheer)}`,
+    `bits: ${message.bits}`,
+    `is_redemption: ${formatYesNo(message.isRedemption)}`,
+    `reward_id: ${formatQuoted(message.rewardId)}`,
+    "</message>",
+    "<mode_signals>",
+    `mentioned_bot: ${formatYesNo(signals.mentionedBot)}`,
+    `textual_mention: ${formatYesNo(signals.textualMention)}`,
+    `replied_to_bot: ${formatYesNo(signals.repliedToBot)}`,
+    `threaded_with_bot: ${formatYesNo(signals.threadedWithBot)}`,
+    `reward_triggered: ${formatYesNo(signals.rewardTriggered)}`,
+    `broadcaster_addressed: ${formatYesNo(signals.broadcasterAddressed)}`,
+    "</mode_signals>",
+    "<recent_room_context>",
+    formatRecentRoomContext(context),
+    "</recent_room_context>",
+    "<recent_same_user_history>",
+    formatRecentUserContext(context),
+    "</recent_same_user_history>",
+    "<recent_bot_interactions>",
+    formatRecentBotInteractions(context),
+    "</recent_bot_interactions>",
+    "<derived_signals>",
+    formatDerivedSignals(message, context, config),
+    "</derived_signals>",
+    "</conversation_context>",
+    "",
+    "<policy_summary>",
+    formatModerationPolicySummary(config),
+    "</policy_summary>",
+    "",
+    "<task>",
+    mode === "social"
+      ? "Decide whether to abstain or take one social say action for this single message."
+      : 'Decide whether to abstain, issue one public warn, or issue the ordered moderation pair ["timeout", "warn"] for this single message.',
+    "Return JSON only.",
+    "</task>",
+  ].join("\n");
 
   return { system, user };
 }

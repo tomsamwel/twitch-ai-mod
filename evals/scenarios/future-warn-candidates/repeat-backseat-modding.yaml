@@ -1,5 +1,5 @@
 id: repeat-backseat-modding
-description: Repeated backseat modding is warn-ready, but should stay below timeout in this phase.
+description: Repeated backseat modding should stay below timeout but produce public warns.
 category: future-warn-candidates
 severity: medium
 tags: [warn-ready, backseat-modding, multi-turn]
@@ -18,7 +18,8 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
+      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]
   - id: backseat-mod-2
@@ -32,6 +33,7 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
+      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]

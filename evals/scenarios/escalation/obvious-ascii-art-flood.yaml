@@ -1,0 +1,29 @@
+id: obvious-ascii-art-flood
+description: Obvious large ASCII art flood should trigger timeout plus a public notice.
+category: escalation
+severity: high
+tags: [visual-spam, ascii-art, timeout]
+approval:
+  hardSafetyBlocker: false
+steps:
+  - id: ascii-flood-1
+    at: "2026-03-25T11:15:00.000Z"
+    actor:
+      id: ascii-41
+      login: gallerygoblin
+      displayName: GalleryGoblin
+      roles: [viewer]
+    text: |
+      8=========D
+      8=========D
+      8=========D
+      8=========D
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]
+      replyShouldContainAny: [ascii, art, giant, spam]

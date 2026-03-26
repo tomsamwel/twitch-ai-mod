@@ -1,6 +1,9 @@
 import { getConfiguredProviderInfo } from "../ai/provider-config.js";
 import type { LoadedScenario } from "../eval/load-scenarios.js";
-import type { ScenarioEvaluationResult } from "../eval/scenario-runner.js";
+import type {
+  ScenarioEvaluationIssue,
+  ScenarioEvaluationResult,
+} from "../eval/scenario-runner.js";
 import type { AiProviderKind, ConfigSnapshot } from "../types.js";
 
 export interface PilotApprovalScenarioRecord {
@@ -38,7 +41,8 @@ export interface PilotApprovalReport {
     socialPassed: number;
     socialPassRate: number;
     hardSafetyBlockers: number;
-    hardSafetyFailures: number;
+    hardSafetyTimeoutRequirements: number;
+    hardSafetyTimeoutSatisfied: number;
   };
   suiteSummaries: Array<{
     suite: string;
@@ -46,21 +50,49 @@ export interface PilotApprovalReport {
     total: number;
     passed: number;
     failed: number;
-    hardSafetyFailures: number;
+    blockingIssues: number;
+    advisoryIssues: number;
+    wrongfulTimeouts: number;
+    blockingMissedTimeouts: number;
   }>;
+  issueTotals: {
+    blocking: number;
+    advisory: number;
+    wrongfulTimeouts: number;
+    blockingMissedTimeouts: number;
+    advisoryMissedTimeouts: number;
+    providerFailures: number;
+    otherExpectationMisses: number;
+  };
+  timeoutMetrics: {
+    timeoutActionsObserved: number;
+    correctTimeoutActions: number;
+    precision: number | null;
+    hardSafetyTimeoutRecall: number | null;
+  };
   promptSizeHints: {
     averageChars: number;
     maxChars: number;
   };
   actionCounts: {
     say: number;
+    warn: number;
     timeout: number;
   };
   providerFailures: PilotApprovalProviderFailure[];
-  hardSafetyFailures: Array<{
+  blockingIssues: Array<{
     suite: string;
     scenarioId: string;
-    failures: string[];
+    stepId: string;
+    kind: ScenarioEvaluationIssue["kind"];
+    message: string;
+  }>;
+  advisoryIssues: Array<{
+    suite: string;
+    scenarioId: string;
+    stepId: string;
+    kind: ScenarioEvaluationIssue["kind"];
+    message: string;
   }>;
 }
 
@@ -95,16 +127,40 @@ export function buildPilotApprovalReport(input: {
   const socialPassed = socialResults.filter((record) => record.result.passed).length;
   const moderationPassRate = moderationResults.length === 0 ? 0 : moderationPassed / moderationResults.length;
   const socialPassRate = socialResults.length === 0 ? 0 : socialPassed / socialResults.length;
-  const hardSafetyFailures = input.scenarioResults
-    .filter((record) => record.hardSafetyBlocker && !record.result.passed)
-    .map((record) => ({
-      suite: record.suite,
-      scenarioId: record.result.scenarioId,
-      failures: record.result.failures,
-    }));
+  const blockingIssues = input.scenarioResults.flatMap((record) =>
+    record.result.issues
+      .filter((issue) => issue.severity === "blocking")
+      .map((issue) => ({
+        suite: record.suite,
+        scenarioId: record.result.scenarioId,
+        stepId: issue.stepId,
+        kind: issue.kind,
+        message: issue.message,
+      })),
+  );
+  const advisoryIssues = input.scenarioResults.flatMap((record) =>
+    record.result.issues
+      .filter((issue) => issue.severity === "advisory")
+      .map((issue) => ({
+        suite: record.suite,
+        scenarioId: record.result.scenarioId,
+        stepId: issue.stepId,
+        kind: issue.kind,
+        message: issue.message,
+      })),
+  );
   const suiteMap = new Map<
     string,
-    { kind: "moderation" | "social"; total: number; passed: number; failed: number; hardSafetyFailures: number }
+    {
+      kind: "moderation" | "social";
+      total: number;
+      passed: number;
+      failed: number;
+      blockingIssues: number;
+      advisoryIssues: number;
+      wrongfulTimeouts: number;
+      blockingMissedTimeouts: number;
+    }
   >();
 
   for (const record of input.scenarioResults) {
@@ -113,12 +169,20 @@ export function buildPilotApprovalReport(input: {
       total: 0,
       passed: 0,
       failed: 0,
-      hardSafetyFailures: 0,
+      blockingIssues: 0,
+      advisoryIssues: 0,
+      wrongfulTimeouts: 0,
+      blockingMissedTimeouts: 0,
     };
     current.total += 1;
     current.passed += record.result.passed ? 1 : 0;
     current.failed += record.result.passed ? 0 : 1;
-    current.hardSafetyFailures += record.hardSafetyBlocker && !record.result.passed ? 1 : 0;
+    current.blockingIssues += record.result.blockingIssueCount;
+    current.advisoryIssues += record.result.advisoryIssueCount;
+    current.wrongfulTimeouts += record.result.issues.filter((issue) => issue.kind === "wrongful_timeout").length;
+    current.blockingMissedTimeouts += record.result.issues.filter(
+      (issue) => issue.kind === "missed_required_timeout" && issue.severity === "blocking",
+    ).length;
     suiteMap.set(record.suite, current);
   }
 
@@ -138,21 +202,38 @@ export function buildPilotApprovalReport(input: {
       (count, record) => count + record.result.actualActionKinds.filter((kind) => kind === "say").length,
       0,
     ),
+    warn: input.scenarioResults.reduce(
+      (count, record) => count + record.result.actualActionKinds.filter((kind) => kind === "warn").length,
+      0,
+    ),
     timeout: input.scenarioResults.reduce(
       (count, record) => count + record.result.actualActionKinds.filter((kind) => kind === "timeout").length,
       0,
     ),
   };
+  const wrongfulTimeouts = blockingIssues.filter((issue) => issue.kind === "wrongful_timeout").length;
+  const blockingMissedTimeouts = blockingIssues.filter((issue) => issue.kind === "missed_required_timeout").length;
+  const advisoryMissedTimeouts = advisoryIssues.filter((issue) => issue.kind === "missed_required_timeout").length;
+  const otherExpectationMisses = advisoryIssues.filter((issue) => issue.kind === "other_expectation_miss").length;
+  const hardSafetyTimeoutSteps = input.scenarioResults.flatMap((record) =>
+    record.hardSafetyBlocker ? record.result.steps.filter((step) => step.timeoutRequired) : [],
+  );
+  const hardSafetyTimeoutSatisfied = hardSafetyTimeoutSteps.filter((step) =>
+    step.actualActionKinds.includes("timeout"),
+  ).length;
+  const timeoutActionsObserved = input.scenarioResults.reduce(
+    (count, record) => count + record.result.steps.filter((step) => step.actualActionKinds.includes("timeout")).length,
+    0,
+  );
+  const correctTimeoutActions = Math.max(0, timeoutActionsObserved - wrongfulTimeouts);
   const blockingReasons: string[] = [];
 
-  if (hardSafetyFailures.length > 0) {
-    blockingReasons.push(`${hardSafetyFailures.length} hard safety blocker scenario(s) failed.`);
+  if (wrongfulTimeouts > 0) {
+    blockingReasons.push(`${wrongfulTimeouts} wrongful timeout issue(s) detected.`);
   }
 
-  if (moderationPassRate < 0.9) {
-    blockingReasons.push(
-      `Moderation suite pass rate is ${(moderationPassRate * 100).toFixed(1)}%, below the required 90.0%.`,
-    );
+  if (blockingMissedTimeouts > 0) {
+    blockingReasons.push(`${blockingMissedTimeouts} blocking missed-timeout issue(s) detected.`);
   }
 
   if (providerFailures.length > 0) {
@@ -178,7 +259,8 @@ export function buildPilotApprovalReport(input: {
       socialPassed,
       socialPassRate,
       hardSafetyBlockers: input.scenarioResults.filter((record) => record.hardSafetyBlocker).length,
-      hardSafetyFailures: hardSafetyFailures.length,
+      hardSafetyTimeoutRequirements: hardSafetyTimeoutSteps.length,
+      hardSafetyTimeoutSatisfied,
     },
     suiteSummaries: [...suiteMap.entries()]
       .map(([suite, summary]) => ({
@@ -186,6 +268,22 @@ export function buildPilotApprovalReport(input: {
         ...summary,
       }))
       .sort((left, right) => left.suite.localeCompare(right.suite)),
+    issueTotals: {
+      blocking: blockingIssues.length,
+      advisory: advisoryIssues.length,
+      wrongfulTimeouts,
+      blockingMissedTimeouts,
+      advisoryMissedTimeouts,
+      providerFailures: providerFailures.length,
+      otherExpectationMisses,
+    },
+    timeoutMetrics: {
+      timeoutActionsObserved,
+      correctTimeoutActions,
+      precision: timeoutActionsObserved === 0 ? null : correctTimeoutActions / timeoutActionsObserved,
+      hardSafetyTimeoutRecall:
+        hardSafetyTimeoutSteps.length === 0 ? null : hardSafetyTimeoutSatisfied / hardSafetyTimeoutSteps.length,
+    },
     promptSizeHints: {
       averageChars:
         promptChars.length > 0
@@ -195,7 +293,8 @@ export function buildPilotApprovalReport(input: {
     },
     actionCounts,
     providerFailures,
-    hardSafetyFailures,
+    blockingIssues,
+    advisoryIssues,
   };
 }
 
@@ -217,19 +316,45 @@ export function formatPilotApprovalMarkdown(report: PilotApprovalReport): string
         ? `${(report.scenarioTotals.socialPassRate * 100).toFixed(1)}% (${report.scenarioTotals.socialPassed}/${report.scenarioTotals.socialTotal})`
         : "n/a"
     }`,
-    `- Hard safety blockers: ${report.scenarioTotals.hardSafetyBlockers}, failures: ${report.scenarioTotals.hardSafetyFailures}`,
+    `- Hard safety blocker scenarios: ${report.scenarioTotals.hardSafetyBlockers}`,
     `- Prompt size hints: avg ${report.promptSizeHints.averageChars} chars, max ${report.promptSizeHints.maxChars} chars`,
     "",
-    "| Suite | Kind | Passed | Failed | Hard safety failures |",
-    "| --- | --- | ---: | ---: | ---: |",
+    "## Timeout Risk",
+    "",
+    `- Timeout precision: ${
+      report.timeoutMetrics.precision === null
+        ? "n/a"
+        : `${(report.timeoutMetrics.precision * 100).toFixed(1)}% (${report.timeoutMetrics.correctTimeoutActions}/${report.timeoutMetrics.timeoutActionsObserved})`
+    }`,
+    `- Hard-safety timeout recall: ${
+      report.timeoutMetrics.hardSafetyTimeoutRecall === null
+        ? "n/a"
+        : `${(report.timeoutMetrics.hardSafetyTimeoutRecall * 100).toFixed(1)}% (${report.scenarioTotals.hardSafetyTimeoutSatisfied}/${report.scenarioTotals.hardSafetyTimeoutRequirements})`
+    }`,
+    "",
+    "## Issue Totals",
+    "",
+    `- Blocking issues: ${report.issueTotals.blocking}`,
+    `- Advisory issues: ${report.issueTotals.advisory}`,
+    `- Wrongful timeouts: ${report.issueTotals.wrongfulTimeouts}`,
+    `- Blocking missed required timeouts: ${report.issueTotals.blockingMissedTimeouts}`,
+    `- Advisory missed required timeouts: ${report.issueTotals.advisoryMissedTimeouts}`,
+    `- Provider failures: ${report.issueTotals.providerFailures}`,
+    `- Other expectation misses: ${report.issueTotals.otherExpectationMisses}`,
+    "",
+    "## Suite Summary",
+    "",
+    "| Suite | Kind | Passed | Failed | Blocking | Advisory | Wrongful timeouts | Blocking missed timeouts |",
+    "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ...report.suiteSummaries.map(
       (summary) =>
-        `| ${summary.suite} | ${summary.kind} | ${summary.passed}/${summary.total} | ${summary.failed} | ${summary.hardSafetyFailures} |`,
+        `| ${summary.suite} | ${summary.kind} | ${summary.passed}/${summary.total} | ${summary.failed} | ${summary.blockingIssues} | ${summary.advisoryIssues} | ${summary.wrongfulTimeouts} | ${summary.blockingMissedTimeouts} |`,
     ),
     "",
     "## Action Counts",
     "",
     `- say actions: ${report.actionCounts.say}`,
+    `- warn actions: ${report.actionCounts.warn}`,
     `- timeout actions: ${report.actionCounts.timeout}`,
     "",
   ];
@@ -242,10 +367,18 @@ export function formatPilotApprovalMarkdown(report: PilotApprovalReport): string
     lines.push("");
   }
 
-  if (report.hardSafetyFailures.length > 0) {
-    lines.push("## Hard Safety Failures", "");
-    for (const failure of report.hardSafetyFailures) {
-      lines.push(`- ${failure.suite}/${failure.scenarioId}: ${failure.failures.join("; ")}`);
+  if (report.blockingIssues.length > 0) {
+    lines.push("## Blocking Issues", "");
+    for (const issue of report.blockingIssues) {
+      lines.push(`- ${issue.suite}/${issue.scenarioId}/${issue.stepId} kind=${issue.kind}: ${issue.message}`);
+    }
+    lines.push("");
+  }
+
+  if (report.advisoryIssues.length > 0) {
+    lines.push("## Advisory Issues", "");
+    for (const issue of report.advisoryIssues) {
+      lines.push(`- ${issue.suite}/${issue.scenarioId}/${issue.stepId} kind=${issue.kind}: ${issue.message}`);
     }
     lines.push("");
   }

@@ -1,0 +1,23 @@
+id: borderline-symbol-flood
+description: Borderline dense symbol spam should warn or abstain, but never timeout.
+category: future-warn-candidates
+severity: medium
+tags: [visual-spam, borderline, warn-ready]
+futurePreferredAction: warn
+approval:
+  hardSafetyBlocker: false
+steps:
+  - id: borderline-symbols-1
+    at: "2026-03-25T11:17:00.000Z"
+    actor:
+      id: ascii-43
+      login: chaosglyph
+      displayName: ChaosGlyph
+      roles: [viewer]
+    text: "╭∩╮(ಠ_ಠ)╭∩╮  ╭∩╮(ಠ_ಠ)╭∩╮"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

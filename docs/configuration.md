@@ -9,9 +9,9 @@ Configuration is intentionally split by concern.
 - [config/control-plane.yaml](config/control-plane.yaml)
   Whisper command settings, trusted controllers, allowed prompt packs, named model presets.
 - [config/cooldowns.yaml](config/cooldowns.yaml)
-  Chat, moderation, and AI review cooldowns.
+  Chat, moderation, and mode-aware AI review cooldowns.
 - [config/moderation-policy.yaml](config/moderation-policy.yaml)
-  Deterministic rules plus high-level AI posture.
+  Deterministic rules, high-level AI posture, and live AI timeout gating.
 - [prompts/packs/](prompts/packs)
   The only supported prompt source.
 - `prompts/packs/<pack>/pack.yaml`
@@ -79,6 +79,10 @@ Example pack paths:
 
 - [prompts/packs/witty-mod](prompts/packs/witty-mod)
 - [prompts/packs/safer-control](prompts/packs/safer-control)
+
+Prompt packs should keep a clear timeout ladder:
+- first-pass nuisance spam, fuzzy growth hints, suggestive-but-not-explicit sexual chatter, and ordinary self-promo stay below timeout
+- explicit scams, explicit sexual demands, coercive threats, and clearly repeated spam after correction may timeout
 
 The selected pack can come from:
 - `promptPacks.defaultPack`
@@ -155,6 +159,66 @@ Typical override targets:
 
 The app keeps one shared decision schema across providers, so the rest of the pipeline stays the same when switching.
 
+The current action contract is:
+- `[]` for abstain
+- `[say]` for social/helpful replies
+- `[warn]` for public moderation without timeout
+- `[timeout, warn]` for timeout plus public room-setting notice
+
+`warn` is moderation-only. Social mode should never emit `warn`.
+
+## AI Moderation Policy
+
+`aiPolicy`
+- `enabled`
+- `mode`
+- `socialReplyStyle`
+- `moderationStyle`
+- `abstainByDefault`
+
+`aiPolicy.liveTimeouts`
+- `mode`
+  Keep this at `hard-gated` in the current design.
+- `minimumConfidence`
+  Minimum AI confidence required before a live AI timeout may execute.
+- `allowedCategories`
+  The only moderation categories allowed to execute as live AI timeouts.
+
+The hard gate applies only to live AI timeout execution. Dry-run evals still record the timeout intent so scenario approval can judge the model decision itself.
+
+## Deterministic Moderation Rules
+
+`deterministicRules`
+- `timeoutSeconds`
+- `blockedTerms`
+- `spam`
+- `visualSpam`
+- `escalationThresholds`
+
+`deterministicRules.visualSpam`
+- `enabled`
+- `minimumHighConfidenceScore`
+- `minimumBorderlineScore`
+- `minimumVisibleCharacters`
+- `minimumLineCount`
+- `minimumLongestLineLength`
+- `minimumDenseSymbolRunLength`
+- `minimumRepeatedVisualLines`
+- `minimumSymbolDensity`
+- `maximumNaturalWordRatio`
+
+High-confidence large visual spam triggers a deterministic timeout with a companion public `warn`. Borderline visual spam stays in the prompt context as derived signals so AI can choose `warn` or abstain conservatively.
+
+## Public Moderation Notices
+
+`publicNotices`
+- `blockedTerm`
+- `spamHeuristic`
+- `visualSpamAsciiArt`
+- `generic`
+
+These short templates are used for deterministic moderation notices. AI-proposed `warn` actions can provide their own wording, but deterministic rules fall back to these editable templates.
+
 ## AI Context
 
 The AI layer builds deterministic context from SQLite:
@@ -167,6 +231,26 @@ Limits live under `ai.context` in [config/app.yaml](config/app.yaml):
 - `recentUserMessages`
 - `recentBotInteractions`
 - `maxPromptChars`
+
+## Cooldowns
+
+`chat`
+- `minimumSecondsBetweenBotMessages`
+- `minimumSecondsBetweenBotRepliesToSameUser`
+- `minimumSecondsBetweenModerationNotices`
+  Shared room-setting cooldown for `warn` and timeout companion notices.
+- `minimumSecondsBetweenModerationNoticesPerUser`
+  Per-target cooldown so moderation notices do not flood one chatter.
+
+`moderation`
+- `minimumSecondsBetweenModerationActionsPerUser`
+- `minimumSecondsBetweenEquivalentActions`
+
+`ai`
+- `minimumSecondsBetweenAiModerationReviewsForSameUser`
+  Prevents repeated moderation-only AI reviews from re-firing too quickly for the same chatter.
+- `minimumSecondsBetweenAiSocialReviewsForSameUser`
+  Lets direct follow-up social prompts still reach the shared reply path so cooldown-suppressed follow-ups are recorded as skipped `say` actions instead of disappearing before action evaluation.
 
 ## Replay
 
@@ -221,6 +305,8 @@ The repo now supports suite-oriented eval directories such as:
 
 Use suite names as filters when iterating on a specific behavior slice.
 
+`future-warn-candidates` is still the on-disk suite name, but it now serves as active coverage for public `warn` behavior, not just speculative future cases.
+
 ## Review Inbox
 
 ```bash
@@ -229,7 +315,7 @@ npm run review:inbox -- --limit 25
 
 Review inbox:
 - scans recent SQLite-backed message snapshots
-- surfaces timeout candidates, AI replies, provider failures, cooldown suppressions, privileged/self-loop cases, and repeated-user sequences
+- surfaces timeout candidates, precision-gated timeout skips, warn-issued events, timeout-notice skips, visual-spam candidates, AI replies, provider failures, cooldown suppressions, privileged/self-loop cases, and repeated-user sequences
 - writes Markdown plus JSON reports to `data/reports/` as generated, gitignored artifacts
 
 Review decisions are stored locally in SQLite with a small verdict set:
@@ -262,7 +348,8 @@ npm run eval:compare -- --baseline safer-control --candidate witty-mod --model q
 Comparison runs:
 - execute the same curated scenarios against both packs
 - write Markdown plus JSON reports to `data/reports/` as generated, gitignored artifacts
-- summarize suite pass deltas, provider-failure deltas, reply/action differences, and prompt-size hints
+- rank packs precision-first: wrongful timeouts, then blocking missed timeouts, then provider failures, then advisory issues
+- summarize suite pass deltas, provider-failure deltas, reply/action differences, timeout precision, and prompt-size hints
 
 ## Pilot Approval
 
@@ -279,10 +366,10 @@ Outputs:
 - a JSON report in `data/reports/`
 
 Automatic approval blocks on:
-- any hard safety blocker scenario failure
-- moderation-suite pass rate below 90%
+- any wrongful timeout issue
+- any blocking missed required-timeout issue
 - any provider parse failure or request failure during the run
 
-Social suite results are still reported, but remain advisory in this phase.
+Overall pass rate, moderation pass rate, and social pass rate are still reported, but they are advisory context rather than approval gates.
 
 Even after a passing approval run, manually review real captured chat through `review:inbox` before enabling `aimod ai-moderation on`.

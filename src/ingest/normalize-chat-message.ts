@@ -67,7 +67,8 @@ export function normalizeChatMessage(
   receivedAt = new Date(),
 ): NormalizedChatMessage {
   const roles = deriveRoles(message.badges);
-  const isPrivileged = roles.includes("broadcaster") || roles.includes("moderator") || roles.includes("trusted");
+  const isPrivileged =
+    roles.includes("broadcaster") || roles.includes("moderator") || roles.includes("vip") || roles.includes("trusted");
 
   return {
     eventId: message.messageId,

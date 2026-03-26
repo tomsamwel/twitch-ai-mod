@@ -157,6 +157,7 @@ export class BotDatabase {
     this.ensureColumn("actions", "run_id", "TEXT");
   }
 
+  // Table/column names are hardcoded constants from initialize() — no injection risk.
   private ensureColumn(tableName: string, columnName: string, definition: string): void {
     const columns = this.database
       .prepare(`PRAGMA table_info(${tableName})`)
@@ -699,7 +700,7 @@ export class BotDatabase {
             FROM actions
             WHERE target_user_id = ?
               AND created_at <= ?
-              AND action_kind IN ('say', 'timeout')
+              AND action_kind IN ('say', 'warn', 'timeout')
             ORDER BY created_at DESC
             LIMIT ?
           )
@@ -708,7 +709,7 @@ export class BotDatabase {
       )
       .all(targetUserId, beforeCreatedAt, limit) as Array<{
       id: string;
-      action_kind: "say" | "timeout";
+      action_kind: "say" | "warn" | "timeout";
       status: ActionResult["status"];
       source: "rules" | "ai";
       target_user_id: string | null;
@@ -826,7 +827,7 @@ export class BotDatabase {
       )
       .all(...eventIds) as Array<{
       id: string;
-      action_kind: "say" | "timeout";
+      action_kind: "say" | "warn" | "timeout";
       status: ActionResult["status"];
       source: "rules" | "ai";
       source_event_id: string;

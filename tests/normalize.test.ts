@@ -48,3 +48,16 @@ test("normalizeChatMessage maps Twitch chat event data into internal shape", () 
   assert.equal(normalized.parts[0]?.type, "mention");
   assert.equal(normalized.parts[2]?.emoteId, "25");
 });
+
+test("normalizeChatMessage treats VIP chatters as privileged", () => {
+  const event = createChatEvent({
+    badges: {
+      vip: "1",
+    },
+  });
+
+  const normalized = normalizeChatMessage(event, new Date("2026-03-22T18:00:00.000Z"));
+
+  assert.equal(normalized.isPrivileged, true);
+  assert.deepEqual(normalized.roles, ["vip"]);
+});

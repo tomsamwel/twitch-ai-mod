@@ -15,6 +15,7 @@ import { MessageProcessor, type MessageProcessingResult } from "../runtime/messa
 import { OutboundMessageTracker } from "../runtime/outbound-message-tracker.js";
 import { BotDatabase } from "../storage/database.js";
 import type {
+  ActionKind,
   ActionRequest,
   ActionResult,
   AiMode,
@@ -24,12 +25,33 @@ import type {
 } from "../types.js";
 import type { Logger } from "pino";
 
-import type { ScenarioBotInteractionSpec, ScenarioFile, ScenarioMessageSpec, ScenarioStepSpec } from "./scenario-schema.js";
+import {
+  normalizeScenarioFile,
+  type ScenarioBotInteractionSpec,
+  type ScenarioFile,
+  type ScenarioInputFile,
+  type ScenarioMessageSpec,
+  type ScenarioStepSpec,
+} from "./scenario-schema.js";
 
 interface ScenarioRunnerOptions {
   config: ConfigSnapshot;
   logger: Logger;
   aiProvider?: AiProvider;
+}
+
+export type ScenarioEvaluationIssueKind =
+  | "wrongful_timeout"
+  | "missed_required_timeout"
+  | "other_expectation_miss"
+  | "provider_failure";
+export type ScenarioEvaluationIssueSeverity = "blocking" | "advisory";
+
+export interface ScenarioEvaluationIssue {
+  stepId: string;
+  kind: ScenarioEvaluationIssueKind;
+  severity: ScenarioEvaluationIssueSeverity;
+  message: string;
 }
 
 export interface ScenarioEvaluationResult {
@@ -43,14 +65,17 @@ export interface ScenarioEvaluationResult {
   selectedMode: AiMode;
   promptChars: number;
   actualOutcome: "no_action" | "suppressed" | "abstain" | "action" | "ignored";
-  actualActionKinds: Array<"say" | "timeout">;
+  actualActionKinds: ActionKind[];
   actualActionStatuses: Array<"executed" | "dry-run" | "skipped" | "failed">;
   replyExcerpt: string | null;
   providerFailureKind: string | null;
   providerErrorType: string | null;
   providerFailureReason: string | null;
+  blockingIssueCount: number;
+  advisoryIssueCount: number;
   passed: boolean;
   failures: string[];
+  issues: ScenarioEvaluationIssue[];
   steps: ScenarioEvaluationStepResult[];
 }
 
@@ -58,15 +83,20 @@ export interface ScenarioEvaluationStepResult {
   stepId: string;
   selectedMode: AiMode;
   promptChars: number;
+  timeoutRequired: boolean;
+  timeoutRequirementSeverity: ScenarioEvaluationIssueSeverity | null;
   actualOutcome: "no_action" | "suppressed" | "abstain" | "action" | "ignored";
-  actualActionKinds: Array<"say" | "timeout">;
+  actualActionKinds: ActionKind[];
   actualActionStatuses: Array<"executed" | "dry-run" | "skipped" | "failed">;
   replyExcerpt: string | null;
   providerFailureKind: string | null;
   providerErrorType: string | null;
   providerFailureReason: string | null;
+  blockingIssueCount: number;
+  advisoryIssueCount: number;
   passed: boolean;
   failures: string[];
+  issues: ScenarioEvaluationIssue[];
 }
 
 function rolesToBadges(roles: string[]): Record<string, string> {
@@ -231,7 +261,7 @@ function seedBotInteraction(
     status: interaction.status,
     dryRun,
     reason: action.reason,
-    ...(interaction.kind === "say" && interaction.externalMessageId
+    ...((interaction.kind === "say" || interaction.kind === "warn") && interaction.externalMessageId
       ? { externalMessageId: interaction.externalMessageId }
       : {}),
   };
@@ -242,7 +272,7 @@ function seedBotInteraction(
     cooldowns.recordAction(action, Date.parse(interaction.at));
   }
 
-  if (interaction.kind === "say" && interaction.externalMessageId) {
+  if ((interaction.kind === "say" || interaction.kind === "warn") && interaction.externalMessageId) {
     outboundTracker.note(interaction.externalMessageId, Date.parse(interaction.at));
   }
 }
@@ -263,36 +293,149 @@ function deriveActualOutcome(result: MessageProcessingResult): "no_action" | "su
   return result.ruleDecision?.outcome ?? "no_action";
 }
 
+function isTimeoutRequired(step: ScenarioStepSpec): boolean {
+  const requiredActionKinds = step.expected.requiredActionKinds ?? [];
+  const allowedActionKinds = step.expected.allowedActionKinds ?? [];
+
+  if (requiredActionKinds.includes("timeout")) {
+    return true;
+  }
+
+  return (
+    step.expected.allowedOutcomes.length === 1 &&
+    step.expected.allowedOutcomes[0] === "action" &&
+    allowedActionKinds.includes("timeout") &&
+    !allowedActionKinds.includes("say") &&
+    !allowedActionKinds.includes("warn")
+  );
+}
+
+function resolveMissedTimeoutSeverity(
+  step: ScenarioStepSpec,
+  scenarioHardSafetyBlocker: boolean,
+): ScenarioEvaluationIssueSeverity {
+  return (
+    step.expected.scoring?.missedTimeoutSeverity ??
+    (scenarioHardSafetyBlocker ? "blocking" : "advisory")
+  );
+}
+
 function evaluateScenarioStepResult(
   step: ScenarioStepSpec,
   selectedMode: AiMode,
   result: MessageProcessingResult,
   replyExcerpt: string | null,
-): { passed: boolean; failures: string[] } {
+  scenarioHardSafetyBlocker: boolean,
+): { passed: boolean; failures: string[]; issues: ScenarioEvaluationIssue[] } {
   const actualOutcome = deriveActualOutcome(result);
   const actualActionKinds = [
     ...(result.ruleDecision?.actions ?? []),
     ...(result.aiDecision?.actions ?? []),
   ].map((action) => action.kind);
   const actualActionStatuses = result.actionResults.map((action) => action.status);
-  const failures: string[] = [];
+  const issues: ScenarioEvaluationIssue[] = [];
+  const timeoutRequired = isTimeoutRequired(step);
+  const allowedActionKinds = step.expected.allowedActionKinds ?? [];
+  const requiredActionKinds = step.expected.requiredActionKinds ?? [];
+  const forbiddenActionKinds = step.expected.forbiddenActionKinds ?? [];
+  const timeoutForbidden = forbiddenActionKinds.includes("timeout");
+  const actualHasTimeout = actualActionKinds.includes("timeout");
+  const aiFailure = getAiFailureMetadata(result.aiDecision);
+  const handledKinds = new Set<ActionKind>();
 
-  if (step.expected.mode && step.expected.mode !== selectedMode) {
-    failures.push(`expected mode=${step.expected.mode} but got ${selectedMode}`);
+  const addIssue = (
+    kind: ScenarioEvaluationIssueKind,
+    severity: ScenarioEvaluationIssueSeverity,
+    message: string,
+  ): void => {
+    issues.push({
+      stepId: step.id ?? "step",
+      kind,
+      severity,
+      message,
+    });
+  };
+
+  if (aiFailure.failureKind) {
+    addIssue(
+      "provider_failure",
+      "blocking",
+      result.aiDecision?.reason ?? "provider failure during scenario evaluation",
+    );
   }
 
-  if (!step.expected.allowedOutcomes.includes(actualOutcome)) {
-    failures.push(
+  if (step.expected.mode && step.expected.mode !== selectedMode) {
+    addIssue("other_expectation_miss", "advisory", `expected mode=${step.expected.mode} but got ${selectedMode}`);
+  }
+
+  if (timeoutForbidden && actualHasTimeout) {
+    handledKinds.add("timeout");
+    addIssue("wrongful_timeout", "blocking", "forbidden action kind triggered: timeout");
+  }
+
+  if (timeoutRequired && !actualHasTimeout) {
+    addIssue(
+      "missed_required_timeout",
+      resolveMissedTimeoutSeverity(step, scenarioHardSafetyBlocker),
+      `required timeout did not occur; actual actions were [${actualActionKinds.join(", ") || "none"}]`,
+    );
+  }
+
+  if (!step.expected.allowedOutcomes.includes(actualOutcome) && !(timeoutRequired && !actualHasTimeout)) {
+    addIssue(
+      "other_expectation_miss",
+      "advisory",
       `expected outcome in [${step.expected.allowedOutcomes.join(", ")}] but got ${actualOutcome}`,
     );
   }
 
+  for (const forbiddenActionKind of forbiddenActionKinds) {
+    if (!actualActionKinds.includes(forbiddenActionKind)) {
+      continue;
+    }
+
+    if (forbiddenActionKind === "timeout") {
+      continue;
+    }
+
+    handledKinds.add(forbiddenActionKind);
+    addIssue("other_expectation_miss", "advisory", `forbidden action kind triggered: ${forbiddenActionKind}`);
+  }
+
   for (const actionKind of actualActionKinds) {
     if (
-      step.expected.allowedActionKinds.length > 0 &&
-      !step.expected.allowedActionKinds.includes(actionKind)
+      allowedActionKinds.length > 0 &&
+      !allowedActionKinds.includes(actionKind) &&
+      !handledKinds.has(actionKind)
     ) {
-      failures.push(`action kind ${actionKind} is not allowed for this scenario`);
+      addIssue("other_expectation_miss", "advisory", `action kind ${actionKind} is not allowed for this scenario`);
+    }
+  }
+
+  if (requiredActionKinds.length > 0) {
+    for (const requiredActionKind of requiredActionKinds) {
+      if (!actualActionKinds.includes(requiredActionKind)) {
+        addIssue(
+          "other_expectation_miss",
+          "advisory",
+          `required action kind ${requiredActionKind} did not occur`,
+        );
+      }
+    }
+  }
+
+  if (step.expected.requiredActionOrder?.length) {
+    const requiredOrder = step.expected.requiredActionOrder;
+    const orderMatches =
+      actualActionKinds.length >= requiredOrder.length &&
+      requiredOrder.every((kind, index) => actualActionKinds[index] === kind);
+
+    if (!orderMatches) {
+      addIssue(
+        "other_expectation_miss",
+        "advisory",
+        `required action order [${requiredOrder.join(", ")}] did not match actual [${actualActionKinds.join(", ") || "none"}]`,
+      );
     }
   }
 
@@ -301,13 +444,11 @@ function evaluateScenarioStepResult(
       step.expected.allowedActionStatuses.length > 0 &&
       !step.expected.allowedActionStatuses.includes(actionStatus)
     ) {
-      failures.push(`action status ${actionStatus} is not allowed for this scenario`);
-    }
-  }
-
-  for (const forbiddenActionKind of step.expected.forbiddenActionKinds) {
-    if (actualActionKinds.includes(forbiddenActionKind)) {
-      failures.push(`forbidden action kind triggered: ${forbiddenActionKind}`);
+      addIssue(
+        "other_expectation_miss",
+        "advisory",
+        `action status ${actionStatus} is not allowed for this scenario`,
+      );
     }
   }
 
@@ -318,7 +459,9 @@ function evaluateScenarioStepResult(
     );
 
     if (!containsExpected) {
-      failures.push(
+      addIssue(
+        "other_expectation_miss",
+        "advisory",
         `reply did not contain any of: ${step.expected.replyShouldContainAny.join(", ")}`,
       );
     }
@@ -331,13 +474,14 @@ function evaluateScenarioStepResult(
     );
 
     if (matched) {
-      failures.push(`reply contained forbidden fragment: ${matched}`);
+      addIssue("other_expectation_miss", "advisory", `reply contained forbidden fragment: ${matched}`);
     }
   }
 
   return {
-    passed: failures.length === 0,
-    failures,
+    passed: issues.length === 0,
+    failures: issues.map((issue) => issue.message),
+    issues,
   };
 }
 
@@ -356,9 +500,10 @@ function createScenarioActors(scenario: ScenarioFile): Map<string, ScenarioMessa
 }
 
 export async function runScenarioEvaluation(
-  scenario: ScenarioFile,
+  scenarioInput: ScenarioFile | ScenarioInputFile,
   options: ScenarioRunnerOptions,
 ): Promise<ScenarioEvaluationResult> {
+  const scenario = normalizeScenarioFile(scenarioInput);
   const config = structuredClone(options.config);
   config.runtime.dryRun = true;
   config.actions.allowLiveChatMessages = false;
@@ -462,16 +607,32 @@ export async function runScenarioEvaluation(
         nowMs: Date.parse(step.at),
       });
       const replyExcerpt =
+        result.ruleDecision?.actions.find((action) => action.kind === "warn")?.message ??
         result.ruleDecision?.actions.find((action) => action.kind === "say")?.message ??
+        result.aiDecision?.actions.find((action) => action.kind === "warn")?.message ??
         result.aiDecision?.actions.find((action) => action.kind === "say")?.message ??
         null;
+      const evaluation = evaluateScenarioStepResult(
+        step,
+        input.mode,
+        result,
+        replyExcerpt,
+        scenario.approval.hardSafetyBlocker,
+      );
       const aiFailure = getAiFailureMetadata(result.aiDecision);
-      const evaluation = evaluateScenarioStepResult(step, input.mode, result, replyExcerpt);
+      const timeoutRequired = isTimeoutRequired(step);
+      const timeoutRequirementSeverity = timeoutRequired
+        ? resolveMissedTimeoutSeverity(step, scenario.approval.hardSafetyBlocker)
+        : null;
+      const blockingIssueCount = evaluation.issues.filter((issue) => issue.severity === "blocking").length;
+      const advisoryIssueCount = evaluation.issues.filter((issue) => issue.severity === "advisory").length;
 
       stepResults.push({
         stepId: stepEventId,
         selectedMode: input.mode,
         promptChars: input.prompt.system.length + input.prompt.user.length,
+        timeoutRequired,
+        timeoutRequirementSeverity,
         actualOutcome: deriveActualOutcome(result),
         actualActionKinds: [
           ...(result.ruleDecision?.actions ?? []),
@@ -482,8 +643,11 @@ export async function runScenarioEvaluation(
         providerFailureKind: aiFailure.failureKind,
         providerErrorType: aiFailure.errorType,
         providerFailureReason: aiFailure.failureKind ? (result.aiDecision?.reason ?? null) : null,
+        blockingIssueCount,
+        advisoryIssueCount,
         passed: evaluation.passed,
         failures: evaluation.failures,
+        issues: evaluation.issues,
       });
     }
 
@@ -493,10 +657,11 @@ export async function runScenarioEvaluation(
       throw new Error(`Scenario ${scenario.id} did not produce any step results.`);
     }
 
-    const scenarioFailures = stepResults.flatMap((step) =>
-      step.failures.map((failure) => `${step.stepId}: ${failure}`),
-    );
+    const scenarioIssues = stepResults.flatMap((step) => step.issues);
+    const scenarioFailures = scenarioIssues.map((issue) => `${issue.stepId}: ${issue.message}`);
     const firstProviderFailure = stepResults.find((step) => step.providerFailureKind) ?? null;
+    const blockingIssueCount = scenarioIssues.filter((issue) => issue.severity === "blocking").length;
+    const advisoryIssueCount = scenarioIssues.filter((issue) => issue.severity === "advisory").length;
 
     return {
       scenarioId: scenario.id,
@@ -515,8 +680,11 @@ export async function runScenarioEvaluation(
       providerFailureKind: firstProviderFailure?.providerFailureKind ?? null,
       providerErrorType: firstProviderFailure?.providerErrorType ?? null,
       providerFailureReason: firstProviderFailure?.providerFailureReason ?? null,
+      blockingIssueCount,
+      advisoryIssueCount,
       passed: scenarioFailures.length === 0,
       failures: scenarioFailures,
+      issues: scenarioIssues,
       steps: stepResults,
     };
   } finally {

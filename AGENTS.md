@@ -40,9 +40,9 @@ These files are the operational source of truth:
 - [config/control-plane.yaml](config/control-plane.yaml)
   Whisper control settings, trusted controllers, allowed packs, model presets.
 - [config/cooldowns.yaml](config/cooldowns.yaml)
-  Bot chat, moderation, and AI review cooldowns.
+  Bot chat, moderation, moderation-notice, and AI review cooldowns.
 - [config/moderation-policy.yaml](config/moderation-policy.yaml)
-  Deterministic rule thresholds and AI policy posture.
+  Deterministic rule thresholds, public moderation notices, and AI timeout policy posture.
 - [prompts/packs/](prompts/packs)
   The only supported prompt source. Each pack should carry `pack.yaml` plus the five prompt files. Do not recreate root `prompts/*.md`.
 - [evals/scenarios/](evals/scenarios)
@@ -63,7 +63,7 @@ Keep these layers separate:
 4. `src/ai/`
    Prompt composition, structured schema parsing, deterministic context building, provider adapters, provider registry.
 5. `src/actions/`
-   Shared execution path for `say` and `timeout`.
+   Shared execution path for `say`, `warn`, and `timeout`.
 6. `src/control/`
    Whisper command parsing, controller auth, runtime override storage, effective runtime settings.
 7. `src/storage/`
@@ -82,6 +82,8 @@ Keep these layers separate:
 - Whisper replies require the bot account to have a verified phone number on Twitch.
 - Bot-authored chat messages are persisted for audit/context, then skipped for rules/AI to prevent loops.
 - Deterministic rules always run before AI.
+- `say` is the social/helpful reply path. `warn` is the public moderation-note path.
+- Timeout-capable moderation should emit an auditable public `warn` after timeout when the timeout actually executes.
 - Live moderation requires both:
   - `runtime.dryRun: false`
   - `actions.allowLiveModeration: true`
@@ -169,7 +171,7 @@ npm run eval:scenarios -- --suite social
 npm run replay -- --limit 25
 npm run review:inbox -- --limit 25
 npm run eval:compare -- --baseline safer-control --candidate witty-mod
-npm run approve:pilot -- --replay-limit 25
+npm run approve:pilot
 ```
 
 For live operator checks:

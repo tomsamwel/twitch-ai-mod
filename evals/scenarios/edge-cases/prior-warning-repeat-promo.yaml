@@ -11,7 +11,7 @@ history:
       text: "check out my shop after stream"
   botInteractions:
     - at: "2026-03-24T15:10:10.000Z"
-      kind: say
+      kind: warn
       source: ai
       status: executed
       reason: "asked viewer to stop promoting"
@@ -27,6 +27,6 @@ incomingMessage:
 expected:
   mode: moderation
   allowedOutcomes: [abstain, action]
-  allowedActionKinds: [say]
+  allowedActionKinds: [warn]
   allowedActionStatuses: [dry-run]
   forbiddenActionKinds: [timeout]

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AiContextBuilder } from "../src/ai/context-builder.js";
+import { ActionExecutor } from "../src/actions/action-executor.js";
 import { MessageProcessor } from "../src/runtime/message-processor.js";
 import { normalizeChatMessage } from "../src/ingest/normalize-chat-message.js";
 import { RuleEngine } from "../src/moderation/rule-engine.js";
@@ -81,8 +82,8 @@ test("MessageProcessor short-circuits duplicate live messages before snapshottin
   const result = await processor.process(duplicateMessage, {
     botIdentity: {
       id: "bot-1",
-      login: "testchannel",
-      displayName: "Altiventara",
+      login: "testbot",
+      displayName: "TestBot",
     },
     processingMode: "live",
     dedupe: true,
@@ -153,6 +154,7 @@ test("MessageProcessor replays AI decisions through the shared action flow in dr
               reason: "brief reply helps",
               confidence: 0.8,
               mode: "social",
+              moderationCategory: "none",
               actions: [
                 {
                   kind: "say",
@@ -196,8 +198,8 @@ test("MessageProcessor replays AI decisions through the shared action flow in dr
   const result = await processor.process(replayMessage, {
     botIdentity: {
       id: "bot-1",
-      login: "testchannel",
-      displayName: "Altiventara",
+      login: "testbot",
+      displayName: "TestBot",
     },
     processingMode: "replay",
     runId: "run-1",
@@ -399,7 +401,7 @@ test("MessageProcessor skips AI cooldown-suppressed reviews before building cont
   const config = createTestConfig();
   const logger = createLogger("info", "test");
   const cooldowns = new CooldownManager(config.cooldowns);
-  cooldowns.recordAiReview("user-1", Date.parse("2026-03-24T12:43:00.000Z"));
+  cooldowns.recordAiReview("user-1", "moderation", Date.parse("2026-03-24T12:43:00.000Z"));
   const ruleEngine = new RuleEngine(config, cooldowns);
   const contextBuilder = new AiContextBuilder(config, {
     listRecentRoomMessageSnapshots() {
@@ -476,6 +478,324 @@ test("MessageProcessor skips AI cooldown-suppressed reviews before building cont
   assert.equal(result.status, "processed");
   assert.equal(result.aiDecision, null);
   assert.equal(result.actionResults.length, 0);
+});
+
+test("MessageProcessor still evaluates a second direct social reply and records a skipped say action", async () => {
+  const config = createTestConfig();
+  const logger = createLogger("info", "test");
+  const cooldowns = new CooldownManager(config.cooldowns);
+  cooldowns.recordAiReview("user-1", "social", Date.parse("2026-03-24T12:50:00.000Z"));
+  cooldowns.recordAction(
+    {
+      kind: "say",
+      targetUserId: "user-1",
+    },
+    Date.parse("2026-03-24T12:50:00.000Z"),
+  );
+  const ruleEngine = new RuleEngine(config, cooldowns);
+  const contextBuilder = new AiContextBuilder(config, {
+    listRecentRoomMessageSnapshots() {
+      return [];
+    },
+    listRecentUserMessageSnapshots() {
+      return [];
+    },
+    listRecentBotInteractions() {
+      return [];
+    },
+  });
+  const message = normalizeChatMessage(
+    createChatEvent({
+      messageId: "social-repeat-2",
+      messageText: "@testbot still there?",
+      messageParts: [
+        {
+          type: "mention",
+          text: "@testbot",
+          mention: {
+            user_id: "bot-1",
+            user_login: "testbot",
+            user_name: "TestBot",
+          },
+        },
+        {
+          type: "text",
+          text: " still there?",
+        },
+      ],
+    }),
+    new Date("2026-03-24T12:50:05.000Z"),
+  );
+  let aiDecisionRecorded = false;
+  let providerCalls = 0;
+  const runtimeSettings = createTestRuntimeSettings(config);
+  const actionExecutor = new ActionExecutor(
+    config,
+    logger,
+    {
+      recordAction() {},
+    },
+    cooldowns,
+    {
+      async sendChatMessage() {
+        throw new Error("social repeat follow-up should be skipped before sending");
+      },
+      async timeoutUser() {
+        throw new Error("timeout should not be called in social follow-up test");
+      },
+    },
+    runtimeSettings,
+  );
+
+  const processor = new MessageProcessor(
+    config,
+    logger,
+    {
+      registerIngestedEvent() {
+        return true;
+      },
+      recordMessageSnapshot() {},
+      recordRuleDecision() {},
+      recordAiDecision() {
+        aiDecisionRecorded = true;
+      },
+    },
+    cooldowns,
+    ruleEngine,
+    contextBuilder,
+    runtimeSettings,
+    {
+      createEffectiveConfig() {
+        return config;
+      },
+      async getProvider() {
+        return {
+          kind: "ollama",
+          async healthCheck() {},
+          async decide(): Promise<AiDecision> {
+            providerCalls += 1;
+            return {
+              source: "ollama",
+              outcome: "action",
+              reason: "brief follow-up answer helps",
+              confidence: 0.8,
+              mode: "social",
+              moderationCategory: "none",
+              actions: [
+                {
+                  kind: "say",
+                  reason: "brief follow-up",
+                  message: "Still here.",
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    actionExecutor,
+  );
+
+  const result = await processor.process(message, {
+    botIdentity: {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T12:50:05.000Z"),
+  });
+
+  assert.equal(providerCalls, 1);
+  assert.equal(aiDecisionRecorded, true);
+  assert.equal(result.aiDecision?.outcome, "action");
+  assert.equal(result.actionResults[0]?.status, "skipped");
+  assert.equal(result.actionResults[0]?.kind, "say");
+});
+
+test("MessageProcessor annotates AI timeout actions with precision-gate metadata", async () => {
+  const config = createTestConfig();
+  const logger = createLogger("info", "test");
+  const cooldowns = new CooldownManager(config.cooldowns);
+  const ruleEngine = new RuleEngine(config, cooldowns);
+  const contextBuilder = new AiContextBuilder(config, {
+    listRecentRoomMessageSnapshots() {
+      return [];
+    },
+    listRecentUserMessageSnapshots() {
+      return [
+        {
+          eventId: "prior-user-message",
+          sourceMessageId: "prior-user-message",
+          chatterId: "user-1",
+          chatterLogin: "viewerone",
+          receivedAt: "2026-03-24T12:54:00.000Z",
+          botIdentity: {
+            id: "bot-1",
+            login: "testbot",
+            displayName: "TestBot",
+          },
+          message: normalizeChatMessage(createChatEvent(), new Date("2026-03-24T12:54:00.000Z")),
+          createdAt: "2026-03-24T12:54:00.000Z",
+        },
+      ];
+    },
+    listRecentBotInteractions() {
+      return [
+        {
+          id: "prior-bot-say",
+          kind: "say",
+          status: "dry-run",
+          source: "ai",
+          targetUserId: "user-1",
+          targetUserName: "viewerone",
+          reason: "brief correction",
+          dryRun: true,
+          processingMode: "live",
+          payload: {
+            id: "prior-bot-say",
+            kind: "say",
+            source: "ai",
+            sourceEventId: "prior-event",
+            sourceMessageId: "prior-message",
+            processingMode: "live",
+            dryRun: true,
+            initiatedAt: "2026-03-24T12:54:10.000Z",
+            reason: "brief correction",
+            targetUserId: "user-1",
+            targetUserName: "viewerone",
+            message: "Please stop spamming mentions.",
+          },
+          result: {
+            id: "prior-bot-say",
+            kind: "say",
+            status: "dry-run",
+            dryRun: true,
+            reason: "brief correction",
+          },
+          createdAt: "2026-03-24T12:54:10.000Z",
+        },
+      ];
+    },
+  });
+  const message = normalizeChatMessage(
+    createChatEvent({
+      messageId: "timeout-msg-1",
+      messageText: "@testbot @testbot @testbot @testbot @testbot",
+      messageParts: [
+        {
+          type: "mention",
+          text: "@testbot",
+          mention: {
+            user_id: "bot-1",
+            user_login: "testbot",
+            user_name: "TestBot",
+          },
+        },
+        {
+          type: "text",
+          text: " @testbot @testbot @testbot @testbot",
+        },
+      ],
+    }),
+    new Date("2026-03-24T12:55:00.000Z"),
+  );
+  const runtimeSettings = createTestRuntimeSettings(config);
+  const createdRequests: ActionRequest[] = [];
+
+  const processor = new MessageProcessor(
+    config,
+    logger,
+    {
+      registerIngestedEvent() {
+        return true;
+      },
+      recordMessageSnapshot() {},
+      recordRuleDecision() {},
+      recordAiDecision() {},
+    },
+    cooldowns,
+    ruleEngine,
+    contextBuilder,
+    runtimeSettings,
+    {
+      createEffectiveConfig() {
+        return config;
+      },
+      async getProvider() {
+        return {
+          kind: "ollama",
+          async healthCheck() {},
+          async decide(): Promise<AiDecision> {
+            return {
+              source: "ollama",
+              outcome: "action",
+              reason: "repeated mention spam",
+              confidence: 0.95,
+              mode: "social",
+              moderationCategory: "spam-escalation",
+              actions: [
+                {
+                  kind: "timeout",
+                  reason: "repeated mention spam",
+                  durationSeconds: 300,
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    {
+      createActionRequest(action, input) {
+        const request: ActionRequest = {
+          ...action,
+          id: "action-timeout-1",
+          source: input.source,
+          sourceEventId: input.sourceEventId,
+          sourceMessageId: input.sourceMessageId,
+          processingMode: input.processingMode ?? "live",
+          dryRun: input.dryRun ?? config.runtime.dryRun,
+          initiatedAt: input.initiatedAt ?? new Date().toISOString(),
+        };
+        createdRequests.push(request);
+        return request;
+      },
+      async execute(action) {
+        return {
+          id: action.id,
+          kind: action.kind,
+          status: action.dryRun ? "dry-run" : "executed",
+          dryRun: action.dryRun,
+          reason: action.reason,
+        };
+      },
+    },
+  );
+
+  await processor.process(message, {
+    botIdentity: {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T12:55:00.000Z"),
+  });
+
+  assert.equal(createdRequests.length, 1);
+  assert.deepEqual(createdRequests[0]?.metadata, {
+    aiConfidence: 0.95,
+    moderationCategory: "spam-escalation",
+    targetIsPrivileged: false,
+    targetIsSelfAuthored: false,
+    hasRepeatedUserEvidence: true,
+    hasRecentBotCorrectiveInteraction: true,
+  });
 });
 
 test("MessageProcessor skips AI moderation for privileged chatters unless the mode is social", async () => {

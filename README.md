@@ -7,11 +7,13 @@ The bot runs on your machine, reads live chat through official Twitch EventSub, 
 ## What Exists Now
 
 - Twurple auth, Helix API access, and EventSub WebSocket ingestion
-- shared action path for `say` and `timeout`
+- shared action path for `say`, `warn`, and `timeout`
 - dry-run gating plus auditable live actions
+- moderation-only public warning notices that stay separate from social replies
 - SQLite persistence for tokens, ingested events, message snapshots, decisions, actions, runtime overrides, and control audits
 - prompt-pack based AI behavior
 - local `ollama` and remote `openai` adapters behind one `AiProvider` interface
+- deterministic large visual-spam / ASCII-art timeout detection
 - replay CLI against captured chat snapshots
 - scripted scenario-lab CLI against curated YAML cases
 - review inbox and replay-to-scenario promotion workflow
@@ -74,6 +76,7 @@ npm run approve:pilot
 - Each prompt pack also carries a small `pack.yaml` manifest so comparisons are tied to an explicit hypothesis.
 - Curated eval cases live in [evals/scenarios](evals/scenarios).
 - Scenarios are now script-capable: `seed` history plus `steps[]`.
+- The legacy-named `future-warn-candidates` suite is now active coverage for public room-setting `warn` behavior.
 - Replay reuses real captured chat from SQLite.
 - Replay inbox turns high-signal real incidents into a lightweight local review queue.
 - Promotion scaffolds reviewed replay incidents into curated YAML scenarios.
@@ -91,6 +94,8 @@ npm run approve:pilot -- --provider ollama --prompt-pack witty-mod --model qwen3
 ```
 
 `approve:pilot` runs the curated scenario suites only and writes Markdown plus JSON approval artifacts under `data/reports/`. Those reports are generated output and are not kept in source control. Real captured chat stays outside the test verdict and should be reviewed separately through `review:inbox` and optionally promoted into new curated scenarios.
+
+Approval is precision-first: wrongful timeouts, blocking missed required timeouts, and provider failures block approval. General abstains and social-quality misses stay visible in the report, but they are advisory by default.
 
 ## Whisper Control
 
@@ -123,6 +128,9 @@ Operational notes:
 - deterministic rules run before AI
 - live moderation remains disabled unless you explicitly turn it on
 - AI live moderation has its own separate runtime gate and stays off by default
+- live AI timeouts are hard-gated by confidence, moderation category, privileged/self protection, and repeat-evidence checks
+- `warn` is a moderation-only public notice; `say` remains the social/helpful reply path
+- timeout flows can pair `timeout` with a public `warn`, and skipped notices are still audited
 - chat send and moderation have separate gates
 - bot-authored messages are snapshotted for context/audit, then ignored for rules/AI to prevent loops
 

@@ -17,7 +17,7 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]
   - id: sexual-ask-2
@@ -31,6 +31,8 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [action]
-      allowedActionKinds: [timeout]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [say]

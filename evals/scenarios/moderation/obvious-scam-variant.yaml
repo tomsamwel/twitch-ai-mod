@@ -15,6 +15,8 @@ incomingMessage:
 expected:
   mode: moderation
   allowedOutcomes: [action]
-  allowedActionKinds: [timeout]
+  allowedActionKinds: [timeout, warn]
+  requiredActionKinds: [timeout, warn]
+  requiredActionOrder: [timeout, warn]
   allowedActionStatuses: [dry-run]
   forbiddenActionKinds: [say]

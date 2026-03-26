@@ -102,11 +102,31 @@ test("OpenAI provider maps a structured response into an action decision", async
   config.ai.provider = "openai";
   const logger = createLogger("info", "test");
   const provider = new OpenAiAiProvider(config, logger);
-  const input = buildAiDecisionInput(normalizeChatMessage(createChatEvent()), createEmptyContext(), config, {
-    id: "bot-1",
-    login: "testbot",
-    displayName: "TestBot",
-  });
+  const input = buildAiDecisionInput(
+    normalizeChatMessage(
+      createChatEvent({
+        messageText: "@testbot hello there",
+        messageParts: [
+          {
+            type: "mention",
+            text: "@testbot",
+            mention: {
+              user_id: "bot-1",
+              user_login: "testbot",
+              user_name: "TestBot",
+            },
+          },
+        ],
+      }),
+    ),
+    createEmptyContext(),
+    config,
+    {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+  );
 
   await withMockFetch(
     (async (resource) => {
@@ -120,6 +140,7 @@ test("OpenAI provider maps a structured response into an action decision", async
               reason: "reply helps",
               confidence: 0.9,
               mode: "social",
+              moderationCategory: "none",
               actions: [
                 {
                   kind: "say",

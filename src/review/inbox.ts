@@ -10,7 +10,11 @@ import type {
 const REPEATED_SEQUENCE_WINDOW_MS = 2 * 60 * 1000;
 
 export type ReviewInboxReason =
+  | "precision-gated-timeout"
   | "timeout-candidate"
+  | "warn-issued"
+  | "timeout-notice-skipped"
+  | "visual-spam-candidate"
   | "ai-reply"
   | "provider-failure"
   | "cooldown-suppression"
@@ -57,7 +61,11 @@ export interface ReviewInboxReport {
 
 function emptyReasonCounts(): Record<ReviewInboxReason, number> {
   return {
+    "precision-gated-timeout": 0,
     "timeout-candidate": 0,
+    "warn-issued": 0,
+    "timeout-notice-skipped": 0,
+    "visual-spam-candidate": 0,
     "ai-reply": 0,
     "provider-failure": 0,
     "cooldown-suppression": 0,
@@ -69,10 +77,18 @@ function emptyReasonCounts(): Record<ReviewInboxReason, number> {
 
 function scoreReason(reason: ReviewInboxReason): number {
   switch (reason) {
+    case "precision-gated-timeout":
+      return 110;
     case "timeout-candidate":
       return 100;
+    case "timeout-notice-skipped":
+      return 95;
+    case "visual-spam-candidate":
+      return 85;
     case "provider-failure":
       return 90;
+    case "warn-issued":
+      return 60;
     case "self-loop":
     case "privileged":
       return 80;
@@ -170,15 +186,49 @@ export function buildReviewInboxReport(options: {
       };
     });
     const actionSummaries = (actionsByEventId.get(snapshot.eventId) ?? []).map((action) => {
+      const effectiveReason = action.result.reason || action.reason;
+
       if (action.kind === "timeout") {
         reasons.add("timeout-candidate");
       }
 
-      if (action.kind === "say" && action.source === "ai") {
+      if (action.kind === "warn") {
+        reasons.add("warn-issued");
+      }
+
+      if (
+        action.kind === "timeout" &&
+        action.source === "ai" &&
+        action.status === "skipped" &&
+        effectiveReason === "AI timeout blocked by precision gate"
+      ) {
+        reasons.add("precision-gated-timeout");
+      }
+
+      if (action.kind === "warn" && effectiveReason === "timeout notice skipped because the preceding timeout did not execute") {
+        reasons.add("timeout-notice-skipped");
+      }
+
+      if ((action.kind === "say" || action.kind === "warn") && action.source === "ai") {
         reasons.add("ai-reply");
       }
 
-      if (action.status === "skipped" && action.reason.toLowerCase().includes("cooldown")) {
+      const payloadMetadata =
+        action.payload.metadata && typeof action.payload.metadata === "object" && !Array.isArray(action.payload.metadata)
+          ? (action.payload.metadata as Record<string, unknown>)
+          : null;
+      const hasVisualSpamSignal =
+        payloadMetadata?.timeoutRule === "visual_spam_ascii_art" ||
+        action.reason.toLowerCase().includes("visual spam") ||
+        action.reason.toLowerCase().includes("ascii art") ||
+        effectiveReason.toLowerCase().includes("visual spam") ||
+        effectiveReason.toLowerCase().includes("ascii art");
+
+      if (hasVisualSpamSignal) {
+        reasons.add("visual-spam-candidate");
+      }
+
+      if (action.status === "skipped" && effectiveReason.toLowerCase().includes("cooldown")) {
         reasons.add("cooldown-suppression");
       }
 
@@ -186,7 +236,7 @@ export function buildReviewInboxReport(options: {
         kind: action.kind,
         source: action.source,
         status: action.status,
-        reason: action.reason,
+        reason: effectiveReason,
       };
     });
 

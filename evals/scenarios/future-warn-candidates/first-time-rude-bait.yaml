@@ -1,5 +1,5 @@
 id: first-time-rude-bait
-description: A first rude bait message is a warn-ready case, not a timeout.
+description: A first rude bait message should get a public warn, not a timeout.
 category: future-warn-candidates
 severity: medium
 tags: [rude, warn-ready]
@@ -17,6 +17,7 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
+      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]

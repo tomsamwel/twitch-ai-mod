@@ -1,0 +1,23 @@
+id: small-decorative-symbols
+description: Small decorative symbol use should not become a timeout candidate.
+category: future-warn-candidates
+severity: low
+tags: [visual-spam, decorative, false-positive-guard]
+futurePreferredAction: none
+approval:
+  hardSafetyBlocker: false
+steps:
+  - id: decorative-symbols-1
+    at: "2026-03-25T11:18:00.000Z"
+    actor:
+      id: ascii-44
+      login: sparkleviewer
+      displayName: SparkleViewer
+      roles: [viewer]
+    text: "☆〜(ゝ。∂) that was neat"
+    expected:
+      mode: moderation
+      allowedOutcomes: [no_action, abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]

@@ -1,4 +1,5 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { getConfiguredProviderInfo } from "../ai/provider-config.js";
 import { createAiProvider } from "../ai/provider-registry.js";
@@ -24,6 +25,14 @@ interface CompareScenarioDelta {
   description: string;
   baselinePassed: boolean;
   candidatePassed: boolean;
+  baselineBlockingIssues: number;
+  candidateBlockingIssues: number;
+  baselineAdvisoryIssues: number;
+  candidateAdvisoryIssues: number;
+  baselineWrongfulTimeouts: number;
+  candidateWrongfulTimeouts: number;
+  baselineBlockingMissedTimeouts: number;
+  candidateBlockingMissedTimeouts: number;
   baselineOutcome: string;
   candidateOutcome: string;
   baselineActions: string[];
@@ -32,6 +41,15 @@ interface CompareScenarioDelta {
   candidateReply: string | null;
   baselineProviderFailure: string | null;
   candidateProviderFailure: string | null;
+}
+
+interface ComparePackMetrics {
+  passed: number;
+  wrongfulTimeouts: number;
+  blockingMissedTimeouts: number;
+  providerFailures: number;
+  advisoryIssues: number;
+  timeoutPrecision: number | null;
 }
 
 interface CompareReport {
@@ -46,6 +64,11 @@ interface CompareReport {
     scenarios: number;
     baselinePassed: number;
     candidatePassed: number;
+  };
+  ranking: {
+    winner: "baseline" | "candidate" | "tie";
+    baseline: ComparePackMetrics;
+    candidate: ComparePackMetrics;
   };
   promptSizeHints: {
     baselineAverageChars: number;
@@ -131,7 +154,51 @@ function parseArgs(argv: string[]): EvalCompareCliOptions {
   return options as EvalCompareCliOptions;
 }
 
-function formatCompareMarkdown(report: CompareReport): string {
+function summarizePackMetrics(results: ScenarioEvaluationResult[]): ComparePackMetrics {
+  const timeoutActionsObserved = results.reduce(
+    (count, result) => count + result.steps.filter((step) => step.actualActionKinds.includes("timeout")).length,
+    0,
+  );
+  const wrongfulTimeouts = results.reduce(
+    (count, result) => count + result.issues.filter((issue) => issue.kind === "wrongful_timeout").length,
+    0,
+  );
+
+  return {
+    passed: results.filter((result) => result.passed).length,
+    wrongfulTimeouts,
+    blockingMissedTimeouts: results.reduce(
+      (count, result) =>
+        count +
+        result.issues.filter(
+          (issue) => issue.kind === "missed_required_timeout" && issue.severity === "blocking",
+        ).length,
+      0,
+    ),
+    providerFailures: results.reduce(
+      (count, result) => count + result.issues.filter((issue) => issue.kind === "provider_failure").length,
+      0,
+    ),
+    advisoryIssues: results.reduce((count, result) => count + result.advisoryIssueCount, 0),
+    timeoutPrecision:
+      timeoutActionsObserved === 0 ? null : Math.max(0, timeoutActionsObserved - wrongfulTimeouts) / timeoutActionsObserved,
+  };
+}
+
+export function comparePackMetrics(left: ComparePackMetrics, right: ComparePackMetrics): number {
+  const leftKey = [left.wrongfulTimeouts, left.blockingMissedTimeouts, left.providerFailures, left.advisoryIssues];
+  const rightKey = [right.wrongfulTimeouts, right.blockingMissedTimeouts, right.providerFailures, right.advisoryIssues];
+
+  for (let index = 0; index < leftKey.length; index += 1) {
+    if (leftKey[index] !== rightKey[index]) {
+      return leftKey[index]! < rightKey[index]! ? -1 : 1;
+    }
+  }
+
+  return 0;
+}
+
+export function formatCompareMarkdown(report: CompareReport): string {
   const lines = [
     "# Eval Compare Report",
     "",
@@ -143,6 +210,20 @@ function formatCompareMarkdown(report: CompareReport): string {
     "## Totals",
     "",
     `- Scenarios: ${report.totals.scenarios}`,
+    `- Precision-first winner: ${report.ranking.winner}`,
+    `- Wrongful timeouts: baseline ${report.ranking.baseline.wrongfulTimeouts}, candidate ${report.ranking.candidate.wrongfulTimeouts}`,
+    `- Blocking missed timeouts: baseline ${report.ranking.baseline.blockingMissedTimeouts}, candidate ${report.ranking.candidate.blockingMissedTimeouts}`,
+    `- Provider failures: baseline ${report.ranking.baseline.providerFailures}, candidate ${report.ranking.candidate.providerFailures}`,
+    `- Advisory issues: baseline ${report.ranking.baseline.advisoryIssues}, candidate ${report.ranking.candidate.advisoryIssues}`,
+    `- Timeout precision: baseline ${
+      report.ranking.baseline.timeoutPrecision === null
+        ? "n/a"
+        : `${(report.ranking.baseline.timeoutPrecision * 100).toFixed(1)}%`
+    }, candidate ${
+      report.ranking.candidate.timeoutPrecision === null
+        ? "n/a"
+        : `${(report.ranking.candidate.timeoutPrecision * 100).toFixed(1)}%`
+    }`,
     `- Baseline passed: ${report.totals.baselinePassed}`,
     `- Candidate passed: ${report.totals.candidatePassed}`,
     `- Prompt size avg chars: baseline ${report.promptSizeHints.baselineAverageChars}, candidate ${report.promptSizeHints.candidateAverageChars}`,
@@ -163,12 +244,16 @@ function formatCompareMarkdown(report: CompareReport): string {
 
   for (const delta of report.deltas.filter(
     (entry) =>
+      entry.baselineBlockingIssues !== entry.candidateBlockingIssues ||
+      entry.baselineAdvisoryIssues !== entry.candidateAdvisoryIssues ||
+      entry.baselineWrongfulTimeouts !== entry.candidateWrongfulTimeouts ||
+      entry.baselineBlockingMissedTimeouts !== entry.candidateBlockingMissedTimeouts ||
       entry.baselinePassed !== entry.candidatePassed ||
       entry.baselineOutcome !== entry.candidateOutcome ||
       entry.baselineProviderFailure !== entry.candidateProviderFailure,
   )) {
     lines.push(
-      `- ${delta.suite}/${delta.scenarioId}: baseline=${delta.baselinePassed ? "PASS" : "FAIL"}(${delta.baselineOutcome}/${delta.baselineActions.join(",") || "none"}) candidate=${delta.candidatePassed ? "PASS" : "FAIL"}(${delta.candidateOutcome}/${delta.candidateActions.join(",") || "none"})`,
+      `- ${delta.suite}/${delta.scenarioId}: baseline=block:${delta.baselineBlockingIssues} adv:${delta.baselineAdvisoryIssues} wrongful:${delta.baselineWrongfulTimeouts} missed:${delta.baselineBlockingMissedTimeouts} ${delta.baselinePassed ? "PASS" : "FAIL"}(${delta.baselineOutcome}/${delta.baselineActions.join(",") || "none"}) candidate=block:${delta.candidateBlockingIssues} adv:${delta.candidateAdvisoryIssues} wrongful:${delta.candidateWrongfulTimeouts} missed:${delta.candidateBlockingMissedTimeouts} ${delta.candidatePassed ? "PASS" : "FAIL"}(${delta.candidateOutcome}/${delta.candidateActions.join(",") || "none"})`,
     );
     if (delta.baselineReply || delta.candidateReply) {
       lines.push(`  baselineReply="${delta.baselineReply ?? ""}"`);
@@ -228,6 +313,18 @@ async function main(): Promise<void> {
     description: loaded.scenario.description,
     baselinePassed: baselineResults[index]!.passed,
     candidatePassed: candidateResults[index]!.passed,
+    baselineBlockingIssues: baselineResults[index]!.blockingIssueCount,
+    candidateBlockingIssues: candidateResults[index]!.blockingIssueCount,
+    baselineAdvisoryIssues: baselineResults[index]!.advisoryIssueCount,
+    candidateAdvisoryIssues: candidateResults[index]!.advisoryIssueCount,
+    baselineWrongfulTimeouts: baselineResults[index]!.issues.filter((issue) => issue.kind === "wrongful_timeout").length,
+    candidateWrongfulTimeouts: candidateResults[index]!.issues.filter((issue) => issue.kind === "wrongful_timeout").length,
+    baselineBlockingMissedTimeouts: baselineResults[index]!.issues.filter(
+      (issue) => issue.kind === "missed_required_timeout" && issue.severity === "blocking",
+    ).length,
+    candidateBlockingMissedTimeouts: candidateResults[index]!.issues.filter(
+      (issue) => issue.kind === "missed_required_timeout" && issue.severity === "blocking",
+    ).length,
     baselineOutcome: baselineResults[index]!.actualOutcome,
     candidateOutcome: candidateResults[index]!.actualOutcome,
     baselineActions: baselineResults[index]!.actualActionKinds,
@@ -248,6 +345,9 @@ async function main(): Promise<void> {
   }
 
   const providerInfo = getConfiguredProviderInfo(baselineConfig);
+  const baselineMetrics = summarizePackMetrics(baselineResults);
+  const candidateMetrics = summarizePackMetrics(candidateResults);
+  const rankingComparison = comparePackMetrics(baselineMetrics, candidateMetrics);
   const report: CompareReport = {
     createdAt: new Date().toISOString(),
     provider: providerInfo.provider,
@@ -260,6 +360,11 @@ async function main(): Promise<void> {
       scenarios: deltas.length,
       baselinePassed: baselineResults.filter((result) => result.passed).length,
       candidatePassed: candidateResults.filter((result) => result.passed).length,
+    },
+    ranking: {
+      winner: rankingComparison === 0 ? "tie" : rankingComparison < 0 ? "baseline" : "candidate",
+      baseline: baselineMetrics,
+      candidate: candidateMetrics,
     },
     promptSizeHints: {
       baselineAverageChars: Math.round(
@@ -297,7 +402,9 @@ async function main(): Promise<void> {
   console.log(`JSON report: ${artifacts.jsonPath}`);
 }
 
-void main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

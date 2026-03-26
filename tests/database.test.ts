@@ -23,8 +23,8 @@ test("BotDatabase stores and replays the latest message snapshots in chronologic
     );
     const botIdentity = {
       id: "bot-1",
-      login: "testchannel",
-      displayName: "Altiventara",
+      login: "testbot",
+      displayName: "TestBot",
     };
 
     database.recordMessageSnapshot(first, botIdentity);
@@ -35,7 +35,7 @@ test("BotDatabase stores and replays the latest message snapshots in chronologic
     assert.equal(snapshots.length, 1);
     assert.equal(snapshots[0]?.eventId, "msg-2");
     assert.equal(snapshots[0]?.message.text, "second");
-    assert.equal(snapshots[0]?.botIdentity.login, "testchannel");
+    assert.equal(snapshots[0]?.botIdentity.login, "testbot");
   } finally {
     database.close();
     await rm(tempDir, { recursive: true, force: true });

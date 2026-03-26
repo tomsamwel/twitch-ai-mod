@@ -1,21 +1,33 @@
-import type { ActionKind, ActionRequest, ConfigSnapshot } from "../types.js";
+import type { ActionKind, ActionRequest, AiMode, ConfigSnapshot } from "../types.js";
 
 export class CooldownManager {
   private lastBotMessageAt = 0;
   private readonly lastReplyByUser = new Map<string, number>();
+  private lastModerationNoticeAt = 0;
+  private readonly lastModerationNoticeByUser = new Map<string, number>();
   private readonly lastModerationByUser = new Map<string, number>();
   private readonly lastEquivalentAction = new Map<string, number>();
-  private readonly lastAiReviewByUser = new Map<string, number>();
+  private readonly lastAiModerationReviewByUser = new Map<string, number>();
+  private readonly lastAiSocialReviewByUser = new Map<string, number>();
 
   public constructor(private readonly config: ConfigSnapshot["cooldowns"]) {}
 
-  public canReviewWithAi(userId: string, now = Date.now()): boolean {
-    const previous = this.lastAiReviewByUser.get(userId) ?? 0;
-    return now - previous >= this.config.ai.minimumSecondsBetweenAiReviewsForSameUser * 1000;
+  public canReviewWithAi(userId: string, mode: AiMode, now = Date.now()): boolean {
+    const previous =
+      mode === "social"
+        ? (this.lastAiSocialReviewByUser.get(userId) ?? 0)
+        : (this.lastAiModerationReviewByUser.get(userId) ?? 0);
+    const minimumSeconds =
+      mode === "social"
+        ? this.config.ai.minimumSecondsBetweenAiSocialReviewsForSameUser
+        : this.config.ai.minimumSecondsBetweenAiModerationReviewsForSameUser;
+
+    return now - previous >= minimumSeconds * 1000;
   }
 
-  public recordAiReview(userId: string, now = Date.now()): void {
-    this.lastAiReviewByUser.set(userId, now);
+  public recordAiReview(userId: string, mode: AiMode, now = Date.now()): void {
+    const targetMap = mode === "social" ? this.lastAiSocialReviewByUser : this.lastAiModerationReviewByUser;
+    targetMap.set(userId, now);
   }
 
   public canSendMessage(userId?: string, now = Date.now()): { allowed: boolean; reason?: string } {
@@ -33,6 +45,26 @@ export class CooldownManager {
 
     if (userDelta < this.config.chat.minimumSecondsBetweenBotRepliesToSameUser * 1000) {
       return { allowed: false, reason: "per-user message cooldown active" };
+    }
+
+    return { allowed: true };
+  }
+
+  public canSendModerationNotice(userId?: string, now = Date.now()): { allowed: boolean; reason?: string } {
+    const globalDelta = now - this.lastModerationNoticeAt;
+
+    if (globalDelta < this.config.chat.minimumSecondsBetweenModerationNotices * 1000) {
+      return { allowed: false, reason: "global moderation notice cooldown active" };
+    }
+
+    if (!userId) {
+      return { allowed: true };
+    }
+
+    const userDelta = now - (this.lastModerationNoticeByUser.get(userId) ?? 0);
+
+    if (userDelta < this.config.chat.minimumSecondsBetweenModerationNoticesPerUser * 1000) {
+      return { allowed: false, reason: "per-user moderation notice cooldown active" };
     }
 
     return { allowed: true };
@@ -65,6 +97,16 @@ export class CooldownManager {
 
       if (action.targetUserId) {
         this.lastReplyByUser.set(action.targetUserId, now);
+      }
+
+      return;
+    }
+
+    if (action.kind === "warn") {
+      this.lastModerationNoticeAt = now;
+
+      if (action.targetUserId) {
+        this.lastModerationNoticeByUser.set(action.targetUserId, now);
       }
 
       return;

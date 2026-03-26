@@ -42,6 +42,7 @@ export interface ReplayEvaluationSummary {
   aiActions: number;
   aiAbstains: number;
   sayActions: number;
+  warnActions: number;
   timeoutActions: number;
   providerFailures: ReplayProviderFailureRecord[];
   timeoutCandidates: ReplayTimeoutCandidate[];
@@ -111,6 +112,7 @@ export async function runReplayEvaluation(options: ReplayEvaluationOptions): Pro
     aiActions: 0,
     aiAbstains: 0,
     sayActions: 0,
+    warnActions: 0,
     timeoutActions: 0,
     providerFailures: [],
     timeoutCandidates: [],
@@ -147,6 +149,11 @@ export async function runReplayEvaluation(options: ReplayEvaluationOptions): Pro
     for (const proposed of proposedActions) {
       if (proposed.action.kind === "say") {
         summary.sayActions += 1;
+        continue;
+      }
+
+      if (proposed.action.kind === "warn") {
+        summary.warnActions += 1;
         continue;
       }
 

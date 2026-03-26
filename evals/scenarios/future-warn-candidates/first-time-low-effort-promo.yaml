@@ -1,5 +1,5 @@
 id: first-time-low-effort-promo
-description: First-time low-effort promo is a future warn candidate, but should stay below timeout now.
+description: First-time low-effort promo should get a public warn, not a timeout.
 category: future-warn-candidates
 severity: medium
 tags: [promo, warn-ready]
@@ -17,6 +17,7 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
+      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]

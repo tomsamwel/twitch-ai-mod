@@ -16,3 +16,9 @@ modelPresets:
     provider: ollama
     baseUrl: http://localhost:11434
     model: qwen2.5:1.5b
+  # Larger models (qwen3:8b, gemma3:12b-it-qat) require more GPU/RAM than a
+  # MacBook Air provides. Uncomment if running on a machine with 16GB+ VRAM.
+  # local-8b:
+  #   provider: ollama
+  #   baseUrl: http://localhost:11434
+  #   model: qwen3:8b
