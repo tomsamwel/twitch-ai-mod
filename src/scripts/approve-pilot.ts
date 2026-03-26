@@ -76,7 +76,6 @@ async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const loadedConfig = await loadConfig(process.cwd(), {
     ...(options.promptPack ? { promptPack: options.promptPack } : {}),
-    ignoreLoginEnvOverrides: true,
   });
   const config = applyNonLiveScriptOverrides(loadedConfig, options);
 

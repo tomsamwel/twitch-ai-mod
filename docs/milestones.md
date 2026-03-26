@@ -17,14 +17,17 @@ The repo now supports:
 - deterministic SQLite-backed AI context retrieval
 - deterministic large visual-spam / ASCII-art detection
 - replay against captured chat snapshots
-- scripted scenario-lab evaluation against curated YAML cases
+- scripted scenario-lab evaluation against curated YAML cases (55 scenarios, 11 suites)
 - replay inbox reports with local review verdicts
 - replay-to-scenario promotion scaffolds
 - side-by-side prompt-pack comparison reports
 - whisper-based trusted-controller runtime overrides
 - self-loop suppression for bot-authored chat events
-- pilot approval reports against scenario suites plus replay
+- pilot approval reports against scenario suites
 - a separate runtime gate for AI-generated live moderation
+- env-based login overrides for live mode (eval/replay always use YAML defaults)
+- hard-violation keyword enforcement in the AI decision contract
+- false-positive example coverage in the prompt
 
 ## Current Operating Posture
 
@@ -43,11 +46,11 @@ Recommended during active tuning:
 
 ## Near-Term Next Steps
 
-1. Tune the default prompt pack with curated-first scenario comparisons plus replay promotion.
-2. Finish the installed-model local bakeoff on `qwen3:4b-instruct` and `qwen2.5:1.5b`, then extend it to `qwen3:8b` and `gemma3:12b` once those are installed.
-3. Refine public-warning phrasing and visual-spam heuristics against real replay captures.
-4. Run a limited AI-assisted live moderation pilot behind explicit operator gates.
-5. Improve API-provider parity so local and remote backends are easier to compare.
+1. Run the installed-model local bakeoff on `qwen3:4b-instruct` vs `qwen2.5:1.5b`, then extend to larger models (`qwen3:8b`, `gemma3:12b`) when hardware allows.
+2. Refine public-warning phrasing and visual-spam heuristics against real replay captures.
+3. Run a limited AI-assisted live moderation pilot behind explicit operator gates.
+4. Improve API-provider parity so local and remote backends are easier to compare.
+5. Promote real incidents from `review:inbox` into curated scenario coverage.
 
 ## Later
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildAiDecisionInput } from "../src/ai/prompt.js";
+import { buildAiDecisionInput, HARD_VIOLATION_KEYWORDS } from "../src/ai/prompt.js";
 import { createChatEvent, createEmptyContext, createTestConfig } from "./helpers.js";
 import { normalizeChatMessage } from "../src/ingest/normalize-chat-message.js";
 
@@ -132,8 +132,10 @@ test("buildAiDecisionInput includes annotated examples, false-positive examples,
   // Executor gate awareness in contract
   assert.match(input.prompt.system, /confidence >= 0\.90/u);
   assert.match(input.prompt.system, /spam-escalation timeout requires prior evidence/u);
-  // Hard-violation keywords
-  assert.match(input.prompt.system, /kys.*kill yourself.*send nudes/u);
+  // Hard-violation keywords from shared constant
+  for (const keyword of HARD_VIOLATION_KEYWORDS) {
+    assert.ok(input.prompt.system.includes(keyword), `prompt should contain hard-violation keyword "${keyword}"`);
+  }
   // Copypasta example
   assert.match(input.prompt.system, /copypasta text wall/u);
   // Derived signals (simplified)

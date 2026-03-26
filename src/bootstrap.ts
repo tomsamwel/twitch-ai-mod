@@ -31,7 +31,7 @@ export interface AppServices {
 }
 
 export async function createAppServices(): Promise<AppServices> {
-  const config = await loadConfig();
+  const config = await loadConfig(process.cwd(), { applyLoginEnvOverrides: true });
   const logger = createLogger(config.runtime.logLevel, config.app.name);
   const database = new BotDatabase(config.storage.sqlitePath);
   const authContext = await createTwitchAuthContext(config, database, logger);

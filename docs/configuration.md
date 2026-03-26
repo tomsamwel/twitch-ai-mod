@@ -31,10 +31,14 @@ Required:
 - `TWITCH_REDIRECT_URI`
 
 Optional:
+- `TWITCH_BROADCASTER_LOGIN` — override the broadcaster login from `config/app.yaml` (live mode only)
+- `TWITCH_BOT_LOGIN` — override the bot login from `config/app.yaml` (live mode only)
 - `TWITCH_OAUTH_HOST`
 - `TWITCH_OAUTH_PORT`
 - `OPENAI_API_KEY`
 - `APP_LOG_LEVEL`
+
+Login overrides apply only when running the live bot (`npm run dev`). Eval, replay, and approval scripts always use the YAML-defined logins so scenario identities stay deterministic.
 
 ## App Config
 
@@ -293,19 +297,20 @@ Optional overrides:
 
 ### Scenario Suites
 
-The repo now supports suite-oriented eval directories such as:
-- `social-direct`
-- `social-quiet`
-- `promo-scam`
-- `harassment-sexual`
-- `privileged-safety`
-- `loops-cooldowns`
-- `escalation`
-- `future-warn-candidates`
+Suite directories:
+- `edge-cases` — false positives, edge conditions, cooldown/privilege/loop correctness
+- `escalation` — multi-step escalation paths after warnings
+- `future-warn-candidates` — borderline public `warn` behavior (aspirational, not blocking)
+- `harassment-sexual` — sexual harassment and coercive threats
+- `loops-cooldowns` — cooldown suppression and self-loop prevention
+- `moderation` — core moderation: scams, spam, rudeness, copypasta
+- `privileged-safety` — privileged user exemptions
+- `promo-scam` — promotional spam and scam variants
+- `social` — general social interaction scenarios
+- `social-direct` — bot-addressed social prompts
+- `social-quiet` — non-addressing benign chat
 
 Use suite names as filters when iterating on a specific behavior slice.
-
-`future-warn-candidates` is still the on-disk suite name, but it now serves as active coverage for public `warn` behavior, not just speculative future cases.
 
 ## Review Inbox
 

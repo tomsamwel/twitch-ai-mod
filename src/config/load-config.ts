@@ -58,7 +58,7 @@ export async function loadConfig(
   rootDir = process.cwd(),
   overrides: {
     promptPack?: string;
-    ignoreLoginEnvOverrides?: boolean;
+    applyLoginEnvOverrides?: boolean;
   } = {},
 ): Promise<ConfigSnapshot> {
   await loadEnvFile(rootDir);
@@ -104,12 +104,12 @@ export async function loadConfig(
     },
     twitch: {
       ...appConfig.twitch,
-      broadcasterLogin: overrides.ignoreLoginEnvOverrides
-        ? appConfig.twitch.broadcasterLogin
-        : (env.TWITCH_BROADCASTER_LOGIN ?? appConfig.twitch.broadcasterLogin),
-      botLogin: overrides.ignoreLoginEnvOverrides
-        ? appConfig.twitch.botLogin
-        : (env.TWITCH_BOT_LOGIN ?? appConfig.twitch.botLogin),
+      broadcasterLogin: overrides.applyLoginEnvOverrides
+        ? (env.TWITCH_BROADCASTER_LOGIN ?? appConfig.twitch.broadcasterLogin)
+        : appConfig.twitch.broadcasterLogin,
+      botLogin: overrides.applyLoginEnvOverrides
+        ? (env.TWITCH_BOT_LOGIN ?? appConfig.twitch.botLogin)
+        : appConfig.twitch.botLogin,
       clientId: env.TWITCH_CLIENT_ID,
       clientSecret: env.TWITCH_CLIENT_SECRET,
       redirectUri: env.TWITCH_REDIRECT_URI,

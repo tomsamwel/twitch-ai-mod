@@ -7,7 +7,14 @@ import type {
   NormalizedChatMessage,
   TwitchIdentity,
 } from "../types.js";
+import { moderationCategorySchema } from "../types.js";
 import { analyzeVisualSpam } from "../moderation/visual-spam.js";
+
+/**
+ * Keywords that always require moderation action regardless of context.
+ * Referenced in the AI decision contract to override the "abstain by default" posture.
+ */
+export const HARD_VIOLATION_KEYWORDS = ["kys", "kill yourself", "send nudes", "send pics"] as const;
 
 interface AiModeSignals {
   mode: AiMode;
@@ -237,12 +244,12 @@ export function composeAiPrompt(
       ? '- Social: outcome "action" requires exactly one "say" action. moderationCategory must be "none".'
       : '- Moderation: outcome "action" requires either one "warn" or the ordered pair ["timeout", "warn"].',
     '- outcome "abstain" requires actions=[].',
-    '- moderationCategory values: "none", "scam", "targeted-harassment", "sexual-harassment", "spam-escalation", "soft-promo", "rude-disruption", "other".',
+    `- moderationCategory values: ${moderationCategorySchema.options.map((v) => `"${v}"`).join(", ")}.`,
     `- Only propose timeout for: ${config.moderationPolicy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}.`,
     `- Timeouts require confidence >= ${config.moderationPolicy.aiPolicy.liveTimeouts.minimumConfidence.toFixed(2)} to execute. If below that, use warn instead.`,
     "- spam-escalation timeout requires prior evidence (repeated user messages or prior bot correction in history). Without evidence, use warn.",
     "- If unsure, abstain.",
-    '- Hard violations that ALWAYS require action: "kys", "kill yourself", "send nudes", "send pics". These are never borderline — always timeout or warn.',
+    `- Hard violations that ALWAYS require action: ${HARD_VIOLATION_KEYWORDS.map((k) => `"${k}"`).join(", ")}. These are never borderline — always [timeout, warn] or warn.`,
     "</decision_contract>",
   ].join("\n");
 

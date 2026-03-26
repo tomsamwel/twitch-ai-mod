@@ -272,8 +272,8 @@ export function formatCompareMarkdown(report: CompareReport): string {
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const [baselineLoadedConfig, candidateLoadedConfig] = await Promise.all([
-    loadConfig(process.cwd(), { promptPack: options.baseline, ignoreLoginEnvOverrides: true }),
-    loadConfig(process.cwd(), { promptPack: options.candidate, ignoreLoginEnvOverrides: true }),
+    loadConfig(process.cwd(), { promptPack: options.baseline }),
+    loadConfig(process.cwd(), { promptPack: options.candidate }),
   ]);
   const baselineConfig = applyNonLiveScriptOverrides(baselineLoadedConfig, options);
   const candidateConfig = applyNonLiveScriptOverrides(candidateLoadedConfig, options);
