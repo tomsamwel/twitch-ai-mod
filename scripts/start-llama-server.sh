@@ -24,9 +24,19 @@ if [ ! -f "$MANIFEST" ]; then
   exit 1
 fi
 
-# Extract the model layer digest (the GGUF blob).
-DIGEST=$(grep -o '"sha256:[a-f0-9]*"' "$MANIFEST" | head -1 | tr -d '"')
-BLOB_PATH="$HOME/.ollama/models/blobs/$DIGEST"
+# Extract the model layer digest (the GGUF blob, not the config blob).
+# The model layer has mediaType "application/vnd.ollama.image.model".
+DIGEST=$(python3 -c "
+import json, sys
+with open('$MANIFEST') as f:
+    m = json.load(f)
+for layer in m['layers']:
+    if 'model' in layer['mediaType']:
+        print(layer['digest'])
+        break
+")
+# Ollama stores blobs with dashes instead of colons in the digest.
+BLOB_PATH="$HOME/.ollama/models/blobs/$(echo "$DIGEST" | tr ':' '-')"
 
 if [ ! -f "$BLOB_PATH" ]; then
   echo "error: model blob not found at $BLOB_PATH" >&2
