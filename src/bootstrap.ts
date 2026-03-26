@@ -1,6 +1,8 @@
 import type { Logger } from "pino";
 
 import { ActionExecutor } from "./actions/action-executor.js";
+import { AdminServer } from "./admin/admin-server.js";
+import { LlamaServerManager } from "./admin/llama-server-manager.js";
 import { AiContextBuilder } from "./ai/context-builder.js";
 import { AiProviderRegistry } from "./ai/provider-registry.js";
 import { loadConfig, readPromptPack } from "./config/load-config.js";
@@ -27,6 +29,8 @@ export interface AppServices {
   actionExecutor: ActionExecutor;
   messageProcessor: MessageProcessor;
   controlPlane: WhisperControlPlane | null;
+  adminServer: AdminServer | null;
+  llamaServerManager: LlamaServerManager | null;
   close(): Promise<void>;
 }
 
@@ -36,6 +40,20 @@ export async function createAppServices(): Promise<AppServices> {
   const database = new BotDatabase(config.storage.sqlitePath);
   const authContext = await createTwitchAuthContext(config, database, logger);
   const promptPacks = await loadPromptPacks(config);
+  const llamaServerManager =
+    config.ai.provider === "llama-cpp" && config.ai.llamaCpp?.managed
+      ? new LlamaServerManager({
+          logger,
+          modelTag: config.ai.llamaCpp.model,
+          port: Number(new URL(config.ai.llamaCpp.baseUrl).port),
+          dataDir: config.paths.rootDir + "/data",
+        })
+      : null;
+
+  if (llamaServerManager) {
+    await llamaServerManager.start();
+  }
+
   const runtimeSettings = new RuntimeSettingsStore(config, logger, database, promptPacks);
   const aiProviders = new AiProviderRegistry(config, logger);
   await aiProviders.getProvider(aiProviders.createEffectiveConfig(runtimeSettings.getEffectiveSettings()));
@@ -86,6 +104,21 @@ export async function createAppServices(): Promise<AppServices> {
         )
       : null;
 
+  const adminServer =
+    config.admin?.enabled
+      ? new AdminServer({
+          runtimeSettings,
+          database,
+          logger,
+          port: config.admin.port,
+          llamaServerManager: llamaServerManager ?? undefined,
+        })
+      : null;
+
+  if (adminServer) {
+    await adminServer.start();
+  }
+
   if (config.controlPlane.enabled && authContext.bot.id === authContext.broadcaster.id) {
     logger.warn(
       {
@@ -107,8 +140,12 @@ export async function createAppServices(): Promise<AppServices> {
     actionExecutor,
     messageProcessor,
     controlPlane,
+    adminServer,
+    llamaServerManager,
     async close(): Promise<void> {
       await twitchGateway.stop();
+      if (adminServer) await adminServer.stop();
+      if (llamaServerManager) await llamaServerManager.stop();
       database.close();
     },
   };

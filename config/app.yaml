@@ -48,7 +48,12 @@ ai:
   llamaCpp:
     baseUrl: http://localhost:8081
     model: qwen3:4b-instruct
+    managed: true
+
+admin:
+  enabled: true
+  port: 3001
 
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
+  allowLiveModeration: true

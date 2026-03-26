@@ -265,8 +265,13 @@ export interface ConfigSnapshot {
     llamaCpp?: {
       baseUrl: string;
       model: string;
+      managed?: boolean | undefined;
     } | undefined;
   };
+  admin?: {
+    enabled: boolean;
+    port: number;
+  } | undefined;
   actions: {
     allowLiveChatMessages: boolean;
     allowLiveModeration: boolean;

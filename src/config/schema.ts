@@ -62,8 +62,13 @@ export const appConfigSchema = z.object({
     llamaCpp: z.object({
       baseUrl: z.url(),
       model: z.string().min(1),
+      managed: z.boolean().optional(),
     }).optional(),
   }),
+  admin: z.object({
+    enabled: z.boolean(),
+    port: z.number().int().positive(),
+  }).optional(),
   actions: z.object({
     allowLiveChatMessages: z.boolean(),
     allowLiveModeration: z.boolean(),
