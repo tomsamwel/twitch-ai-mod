@@ -10,7 +10,7 @@ steps:
       login: curiousviewer
       displayName: CuriousViewer
       roles: [viewer]
-    text: "@testchannel what can you do here?"
+    text: "@testchannel what do u do"
     expected:
       mode: social
       allowedOutcomes: [action]

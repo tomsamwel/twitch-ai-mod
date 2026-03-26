@@ -63,7 +63,7 @@ export function createTestConfig(): ConfigSnapshot {
       promptPack: "witty-mod",
       requestDefaults: {
         temperature: 0,
-        maxOutputTokens: 100,
+        maxOutputTokens: 200,
         timeoutMs: 45000,
       },
       context: {

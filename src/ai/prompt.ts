@@ -101,38 +101,45 @@ function formatDerivedSignals(
   config: ConfigSnapshot,
 ): string {
   const visualSpam = analyzeVisualSpam(message.text, config.moderationPolicy.deterministicRules.visualSpam);
+  const visualSpamLabel = visualSpam.highConfidence
+    ? "detected (high confidence)"
+    : visualSpam.borderline
+      ? "detected (borderline)"
+      : "none";
 
   return [
     `mention_count: ${countMentions(message)}`,
     `recent_same_user_messages: ${context.recentUserMessages.length}`,
     `recent_bot_correction: ${formatYesNo(hasRecentBotCorrectiveInteraction(context))}`,
-    `visual_spam_score: ${visualSpam.score}`,
-    `visual_spam_high_confidence: ${formatYesNo(visualSpam.highConfidence)}`,
-    `visual_spam_borderline: ${formatYesNo(visualSpam.borderline)}`,
+    `visual_spam: ${visualSpamLabel}`,
   ].join("\n");
 }
 
 function formatDecisionExamples(mode: AiMode): string {
   if (mode === "social") {
     return [
-      'input: "@bot what\'s your goal?" -> action, say "My goal is to help keep chat friendly.", conf=0.88',
-      'input: "@bot please help" -> action, say "I\'m here to help keep chat friendly.", conf=0.86',
-      'input: "@bot @bot @bot" first burst -> action, say "Please stop spamming mentions.", conf=0.82',
+      'input: "@bot what do u even do" -> action, say "I help keep chat friendly.", conf=0.88 (direct question, brief answer)',
+      'input: "@bot help pls" -> action, say "I\'m here to keep chat smooth.", conf=0.86 (help request)',
+      'input: "nice stream" no direct address -> abstain (not addressing bot, ignore)',
       "",
       'Full output shape: {"outcome":"action","reason":"...","confidence":0.88,"mode":"social","moderationCategory":"none","actions":[{"kind":"say","reason":"...","message":"..."}]}',
     ].join("\n");
   }
 
   return [
-    'input: "@bot @bot @bot" no prior warning -> action, warn "Please stop spamming mentions.", category=spam-escalation, conf=0.78',
-    'input: "@bot*5" repeated after bot correction -> action, [timeout, warn "Mention spam gets timed out."], category=spam-escalation, conf=0.95',
-    'input: "maybe help people get followers" -> abstain, category=scam, conf=0.69',
-    'input: "you should totally dm me later" -> abstain, category=sexual-harassment, conf=0.72',
-    'input: "lol this stream is washed" -> action, warn "Keep it civil.", category=rude-disruption, conf=0.74',
-    'input: "shut up bot, kill yourself" -> action, [timeout, warn "Harassment gets timed out."], category=targeted-harassment, conf=0.99',
-    'input: "send me pics or i will come" -> action, [timeout, warn "Coercive sexual comments get timed out."], category=sexual-harassment, conf=0.99',
-    'input: roles=vip "follow for follow" -> abstain, category=none, conf=0.95 (privileged user exempt)',
-    'input: visual spam borderline symbols -> action, warn "Keep visual spam out of chat.", category=spam-escalation, conf=0.76',
+    "Moderation examples:",
+    'input: "maybe help people get followers" -> abstain, category=scam, conf=0.69 (ambiguous, could be casual chat)',
+    'input: "send pics or ill find u" -> [timeout, warn], category=sexual-harassment, conf=0.99 (coercive sexual threat)',
+    'input: roles=vip "follow for follow" -> abstain, category=none, conf=0.95 (privileged user, never timeout)',
+    'input: "@bot*5" after prior bot warn -> [timeout, warn], category=spam-escalation, conf=0.95 (repeated after correction)',
+    'input: "shut up bot kys" -> [timeout, warn], category=targeted-harassment, conf=0.99 (kys is always a hard violation)',
+    'input: visual spam borderline -> warn, category=spam-escalation, conf=0.76 (disruptive but not extreme)',
+    'input: copypasta text wall with heavy repetition -> warn, category=spam-escalation, conf=0.82 (disruptive repetitive spam)',
+    "",
+    "False-positive examples (do NOT flag these):",
+    'input: "gonna headshot that noob lol" -> abstain (game violence discussion, not real threat)',
+    'input: "this stream is so bad its good lmao" -> abstain (positive sentiment despite negative words)',
+    'input: "someone said a slur earlier can mods ban them" -> abstain (reporting a violation, not committing one)',
     "",
     'Full output shape: {"outcome":"action","reason":"...","confidence":0.95,"mode":"moderation","moderationCategory":"spam-escalation","actions":[{"kind":"timeout","reason":"..."},{"kind":"warn","reason":"...","message":"..."}]}',
   ].join("\n");
@@ -219,6 +226,10 @@ export function composeAiPrompt(
     config.prompts.safetyRules.trim(),
     "</safety>",
     "",
+    "<decision_examples>",
+    formatDecisionExamples(mode),
+    "</decision_examples>",
+    "",
     "<decision_contract>",
     "- Return one JSON object only. No markdown or prose outside it.",
     `- Set mode="${mode}" exactly.`,
@@ -228,12 +239,11 @@ export function composeAiPrompt(
     '- outcome "abstain" requires actions=[].',
     '- moderationCategory values: "none", "scam", "targeted-harassment", "sexual-harassment", "spam-escalation", "soft-promo", "rude-disruption", "other".',
     `- Only propose timeout for: ${config.moderationPolicy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}.`,
+    `- Timeouts require confidence >= ${config.moderationPolicy.aiPolicy.liveTimeouts.minimumConfidence.toFixed(2)} to execute. If below that, use warn instead.`,
+    "- spam-escalation timeout requires prior evidence (repeated user messages or prior bot correction in history). Without evidence, use warn.",
     "- If unsure, abstain.",
+    '- Hard violations that ALWAYS require action: "kys", "kill yourself", "send nudes", "send pics". These are never borderline — always timeout or warn.',
     "</decision_contract>",
-    "",
-    "<decision_examples>",
-    formatDecisionExamples(mode),
-    "</decision_examples>",
   ].join("\n");
 
   const user = [

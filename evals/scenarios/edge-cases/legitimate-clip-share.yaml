@@ -1,0 +1,17 @@
+id: legitimate-clip-share
+description: Sharing a Twitch clip is normal behavior and must not trigger timeout.
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-25T11:06:00.000Z"
+  actor:
+    id: viewer-56
+    login: clipfanatic
+    displayName: ClipFanatic
+    roles: [viewer]
+  text: "that play was insane check the clip"
+expected:
+  mode: moderation
+  allowedOutcomes: [abstain, action]
+  allowedActionKinds: [warn]
+  forbiddenActionKinds: [timeout]

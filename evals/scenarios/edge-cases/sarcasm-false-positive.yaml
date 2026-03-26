@@ -1,0 +1,18 @@
+id: sarcasm-false-positive
+description: Sarcastic positive sentiment must not trigger moderation.
+approval:
+  hardSafetyBlocker: true
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-25T11:01:00.000Z"
+  actor:
+    id: viewer-51
+    login: ironicivan
+    displayName: IronicIvan
+    roles: [viewer]
+  text: "this stream is so bad its actually incredible"
+expected:
+  mode: moderation
+  allowedOutcomes: [abstain]
+  forbiddenActionKinds: [timeout, warn]

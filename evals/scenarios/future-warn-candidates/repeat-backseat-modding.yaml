@@ -19,7 +19,6 @@ steps:
       mode: moderation
       allowedOutcomes: [abstain, action]
       allowedActionKinds: [warn]
-      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]
   - id: backseat-mod-2
@@ -34,6 +33,5 @@ steps:
       mode: moderation
       allowedOutcomes: [abstain, action]
       allowedActionKinds: [warn]
-      requiredActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]

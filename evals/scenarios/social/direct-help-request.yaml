@@ -9,7 +9,7 @@ incomingMessage:
     login: onefuzzletorule
     displayName: OneFuzzleToRule
     roles: [viewer]
-  text: "@testchannel please help"
+  text: "@testchannel help pls"
 expected:
   mode: social
   allowedOutcomes: [action]

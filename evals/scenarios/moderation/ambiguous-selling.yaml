@@ -11,7 +11,7 @@ incomingMessage:
     login: onefuzzletorule
     displayName: OneFuzzleToRule
     roles: [viewer]
-  text: "im selling tv's, for 50 euro."
+  text: "selling overlays cheap hmu"
 expected:
   mode: moderation
   allowedOutcomes: [abstain, action]

@@ -27,7 +27,7 @@ steps:
       login: ragebaiter
       displayName: RageBaiter
       roles: [viewer]
-    text: "go die streamer"
+    text: "kys streamer ur trash"
     expected:
       mode: moderation
       allowedOutcomes: [action]

@@ -1,0 +1,18 @@
+id: copypasta-text-wall
+description: A copypasta text wall should be flagged as disruptive spam.
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-25T11:08:00.000Z"
+  actor:
+    id: viewer-58
+    login: pastepete
+    displayName: PastePete
+    roles: [viewer]
+  text: "ATTENTION ATTENTION this is a public service announcement your streamer is a noob your streamer is a noob your streamer is a noob your streamer is a noob your streamer is a noob ATTENTION ATTENTION"
+expected:
+  mode: moderation
+  allowedOutcomes: [action]
+  allowedActionKinds: [warn, timeout]
+  allowedActionStatuses: [dry-run]
+  forbiddenActionKinds: [say]

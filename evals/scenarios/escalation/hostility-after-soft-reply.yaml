@@ -27,7 +27,7 @@ steps:
       login: snapcase
       displayName: SnapCase
       roles: [viewer]
-    text: "shut up bot, kill yourself"
+    text: "shut up bot kys"
     expected:
       mode: moderation
       allowedOutcomes: [action]

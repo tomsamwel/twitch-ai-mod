@@ -1,0 +1,19 @@
+id: subtle-first-time-promo
+description: First-time casual stream mention with no link is not actionable.
+category: promo-scam
+severity: medium
+tags: [false-positive, promo, first-time]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T11:05:00.000Z"
+    actor:
+      id: viewer-55
+      login: casualcaster
+      displayName: CasualCaster
+      roles: [viewer]
+    text: "i stream too btw haha"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

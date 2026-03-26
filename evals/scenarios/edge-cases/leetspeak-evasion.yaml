@@ -1,0 +1,17 @@
+id: leetspeak-evasion
+description: L33tspeak follower selling evasion should be detected by AI.
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-25T11:07:00.000Z"
+  actor:
+    id: viewer-57
+    login: l33tspammer
+    displayName: L33tSpammer
+    roles: [viewer]
+  text: "fr33 f0ll0w3rs dm m3"
+expected:
+  mode: moderation
+  allowedOutcomes: [abstain, action]
+  allowedActionKinds: [warn]
+  forbiddenActionKinds: [timeout]

@@ -16,7 +16,7 @@ incomingMessage:
     login: onefuzzletorule
     displayName: OneFuzzleToRule
     roles: [viewer]
-  text: "@testchannel what's your goal here?"
+  text: "@testchannel what do u even do"
 expected:
   mode: social
   allowedOutcomes: [action]

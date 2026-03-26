@@ -8,6 +8,8 @@ export const envSchema = z.object({
   TWITCH_REDIRECT_URI: z.string().url("TWITCH_REDIRECT_URI must be a valid URL"),
   TWITCH_OAUTH_HOST: z.string().min(1).default("localhost"),
   TWITCH_OAUTH_PORT: z.coerce.number().int().positive().default(3000),
+  TWITCH_BROADCASTER_LOGIN: z.string().min(1).optional(),
+  TWITCH_BOT_LOGIN: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
   APP_LOG_LEVEL: logLevelSchema.optional(),
 });

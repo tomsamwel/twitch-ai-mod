@@ -177,7 +177,7 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 100
+    maxOutputTokens: 200
     timeoutMs: 45000
   context:
     recentRoomMessages: 5
@@ -241,7 +241,7 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 100
+    maxOutputTokens: 200
     timeoutMs: 45000
   context:
     recentRoomMessages: 5
@@ -300,7 +300,7 @@ ai:
   provider: openai
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 100
+    maxOutputTokens: 200
     timeoutMs: 45000
   context:
     recentRoomMessages: 5
@@ -360,7 +360,7 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 100
+    maxOutputTokens: 200
     timeoutMs: 45000
   context:
     recentRoomMessages: 5
@@ -422,7 +422,7 @@ ai:
   promptPack: safer-control
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 100
+    maxOutputTokens: 200
     timeoutMs: 45000
   context:
     recentRoomMessages: 5
@@ -482,7 +482,7 @@ ai:
   provider: ollama
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 100
+    maxOutputTokens: 200
     timeoutMs: 45000
   context:
     recentRoomMessages: 5

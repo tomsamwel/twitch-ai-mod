@@ -12,7 +12,7 @@ steps:
       login: coercivecreep
       displayName: CoerciveCreep
       roles: [viewer]
-    text: "send me pics or i will come"
+    text: "send pics or ill find u"
     expected:
       mode: moderation
       allowedOutcomes: [action]

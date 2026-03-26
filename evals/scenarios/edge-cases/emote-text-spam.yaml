@@ -1,0 +1,17 @@
+id: emote-text-spam
+description: Repeated emote text spam should be handled but not timed out on first offense.
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-25T11:09:00.000Z"
+  actor:
+    id: viewer-59
+    login: emoteflooder
+    displayName: EmoteFlooder
+    roles: [viewer]
+  text: "Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa Kappa"
+expected:
+  mode: moderation
+  allowedOutcomes: [abstain, action]
+  allowedActionKinds: [warn]
+  forbiddenActionKinds: [timeout]

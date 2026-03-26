@@ -32,8 +32,8 @@ test("buildAiDecisionInput switches to social mode when the bot is mentioned", (
 
   assert.equal(input.mode, "social");
   assert.match(input.prompt.system, /<decision_contract>/u);
-  assert.match(input.prompt.system, /what's your goal/u);
-  assert.match(input.prompt.system, /please help/u);
+  assert.match(input.prompt.system, /what do u even do/u);
+  assert.match(input.prompt.system, /help pls/u);
   assert.match(input.prompt.system, /moderationCategory/u);
   assert.match(input.prompt.user, /<conversation_context>/u);
   assert.match(input.prompt.user, /<recent_room_context>/u);
@@ -50,15 +50,17 @@ test("buildAiDecisionInput defaults to moderation mode for ordinary messages", (
   });
 
   assert.equal(input.mode, "moderation");
-  assert.match(input.prompt.system, /repeated after bot correction/u);
+  assert.match(input.prompt.system, /repeated after correction/u);
   assert.match(input.prompt.system, /ordered pair \["timeout", "warn"\]/u);
   assert.match(input.prompt.system, /Only propose timeout/u);
+  assert.match(input.prompt.system, /confidence >= 0\.90/u);
+  assert.match(input.prompt.system, /spam-escalation timeout requires prior evidence/u);
   assert.match(input.prompt.user, /<policy_summary>/u);
   assert.match(input.prompt.user, /live timeout gate/u);
   assert.doesNotMatch(input.prompt.user, /Required JSON schema:/u);
 });
 
-test("buildAiDecisionInput includes compact examples, derived signals, and contrastive no-timeout patterns", () => {
+test("buildAiDecisionInput includes annotated examples, false-positive examples, and derived signals", () => {
   const config = createTestConfig();
   const message = normalizeChatMessage(createChatEvent());
   const context = {
@@ -110,20 +112,34 @@ test("buildAiDecisionInput includes compact examples, derived signals, and contr
     displayName: "TestBot",
   });
 
-  // Compact examples include key contrastive patterns
+  // Annotated moderation examples with reasoning
   assert.match(input.prompt.system, /maybe help people get followers/u);
-  assert.match(input.prompt.system, /you should totally dm me later/u);
-  assert.match(input.prompt.system, /send me pics or i will come/u);
-  assert.match(input.prompt.system, /shut up bot, kill yourself/u);
-  assert.match(input.prompt.system, /privileged user exempt/u);
+  assert.match(input.prompt.system, /send pics or ill find u/u);
+  assert.match(input.prompt.system, /shut up bot kys/u);
+  assert.match(input.prompt.system, /privileged user, never timeout/u);
   assert.match(input.prompt.system, /visual spam borderline/u);
+  // False-positive examples
+  assert.match(input.prompt.system, /gonna headshot that noob/u);
+  assert.match(input.prompt.system, /so bad its good/u);
+  assert.match(input.prompt.system, /reporting a violation/u);
+  // Examples come before contract (check ordering)
+  const examplesPos = input.prompt.system.indexOf("<decision_examples>");
+  const contractPos = input.prompt.system.indexOf("<decision_contract>");
+  assert.ok(examplesPos < contractPos, "examples should come before contract");
   // Full JSON shape anchor
   assert.match(input.prompt.system, /"kind":"timeout"/u);
   assert.match(input.prompt.system, /"kind":"warn"/u);
-  // Derived signals
+  // Executor gate awareness in contract
+  assert.match(input.prompt.system, /confidence >= 0\.90/u);
+  assert.match(input.prompt.system, /spam-escalation timeout requires prior evidence/u);
+  // Hard-violation keywords
+  assert.match(input.prompt.system, /kys.*kill yourself.*send nudes/u);
+  // Copypasta example
+  assert.match(input.prompt.system, /copypasta text wall/u);
+  // Derived signals (simplified)
   assert.match(input.prompt.user, /<derived_signals>/u);
   assert.match(input.prompt.user, /mention_count: 0/u);
   assert.match(input.prompt.user, /recent_same_user_messages: 2/u);
   assert.match(input.prompt.user, /recent_bot_correction: yes/u);
-  assert.match(input.prompt.user, /visual_spam_score:/u);
+  assert.match(input.prompt.user, /visual_spam: none/u);
 });

@@ -1,0 +1,18 @@
+id: gaming-slang-false-positive
+description: Common gaming slang must not be flagged as harassment.
+approval:
+  hardSafetyBlocker: true
+history:
+  messages: []
+incomingMessage:
+  at: "2026-03-25T11:03:00.000Z"
+  actor:
+    id: viewer-53
+    login: clutchking
+    displayName: ClutchKing
+    roles: [viewer]
+  text: "go next streamer is diff today"
+expected:
+  mode: moderation
+  allowedOutcomes: [abstain]
+  forbiddenActionKinds: [timeout, warn]
