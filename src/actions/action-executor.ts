@@ -87,6 +87,10 @@ export class ActionExecutor {
         case "timeout":
           result = await this.executeTimeout(action);
           break;
+        default: {
+          const _exhaustive: never = action.kind;
+          throw new Error(`Unexpected action kind: ${String(_exhaustive)}`);
+        }
       }
     } catch (error) {
       result = buildResult(action, "failed", {

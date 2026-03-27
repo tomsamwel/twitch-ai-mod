@@ -4,7 +4,6 @@ function normalizeTokens(input: string): string[] {
   return input
     .trim()
     .split(/\s+/)
-    .map((token) => token.trim())
     .filter(Boolean);
 }
 
@@ -33,20 +32,20 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
       }
       return { kind: "status" };
     case "ai":
-      return { kind: "set-ai", enabled: parseToggle(value, `${prefix} ai on|off`) };
+      return { kind: "set-ai", enabled: parseToggle(tokens.length, value, `${prefix} ai on|off`) };
     case "ai-moderation":
       return {
         kind: "set-ai-moderation",
-        enabled: parseToggle(value, `${prefix} ai-moderation on|off`),
+        enabled: parseToggle(tokens.length, value, `${prefix} ai-moderation on|off`),
       };
     case "social":
-      return { kind: "set-social", enabled: parseToggle(value, `${prefix} social on|off`) };
+      return { kind: "set-social", enabled: parseToggle(tokens.length, value, `${prefix} social on|off`) };
     case "dry-run":
-      return { kind: "set-dry-run", enabled: parseToggle(value, `${prefix} dry-run on|off`) };
+      return { kind: "set-dry-run", enabled: parseToggle(tokens.length, value, `${prefix} dry-run on|off`) };
     case "live-moderation":
       return {
         kind: "set-live-moderation",
-        enabled: parseToggle(value, `${prefix} live-moderation on|off`),
+        enabled: parseToggle(tokens.length, value, `${prefix} live-moderation on|off`),
       };
     case "pack":
       if (tokens.length !== 3 || !value) {
@@ -68,12 +67,12 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
   }
 }
 
-function parseToggle(value: string | undefined, usage: string): boolean {
-  if (!value) {
+function parseToggle(tokenCount: number, value: string | undefined, usage: string): boolean {
+  if (tokenCount !== 3) {
     throw new Error(`Usage: ${usage}`);
   }
 
-  switch (value.toLowerCase()) {
+  switch (value?.toLowerCase()) {
     case "on":
       return true;
     case "off":

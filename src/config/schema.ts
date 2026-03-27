@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { logLevelSchema, moderationCategorySchema } from "../types.js";
+import { AI_PROVIDER_KINDS, logLevelSchema, moderationCategorySchema } from "../types.js";
 
 export const envSchema = z.object({
   TWITCH_CLIENT_ID: z.string().min(1, "TWITCH_CLIENT_ID is required"),
@@ -37,7 +37,7 @@ export const appConfigSchema = z.object({
   }),
   ai: z.object({
     enabled: z.boolean(),
-    provider: z.enum(["ollama", "openai", "llama-cpp"]),
+    provider: z.enum(AI_PROVIDER_KINDS),
     requestDefaults: z.object({
       temperature: z.number().min(0).max(2),
       maxOutputTokens: z.number().int().positive(),
@@ -84,7 +84,7 @@ export const controlPlaneSchema = z.object({
   modelPresets: z.record(
     z.string().min(1),
     z.object({
-      provider: z.enum(["ollama", "openai", "llama-cpp"]),
+      provider: z.enum(AI_PROVIDER_KINDS),
       baseUrl: z.url(),
       model: z.string().min(1),
     }),

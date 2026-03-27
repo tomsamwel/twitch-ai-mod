@@ -264,7 +264,7 @@ export class WhisperControlPlane {
     commandSummary: string,
     highRisk = false,
   ): ControlCommandResult {
-    const previousValue = this.runtimeSettings.getOverrides()[key] ?? this.runtimeSettings.getEffectiveSettings()[this.mapKeyToSetting(key)];
+    const previousValue = this.runtimeSettings.getOverrides()[key] ?? this.runtimeSettings.getEffectiveSettings()[key];
     this.runtimeSettings.setOverride(key, value, actor);
 
     return {
@@ -321,26 +321,6 @@ export class WhisperControlPlane {
       },
       "processed whisper control command",
     );
-  }
-
-  private mapKeyToSetting(
-    key:
-      | "aiEnabled"
-      | "aiModerationEnabled"
-      | "socialRepliesEnabled"
-      | "dryRun"
-      | "liveModerationEnabled"
-      | "promptPack"
-      | "modelPreset",
-  ):
-    | "aiEnabled"
-    | "aiModerationEnabled"
-    | "socialRepliesEnabled"
-    | "dryRun"
-    | "liveModerationEnabled"
-    | "promptPack"
-    | "modelPreset" {
-    return key;
   }
 
   private toOverrideKey(

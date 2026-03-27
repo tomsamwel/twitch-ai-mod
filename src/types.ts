@@ -3,7 +3,8 @@ import { z } from "zod";
 export const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
 export type LogLevel = z.infer<typeof logLevelSchema>;
 
-export type AiProviderKind = "ollama" | "openai" | "llama-cpp";
+export const AI_PROVIDER_KINDS = ["ollama", "openai", "llama-cpp"] as const;
+export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
 export type AiMode = "social" | "moderation";
 export const moderationCategorySchema = z.enum([
   "none",

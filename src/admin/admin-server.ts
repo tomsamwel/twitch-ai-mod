@@ -124,7 +124,14 @@ export class AdminServer {
 
   private async handlePostSettings(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const body = await readRequestBody(req);
-    const parsed = JSON.parse(body) as { key?: string; value?: unknown };
+    let parsed: { key?: string; value?: unknown };
+    try {
+      parsed = JSON.parse(body) as { key?: string; value?: unknown };
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid JSON" }));
+      return;
+    }
 
     if (!parsed.key || !VALID_OVERRIDE_KEYS.includes(parsed.key as RuntimeOverrideKey)) {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -154,9 +161,9 @@ export class AdminServer {
 
   private getRecentActivity(): Array<Record<string, unknown>> {
     try {
-      const rows = this.options.database.getRecentDecisionsForAdmin(10);
-      return rows;
-    } catch {
+      return this.options.database.getRecentDecisionsForAdmin(10);
+    } catch (error) {
+      this.options.logger.error({ err: error }, "failed to load recent activity for admin panel");
       return [];
     }
   }
@@ -166,7 +173,7 @@ function readRequestBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.on("end", () => resolve(Buffer.concat(chunks).toString()));
-    req.on("error", reject);
+    req.once("end", () => resolve(Buffer.concat(chunks).toString()));
+    req.once("error", reject);
   });
 }

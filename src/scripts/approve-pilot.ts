@@ -21,7 +21,7 @@ interface ApprovePilotCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run approve:pilot -- [--provider ollama|openai] [--prompt-pack <name>] [--model <name>]",
+    "Usage: npm run approve:pilot -- [--provider ollama|openai|llama-cpp] [--prompt-pack <name>] [--model <name>]",
   );
 }
 

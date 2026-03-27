@@ -169,6 +169,10 @@ export class TwurpleTwitchGateway {
     this.validationInterval = setInterval(() => {
       void this.validateCurrentToken().catch((error) => {
         this.logger.fatal({ err: error }, "Twitch token validation failed; stopping bot");
+        if (this.validationInterval) {
+          clearInterval(this.validationInterval);
+          this.validationInterval = null;
+        }
         void this.stop().finally(() => {
           process.exitCode = 1;
         });

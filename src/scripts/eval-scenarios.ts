@@ -15,7 +15,7 @@ interface ScenarioEvalCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run eval:scenarios -- [--suite <name>] [--scenario <id>] [--provider ollama|openai] [--model <name>] [--prompt-pack <name>]",
+    "Usage: npm run eval:scenarios -- [--suite <name>] [--scenario <id>] [--provider ollama|openai|llama-cpp] [--model <name>] [--prompt-pack <name>]",
   );
 }
 

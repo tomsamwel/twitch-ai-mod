@@ -32,9 +32,12 @@ function resolveGgufBlobPath(modelTag: string): string {
     );
   }
 
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
-    layers: Array<{ mediaType: string; digest: string }>;
-  };
+  let manifest: { layers: Array<{ mediaType: string; digest: string }> };
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as typeof manifest;
+  } catch {
+    throw new Error(`Failed to parse Ollama manifest at ${manifestPath}. The file may be corrupted.`);
+  }
 
   const modelLayer = manifest.layers.find((layer) => layer.mediaType.includes("model"));
 

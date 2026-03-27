@@ -89,7 +89,7 @@ interface CompareReport {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run eval:compare -- --baseline <pack> --candidate <pack> [--suite <name>] [--provider ollama|openai] [--model <name>]",
+    "Usage: npm run eval:compare -- --baseline <pack> --candidate <pack> [--suite <name>] [--provider ollama|openai|llama-cpp] [--model <name>]",
   );
 }
 

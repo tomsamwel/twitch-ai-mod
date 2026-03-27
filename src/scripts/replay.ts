@@ -14,7 +14,7 @@ interface ReplayCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run replay -- [--limit <n>] [--provider ollama|openai] [--model <name>] [--prompt-pack <name>]",
+    "Usage: npm run replay -- [--limit <n>] [--provider ollama|openai|llama-cpp] [--model <name>] [--prompt-pack <name>]",
   );
 }
 
