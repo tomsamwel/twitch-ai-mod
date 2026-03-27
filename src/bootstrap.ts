@@ -9,7 +9,9 @@ import { WhisperControlPlane } from "./control/control-plane.js";
 import { RuntimeSettingsStore } from "./control/runtime-settings.js";
 import { CooldownManager } from "./moderation/cooldown-manager.js";
 import { RuleEngine } from "./moderation/rule-engine.js";
+import { AiReviewQueue } from "./runtime/ai-review-queue.js";
 import { MessageProcessor } from "./runtime/message-processor.js";
+import type { AiReviewWorkItem } from "./runtime/message-processor.js";
 import { OutboundMessageTracker } from "./runtime/outbound-message-tracker.js";
 import { BotDatabase } from "./storage/database.js";
 import { createLogger } from "./storage/logger.js";
@@ -29,6 +31,7 @@ export interface AppServices {
   twitchGateway: TwurpleTwitchGateway;
   actionExecutor: ActionExecutor;
   messageProcessor: MessageProcessor;
+  aiReviewQueue: AiReviewQueue<AiReviewWorkItem>;
   controlPlane: WhisperControlPlane | null;
   adminServer: AdminServer | null;
   llamaServerManager: LlamaServerManager | null;
@@ -50,6 +53,7 @@ export async function createAppServices(): Promise<AppServices> {
   const ruleEngine = new RuleEngine(config, cooldowns);
   const contextBuilder = new AiContextBuilder(config, database);
   const outboundMessageTracker = new OutboundMessageTracker();
+  const aiReviewQueue = new AiReviewQueue<AiReviewWorkItem>(config.ai.queue, logger);
   const twitchGateway = new TwurpleTwitchGateway(
     config,
     logger,
@@ -80,7 +84,11 @@ export async function createAppServices(): Promise<AppServices> {
     aiProviders,
     actionExecutor,
     outboundMessageTracker,
+    aiReviewQueue,
   );
+  aiReviewQueue.start(async (work) => {
+    await messageProcessor.processAiReview(work);
+  });
   const controlPlane =
     config.controlPlane.enabled
       ? new WhisperControlPlane(
@@ -101,6 +109,7 @@ export async function createAppServices(): Promise<AppServices> {
           logger,
           port: config.admin.port,
           llamaServerManager: llamaServerManager ?? undefined,
+          aiReviewQueue,
         })
       : null;
 
@@ -128,11 +137,13 @@ export async function createAppServices(): Promise<AppServices> {
     twitchGateway,
     actionExecutor,
     messageProcessor,
+    aiReviewQueue,
     controlPlane,
     adminServer,
     llamaServerManager,
     async close(): Promise<void> {
       await twitchGateway.stop();
+      aiReviewQueue.stop();
       if (adminServer) await adminServer.stop();
       if (llamaServerManager) await llamaServerManager.stop();
       database.close();

@@ -9,8 +9,23 @@ export class CooldownManager {
   private readonly lastEquivalentAction = new Map<string, number>();
   private readonly lastAiModerationReviewByUser = new Map<string, number>();
   private readonly lastAiSocialReviewByUser = new Map<string, number>();
+  private readonly evictionTtlMs: number;
+  private lastPrunedAt = 0;
 
-  public constructor(private readonly config: ConfigSnapshot["cooldowns"]) {}
+  public constructor(private readonly config: ConfigSnapshot["cooldowns"]) {
+    // Eviction TTL is 2x the longest configured cooldown so entries are never pruned prematurely.
+    this.evictionTtlMs =
+      2 *
+      Math.max(
+        config.chat.minimumSecondsBetweenBotRepliesToSameUser,
+        config.chat.minimumSecondsBetweenModerationNoticesPerUser,
+        config.moderation.minimumSecondsBetweenModerationActionsPerUser,
+        config.moderation.minimumSecondsBetweenEquivalentActions,
+        config.ai.minimumSecondsBetweenAiModerationReviewsForSameUser,
+        config.ai.minimumSecondsBetweenAiSocialReviewsForSameUser,
+      ) *
+      1000;
+  }
 
   public canReviewWithAi(userId: string, mode: AiMode, now = Date.now()): boolean {
     const previous =
@@ -28,6 +43,7 @@ export class CooldownManager {
   public recordAiReview(userId: string, mode: AiMode, now = Date.now()): void {
     const targetMap = mode === "social" ? this.lastAiSocialReviewByUser : this.lastAiModerationReviewByUser;
     targetMap.set(userId, now);
+    this.pruneIfDue(now);
   }
 
   public canSendMessage(userId?: string, now = Date.now()): { allowed: boolean; reason?: string } {
@@ -98,23 +114,40 @@ export class CooldownManager {
       if (action.targetUserId) {
         this.lastReplyByUser.set(action.targetUserId, now);
       }
-
-      return;
-    }
-
-    if (action.kind === "warn") {
+    } else if (action.kind === "warn") {
       this.lastModerationNoticeAt = now;
 
       if (action.targetUserId) {
         this.lastModerationNoticeByUser.set(action.targetUserId, now);
       }
-
-      return;
-    }
-
-    if (action.kind === "timeout" && action.targetUserId) {
+    } else if (action.kind === "timeout" && action.targetUserId) {
       this.lastModerationByUser.set(action.targetUserId, now);
       this.lastEquivalentAction.set(`${action.kind}:${action.targetUserId}`, now);
+    }
+
+    this.pruneIfDue(now);
+  }
+
+  private pruneIfDue(now: number): void {
+    // Prune at most once per 30 seconds to avoid iterating all maps on every write.
+    if (now - this.lastPrunedAt < 30_000) {
+      return;
+    }
+    this.lastPrunedAt = now;
+
+    this.pruneMap(this.lastReplyByUser, now);
+    this.pruneMap(this.lastModerationNoticeByUser, now);
+    this.pruneMap(this.lastModerationByUser, now);
+    this.pruneMap(this.lastEquivalentAction, now);
+    this.pruneMap(this.lastAiModerationReviewByUser, now);
+    this.pruneMap(this.lastAiSocialReviewByUser, now);
+  }
+
+  private pruneMap(map: Map<string, number>, now: number): void {
+    for (const [key, timestamp] of map.entries()) {
+      if (now - timestamp > this.evictionTtlMs) {
+        map.delete(key);
+      }
     }
   }
 }

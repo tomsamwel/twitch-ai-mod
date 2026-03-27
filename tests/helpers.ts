@@ -80,6 +80,11 @@ export function createTestConfig(): ConfigSnapshot {
         baseUrl: "https://api.openai.com/v1",
         model: "gpt-4o-mini",
       },
+      queue: {
+        capacity: 50,
+        concurrency: 1,
+        stalenessMs: 30_000,
+      },
     },
     actions: {
       allowLiveChatMessages: true,

@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 import { AiContextBuilder } from "../ai/context-builder.js";
 import { AiProviderRegistry } from "../ai/provider-registry.js";
 import { buildAiDecisionInput, selectAiMode } from "../ai/prompt.js";
+import type { AiModeSelection } from "../ai/prompt.js";
 import type { ActionExecutor } from "../actions/action-executor.js";
 import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import { CooldownManager } from "../moderation/cooldown-manager.js";
@@ -35,8 +36,23 @@ export interface MessageProcessingResult {
   actionResults: ActionResult[];
 }
 
+export interface AiReviewWorkItem {
+  message: NormalizedChatMessage;
+  botIdentity: TwitchIdentity;
+  processingMode: ProcessingMode;
+  runId?: string;
+  forceDryRun?: boolean;
+  nowMs: number;
+  aiMode: AiModeSelection;
+}
+
 interface OutboundMessageTrackerLike {
   consume(messageId: string, now?: number): boolean;
+}
+
+/** Minimal interface so MessageProcessor doesn't depend on the concrete queue class. */
+interface AiReviewDispatcher {
+  enqueue(data: AiReviewWorkItem): void;
 }
 
 function annotateAiActionForExecution(
@@ -103,6 +119,7 @@ export class MessageProcessor {
     private readonly aiProviders: Pick<AiProviderRegistry, "createEffectiveConfig" | "getProvider">,
     private readonly actionExecutor: Pick<ActionExecutor, "createActionRequest" | "execute">,
     private readonly outboundMessageTracker?: OutboundMessageTrackerLike,
+    private readonly aiReviewQueue?: AiReviewDispatcher,
   ) {}
 
   public async process(
@@ -261,8 +278,53 @@ export class MessageProcessor {
 
     this.cooldowns.recordAiReview(message.chatterId, aiMode.mode, nowMs);
 
-    const context = this.contextBuilder.build(message, options.botIdentity);
-    const aiInput = buildAiDecisionInput(message, context, effectiveConfig, options.botIdentity, aiMode);
+    const workItem: AiReviewWorkItem = {
+      message,
+      botIdentity: options.botIdentity,
+      processingMode,
+      ...(options.runId ? { runId: options.runId } : {}),
+      ...(options.forceDryRun ? { forceDryRun: options.forceDryRun } : {}),
+      nowMs,
+      aiMode,
+    };
+
+    if (this.aiReviewQueue && processingMode === "live") {
+      this.aiReviewQueue.enqueue(workItem);
+      return {
+        status: "processed",
+        ruleDecision,
+        aiDecision: null,
+        actionResults: [],
+      };
+    }
+
+    // Direct path: eval, replay, or live without queue.
+    const aiResult = await this.processAiReview(workItem);
+
+    return {
+      status: "processed",
+      ruleDecision,
+      aiDecision: aiResult.aiDecision,
+      actionResults: aiResult.actionResults,
+    };
+  }
+
+  /**
+   * Execute the AI review phase for a single message.
+   * Called directly in eval/replay mode, or via the queue handler in live mode.
+   */
+  public async processAiReview(
+    work: AiReviewWorkItem,
+  ): Promise<{ aiDecision: AiDecision; actionResults: ActionResult[] }> {
+    const effectiveSettings = this.runtimeSettings.getEffectiveSettings();
+    const effectiveConfig = this.aiProviders.createEffectiveConfig(effectiveSettings);
+    const persistenceContext = {
+      processingMode: work.processingMode,
+      ...(work.runId ? { runId: work.runId } : {}),
+    };
+
+    const context = this.contextBuilder.build(work.message, work.botIdentity);
+    const aiInput = buildAiDecisionInput(work.message, context, effectiveConfig, work.botIdentity, work.aiMode);
     const aiProvider = await this.aiProviders.getProvider(effectiveConfig);
     let aiDecision = await aiProvider.decide(aiInput);
 
@@ -283,8 +345,8 @@ export class MessageProcessor {
 
     this.logger.info(
       {
-        eventId: message.eventId,
-        processingMode,
+        eventId: work.message.eventId,
+        processingMode: work.processingMode,
         outcome: aiDecision.outcome,
         mode: aiDecision.mode,
         reason: aiDecision.reason,
@@ -292,36 +354,26 @@ export class MessageProcessor {
       },
       "processed AI decision",
     );
-    this.database.recordAiDecision(message, aiDecision, persistenceContext);
+    this.database.recordAiDecision(work.message, aiDecision, persistenceContext);
 
-    if (aiDecision.actions.length === 0) {
-      return {
-        status: "processed",
-        ruleDecision,
-        aiDecision,
-        actionResults,
-      };
+    const actionResults: ActionResult[] = [];
+
+    if (aiDecision.actions.length > 0) {
+      const annotatedActions = aiDecision.actions.map((action) =>
+        annotateAiActionForExecution(action, aiDecision, work.message, context, work.botIdentity),
+      );
+
+      await this.executeActions(annotatedActions, actionResults, {
+        source: "ai",
+        message: work.message,
+        processingMode: work.processingMode,
+        runId: work.runId,
+        forceDryRun: work.forceDryRun,
+        nowMs: work.nowMs,
+      });
     }
 
-    const annotatedActions = aiDecision.actions.map((action) =>
-      annotateAiActionForExecution(action, aiDecision, message, context, options.botIdentity),
-    );
-
-    await this.executeActions(annotatedActions, actionResults, {
-      source: "ai",
-      message,
-      processingMode,
-      runId: options.runId,
-      forceDryRun: options.forceDryRun,
-      nowMs,
-    });
-
-    return {
-      status: "processed",
-      ruleDecision,
-      aiDecision,
-      actionResults,
-    };
+    return { aiDecision, actionResults };
   }
 
   private async executeActions(

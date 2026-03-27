@@ -268,6 +268,11 @@ export interface ConfigSnapshot {
       model: string;
       managed?: boolean | undefined;
     } | undefined;
+    queue: {
+      capacity: number;
+      concurrency: number;
+      stalenessMs: number;
+    };
   };
   admin?: {
     enabled: boolean;

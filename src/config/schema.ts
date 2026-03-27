@@ -64,6 +64,11 @@ export const appConfigSchema = z.object({
       model: z.string().min(1),
       managed: z.boolean().optional(),
     }).optional(),
+    queue: z.object({
+      capacity: z.number().int().positive(),
+      concurrency: z.number().int().positive(),
+      stalenessMs: z.number().int().positive(),
+    }).default({ capacity: 50, concurrency: 1, stalenessMs: 30_000 }),
   }),
   admin: z.object({
     enabled: z.boolean(),

@@ -49,6 +49,12 @@ ai:
     baseUrl: http://localhost:8081
     model: qwen3:4b-instruct
     managed: true
+  # Bounded queue for AI review requests in live mode.
+  # Prevents unbounded concurrent AI calls during high-volume chat.
+  queue:
+    capacity: 50          # max pending AI reviews before dropping oldest
+    concurrency: 1        # parallel AI calls (1 for local llama-server/ollama, 3-5 for openai)
+    stalenessMs: 30000    # drop items waiting longer than 30s before processing
 
 admin:
   enabled: true

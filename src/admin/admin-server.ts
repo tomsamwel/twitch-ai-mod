@@ -7,6 +7,7 @@ import type { Logger } from "pino";
 import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import type { BotDatabase } from "../storage/database.js";
 import type { LlamaServerManager } from "./llama-server-manager.js";
+import type { AiReviewQueueStats } from "../runtime/ai-review-queue.js";
 import type { RuntimeOverrideKey } from "../types.js";
 
 const VALID_OVERRIDE_KEYS: readonly RuntimeOverrideKey[] = [
@@ -21,12 +22,17 @@ const VALID_OVERRIDE_KEYS: readonly RuntimeOverrideKey[] = [
 
 const ADMIN_ACTOR = { userId: "admin", login: "local-admin" };
 
+interface AiReviewQueueLike {
+  getStats(): AiReviewQueueStats;
+}
+
 interface AdminServerOptions {
   runtimeSettings: RuntimeSettingsStore;
   database: BotDatabase;
   logger: Logger;
   port: number;
   llamaServerManager?: LlamaServerManager | undefined;
+  aiReviewQueue?: AiReviewQueueLike | undefined;
 }
 
 export class AdminServer {
@@ -115,9 +121,10 @@ export class AdminServer {
     const availablePacks = this.options.runtimeSettings.listAvailablePromptPacks();
     const availableModels = this.options.runtimeSettings.listAvailableModelPresets();
     const llamaServer = this.options.llamaServerManager?.getStatus() ?? null;
+    const aiQueue = this.options.aiReviewQueue?.getStats() ?? null;
     const recentActivity = this.getRecentActivity();
 
-    const body = { settings, overrides, availablePacks, availableModels, llamaServer, recentActivity };
+    const body = { settings, overrides, availablePacks, availableModels, llamaServer, aiQueue, recentActivity };
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
   }

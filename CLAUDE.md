@@ -4,7 +4,7 @@
 
 ```bash
 npm run check            # TypeScript type check
-npm test                 # 85 unit tests (~1.5s), node:test framework
+npm test                 # 94 unit tests (~1.5s), node:test framework
 npm run build            # Compile to dist/
 npm run eval:scenarios   # 55 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
 npm run eval:compare -- --baseline safer-control --candidate witty-mod
@@ -30,6 +30,8 @@ Build before running evals — they execute compiled JS from `dist/`.
 Supporting: `control/` (whisper commands), `runtime/` (message processor), `storage/` (SQLite), `config/` (YAML+env loading), `eval/` (scenario testing), `review/` (replay inbox), `admin/` (HTTP panel + llama-server management)
 
 Deterministic rules always run before AI. Bot-authored messages are snapshotted then skipped.
+
+In live mode, AI reviews go through a bounded queue (`AiReviewQueue` in `src/runtime/ai-review-queue.ts`) with configurable capacity, concurrency, and staleness eviction (`ai.queue` in app.yaml). Eval/replay scripts bypass the queue — `MessageProcessor.processAiReview()` is called directly.
 
 ## Config System — Key Gotchas
 
