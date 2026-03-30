@@ -40,7 +40,7 @@ ai:
   ollama:
     baseUrl: http://localhost:11434
     model: qwen3:4b-instruct
-    numCtx: 2048
+    numCtx: 4096
     keepAlive: -1
   openai:
     baseUrl: https://api.openai.com/v1

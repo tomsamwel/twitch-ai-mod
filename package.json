@@ -13,6 +13,7 @@
     "chat:send": "tsx src/scripts/send-chat-message.ts",
     "replay": "tsx src/scripts/replay.ts",
     "eval:scenarios": "tsx src/scripts/eval-scenarios.ts",
+    "eval:candidates": "tsx src/scripts/eval-candidates.ts",
     "eval:compare": "tsx src/scripts/eval-compare.ts",
     "approve:pilot": "tsx src/scripts/approve-pilot.ts",
     "review:inbox": "tsx src/scripts/review-inbox.ts",

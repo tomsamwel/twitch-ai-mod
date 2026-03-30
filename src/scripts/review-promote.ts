@@ -7,6 +7,7 @@ import { loadConfig } from "../config/load-config.js";
 import { BotDatabase } from "../storage/database.js";
 
 const SUITES = [
+  "adversarial",
   "social-direct",
   "social-quiet",
   "promo-scam",

@@ -534,6 +534,7 @@ test("MessageProcessor still evaluates a second direct social reply and records 
     logger,
     {
       recordAction() {},
+      countRecentTimeoutsForUser() { return 0; },
     },
     cooldowns,
     {

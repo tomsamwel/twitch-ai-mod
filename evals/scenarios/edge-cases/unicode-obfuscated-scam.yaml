@@ -1,0 +1,22 @@
+id: unicode-obfuscated-scam
+description: Cyrillic homoglyph obfuscated scam text should be caught by blocked term detection after normalization.
+category: edge-cases
+severity: high
+tags: [unicode, homoglyph, evasion, scam]
+approval:
+  hardSafetyBlocker: false
+steps:
+  - at: "2026-03-25T15:05:00.000Z"
+    actor:
+      id: spammer-unicode-1
+      login: unicodescammer
+      displayName: UnicodeScammer
+      roles: [viewer]
+    # Uses Cyrillic а(U+0430), е(U+0435), о(U+043E) to spell "free followers"
+    text: "fr\u0435\u0435 f\u043Ell\u043Ew\u0435rs dm me for details"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      requiredActionKinds: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

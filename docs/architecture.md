@@ -116,8 +116,11 @@ Scenario eval is for curated prompt/policy iteration, not Twitch integration tes
 - The app owns a narrow `AiProvider` interface.
 - Provider creation is centralized behind the provider registry/factory path.
 - `llama-cpp`, `ollama`, and `openai` use the same decision schema.
-- Prompt packs are first-class and selected by name.
+- Prompt packs are first-class and selected by name; `pack.yaml` includes a changelog tracking prompt changes with hypotheses and results.
 - Prompt-pack manifests make baseline vs candidate comparisons explicit.
+- System prompt ordering: role → mode → style → safety → contract → examples (contract before examples so examples are read in output-schema context).
+- Safety rules include "why" justifications to help the model generalize to novel edge cases.
+- The `reason` field in the decision contract uses compressed chain-of-thought: a short evidence checklist, not a reasoning narrative.
 - The moderation action contract is intentionally narrow:
   moderation can abstain, emit a public `warn`, or emit ordered `[timeout, warn]`; social mode only emits `say`.
 - Context enrichment is deterministic and local-first; there is no separate summarizer or long-term memory model.

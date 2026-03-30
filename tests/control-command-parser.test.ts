@@ -25,6 +25,18 @@ test("parseControlCommand parses strict toggle and value commands", () => {
   });
 });
 
+test("parseControlCommand parses compound commands (panic, chill, off)", () => {
+  assert.deepEqual(parseControlCommand("aimod panic", "aimod"), { kind: "panic" });
+  assert.deepEqual(parseControlCommand("aimod chill", "aimod"), { kind: "chill" });
+  assert.deepEqual(parseControlCommand("aimod off", "aimod"), { kind: "off" });
+});
+
+test("parseControlCommand rejects compound commands with extra tokens", () => {
+  assert.throws(() => parseControlCommand("aimod panic now", "aimod"), /Usage: aimod panic/u);
+  assert.throws(() => parseControlCommand("aimod chill please", "aimod"), /Usage: aimod chill/u);
+  assert.throws(() => parseControlCommand("aimod off now", "aimod"), /Usage: aimod off/u);
+});
+
 test("parseControlCommand rejects malformed commands with helpful usage", () => {
   assert.throws(() => parseControlCommand("aimod dry-run maybe", "aimod"), /Usage: aimod dry-run on\|off/u);
   assert.throws(

@@ -1,4 +1,5 @@
 import type { ChatMessageEventLike, NormalizedChatMessage, NormalizedMessagePart } from "../types.js";
+import { normalizeUnicode } from "../moderation/unicode-normalize.js";
 
 function deriveRoles(badges: Record<string, string>): string[] {
   const roles: string[] = [];
@@ -81,6 +82,7 @@ export function normalizeChatMessage(
     chatterLogin: message.chatterName,
     chatterDisplayName: message.chatterDisplayName,
     text: message.messageText,
+    normalizedText: normalizeUnicode(message.messageText),
     color: message.color,
     messageType: message.messageType,
     badges: message.badges,

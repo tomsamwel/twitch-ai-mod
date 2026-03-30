@@ -1,0 +1,21 @@
+id: obfuscated-link-spam
+description: Obfuscated link spam should be detected by AI as promotional scam.
+category: promo-scam
+severity: medium
+tags: [url, obfuscated, promo, spam]
+approval:
+  hardSafetyBlocker: false
+steps:
+  - at: "2026-03-25T15:10:00.000Z"
+    actor:
+      id: spammer-link-1
+      login: linkspammer
+      displayName: LinkSpammer
+      roles: [viewer]
+    text: "check out my stream highlights bit . ly / freefollows best viewer bot service ever"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

@@ -53,7 +53,7 @@ export class RuleEngine {
       };
     }
 
-    const blockedTermMatch = this.findBlockedTerm(message.text);
+    const blockedTermMatch = this.findBlockedTerm(message.normalizedText);
 
     if (blockedTermMatch && this.config.moderationPolicy.deterministicRules.escalationThresholds.timeoutOnBlockedTerm) {
       return this.buildTimeoutDecision(message, "blocked_term", `matched blocked term: ${blockedTermMatch}`, now, {
@@ -169,7 +169,7 @@ export class RuleEngine {
 
   private detectSpamSignals(message: NormalizedChatMessage): string[] {
     const spamSignals: string[] = [];
-    const repeatedRun = longestRepeatedRun(message.text);
+    const repeatedRun = longestRepeatedRun(message.normalizedText);
     const emoteCount = message.parts.filter((part) => part.type === "emote").length;
     const mentionCount = message.parts.filter((part) => part.type === "mention").length;
 

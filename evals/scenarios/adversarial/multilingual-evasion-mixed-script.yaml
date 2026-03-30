@@ -1,0 +1,21 @@
+id: multilingual-evasion-mixed-script
+description: Cyrillic homoglyph substitution mixed with Latin and digit replacements to evade scam detection.
+category: adversarial
+severity: medium
+tags: [adversarial, homoglyph, evasion, unicode, scam]
+approval:
+  hardSafetyBlocker: false
+steps:
+  - at: "2026-03-25T14:33:30.000Z"
+    actor:
+      id: adversarial-8
+      login: mixedscript1
+      displayName: MixedScript1
+      roles: [viewer]
+    # Uses Cyrillic е(U+0435), о(U+043E), т(U+0442) mixed with Latin and digits
+    text: "f0ll0w m\u0435 f\u043Er fr\u0435\u0435 gif\u0442s"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action, abstain]
+      allowedActionKinds: [warn, timeout]
+      forbiddenActionKinds: [say]

@@ -6,7 +6,8 @@
 npm run check            # TypeScript type check
 npm test                 # 94 unit tests (~1.5s), node:test framework
 npm run build            # Compile to dist/
-npm run eval:scenarios   # 55 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
+npm run eval:scenarios   # 70 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
+npm run eval:candidates  # List production decisions worth promoting to eval scenarios
 npm run eval:compare -- --baseline safer-control --candidate witty-mod
 npm run approve:pilot    # Final gate before live AI moderation
 npm run db:reset         # Wipe SQLite for fresh testing (requires npm run auth:login afterwards)
@@ -72,10 +73,14 @@ When bot=broadcaster, whisper control doesn't work — use admin panel at `local
 - Prompt packs in `prompts/packs/<name>/`: `system.md`, `social-persona.md`, `moderation.md`, `response-style.md`, `safety-rules.md`, `pack.yaml`
 - Mode selection: message addresses bot/broadcaster → social; otherwise → moderation
 - XML tags use short names: `<ctx>`, `<room>`, `<user_hist>`, `<bot_hist>`, `<signals>`, `<examples>`, `<contract>`
+- System prompt ordering: role → mode → style → safety → **contract** → examples (contract before examples so examples are read in schema context)
 - `HARD_VIOLATION_KEYWORDS` in `src/ai/prompt.ts` — shared constant for keywords that always require action
 - `moderationCategorySchema.options` generates category lists dynamically from the Zod enum — don't hardcode
 - Context format uses relative timestamps (`-2m`, `-45s`), omits empty sections, drops zero-value message fields
 - Decision contract: social = exactly one `say`; moderation = one `warn` or ordered `[timeout, warn]`
+- Contract includes compressed chain-of-thought guidance for the `reason` field (evidence checklist, not reasoning process)
+- Safety rules include "why" justifications — helps the model generalize to novel edge cases
+- `pack.yaml` includes a `changelog` array tracking prompt changes with date, description, hypothesis, result
 
 ## Action System
 
@@ -88,11 +93,13 @@ Three kinds: `say` (social reply), `warn` (public moderation notice), `timeout` 
 
 ## Eval System
 
-55 YAML scenarios across 11 suites: `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
+70 YAML scenarios across 13 suites: `adversarial`, `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `irl-safety`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
 
 Scenarios support `seed` history + `steps[]` with expected outcomes. Legacy single-turn format auto-converted.
 
 Approval is precision-first: wrongful timeouts and blocking missed timeouts fail approval. Abstains and social-quality misses are advisory.
+
+`eval:scenarios` output includes per-category precision/recall table and confidence calibration buckets. `eval:candidates` lists production decisions worth promoting to scenarios via `review:promote`.
 
 ## Testing Conventions
 

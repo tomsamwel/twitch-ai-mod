@@ -37,7 +37,7 @@ export class ActionExecutor {
   public constructor(
     private readonly config: ConfigSnapshot,
     private readonly logger: Logger,
-    private readonly database: Pick<BotDatabase, "recordAction">,
+    private readonly database: Pick<BotDatabase, "recordAction" | "countRecentTimeoutsForUser">,
     private readonly cooldowns: CooldownManager,
     private readonly twitchGateway: Pick<TwurpleTwitchGateway, "sendChatMessage" | "timeoutUser">,
     private readonly runtimeSettings: Pick<RuntimeSettingsStore, "getEffectiveSettings">,
@@ -229,9 +229,34 @@ export class ActionExecutor {
       }
     }
 
-    await this.twitchGateway.timeoutUser(action.targetUserId, action.durationSeconds, action.reason);
+    const effectiveDuration = this.resolveProgressiveDuration(action);
+    await this.twitchGateway.timeoutUser(action.targetUserId, effectiveDuration, action.reason);
 
     return buildResult(action, "executed");
+  }
+
+  private resolveProgressiveDuration(action: ActionRequest): number {
+    const progressive = this.config.moderationPolicy.deterministicRules.progressiveTimeouts;
+    if (!progressive?.enabled || !action.targetUserId) {
+      return action.durationSeconds!;
+    }
+
+    const windowStart = new Date(Date.now() - progressive.windowSeconds * 1000).toISOString();
+    const priorCount = this.database.countRecentTimeoutsForUser(action.targetUserId, windowStart);
+
+    // Find the highest tier where maxPriorTimeouts <= priorCount.
+    const sorted = [...progressive.tiers].sort((a, b) => b.maxPriorTimeouts - a.maxPriorTimeouts);
+    const tier = sorted.find((t) => priorCount >= t.maxPriorTimeouts);
+    const resolvedDuration = tier?.durationSeconds ?? action.durationSeconds!;
+
+    if (resolvedDuration !== action.durationSeconds) {
+      this.logger.info(
+        { targetUserId: action.targetUserId, priorCount, resolvedDuration, originalDuration: action.durationSeconds },
+        "progressive timeout duration resolved",
+      );
+    }
+
+    return resolvedDuration;
   }
 
   private getAiTimeoutPrecisionGateFailure(action: ActionRequest): string | null {

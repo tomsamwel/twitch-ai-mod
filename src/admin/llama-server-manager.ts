@@ -68,7 +68,7 @@ export class LlamaServerManager {
     this.logger = options.logger;
     this.modelTag = options.modelTag;
     this.port = options.port;
-    this.ctxSize = options.ctxSize ?? 2048;
+    this.ctxSize = options.ctxSize ?? 4096;
     this.checkpointEvery = options.checkpointEvery ?? 256;
     this.pidFilePath = path.join(options.dataDir, ".llama-server.pid");
   }

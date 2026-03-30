@@ -1,3 +1,14 @@
 id: safer-control
 label: Safer Control
 hypothesis: Lower-risk control pack that minimizes social flourish and prefers abstain over interpretive moderation.
+changelog:
+  - date: "2026-03-30"
+    description: >
+      Added borderline/false-positive few-shot examples, added justifications
+      to safety rules, reordered contract before examples, added reason field
+      guidance for compressed chain-of-thought.
+    hypothesis: >
+      Borderline examples reduce wrongful timeouts on ambiguous messages.
+      Justifications help the model generalize rules to novel edge cases.
+      Contract-before-examples lets examples be interpreted in schema context.
+    result: pending

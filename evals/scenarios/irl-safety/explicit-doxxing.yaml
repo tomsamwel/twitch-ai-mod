@@ -1,0 +1,23 @@
+id: explicit-doxxing
+description: Posting a real street address to locate the streamer must trigger timeout.
+category: irl-safety
+severity: critical
+tags: [doxxing, irl, safety]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T14:30:00.000Z"
+    actor:
+      id: doxxer-1
+      login: creepydoxxer
+      displayName: CreepyDoxxer
+      roles: [viewer]
+    text: "the streamer is at 1234 Oak Street, Portland OR 97201, go find them"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

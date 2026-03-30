@@ -26,6 +26,9 @@ test("ActionExecutor respects dry-run mode and does not call Twitch", async () =
       recordAction(): void {
         recordedActions += 1;
       },
+      countRecentTimeoutsForUser(): number {
+        return 0;
+      },
     },
     cooldowns,
     {
@@ -82,6 +85,9 @@ test("ActionExecutor enforces chat cooldowns for repeated live say actions", asy
     {
       recordAction(): void {
         recordedActions += 1;
+      },
+      countRecentTimeoutsForUser(): number {
+        return 0;
       },
     },
     cooldowns,
@@ -158,6 +164,7 @@ test("ActionExecutor blocks live AI timeout actions unless AI moderation is enab
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {
@@ -233,6 +240,7 @@ test("ActionExecutor blocks live AI timeout actions when the moderation category
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {
@@ -297,6 +305,7 @@ test("ActionExecutor blocks live AI timeout actions when confidence is below the
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {
@@ -361,6 +370,7 @@ test("ActionExecutor blocks live AI timeout actions for privileged or self-autho
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {
@@ -452,6 +462,7 @@ test("ActionExecutor requires repeat evidence before allowing spam-escalation ti
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {
@@ -540,6 +551,7 @@ test("ActionExecutor treats warn actions as moderation notices with reply-parent
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {
@@ -620,6 +632,7 @@ test("ActionExecutor skips timeout companion warns when the preceding timeout di
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {
@@ -678,6 +691,7 @@ test("ActionExecutor allows timeout companion warns in dry-run flows when the ti
     logger,
     {
       recordAction(): void {},
+      countRecentTimeoutsForUser(): number { return 0; },
     },
     cooldowns,
     {

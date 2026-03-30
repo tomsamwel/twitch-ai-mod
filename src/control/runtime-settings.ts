@@ -221,6 +221,9 @@ export class RuntimeSettingsStore {
         }
         break;
       default:
+        if (typeof value !== "boolean") {
+          throw new Error(`Override "${key}" expects a boolean value.`);
+        }
         break;
     }
   }

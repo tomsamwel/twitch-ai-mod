@@ -5,6 +5,14 @@ deterministicRules:
     - cheap viewers
     - viewer bot
     - follow for follow
+    - sell followers
+    - selling followers
+    - free followers
+    - dm me for promotion
+    - dm for promo
+    - guaranteed followers
+    - guaranteed viewers
+    - viewer bot service
   timeoutSeconds: 300
   spam:
     maxRepeatedCharacters: 10
@@ -24,6 +32,16 @@ deterministicRules:
   escalationThresholds:
     timeoutOnBlockedTerm: true
     timeoutOnSpam: true
+  progressiveTimeouts:
+    enabled: true
+    windowSeconds: 3600
+    tiers:
+      - maxPriorTimeouts: 0
+        durationSeconds: 60
+      - maxPriorTimeouts: 1
+        durationSeconds: 300
+      - maxPriorTimeouts: 2
+        durationSeconds: 600
 
 publicNotices:
   blockedTerm: "Scam pitches get timed out. Try a better hobby."
@@ -45,3 +63,4 @@ aiPolicy:
       - targeted-harassment
       - sexual-harassment
       - spam-escalation
+      - irl-safety

@@ -88,6 +88,8 @@ export interface ScenarioEvaluationStepResult {
   actualOutcome: "no_action" | "suppressed" | "abstain" | "action" | "ignored";
   actualActionKinds: ActionKind[];
   actualActionStatuses: Array<"executed" | "dry-run" | "skipped" | "failed">;
+  moderationCategory: string | null;
+  confidence: number | null;
   replyExcerpt: string | null;
   providerFailureKind: string | null;
   providerErrorType: string | null;
@@ -639,6 +641,8 @@ export async function runScenarioEvaluation(
           ...(result.aiDecision?.actions ?? []),
         ].map((action) => action.kind),
         actualActionStatuses: result.actionResults.map((action) => action.status),
+        moderationCategory: result.aiDecision?.moderationCategory ?? null,
+        confidence: result.aiDecision?.confidence ?? null,
         replyExcerpt,
         providerFailureKind: aiFailure.failureKind,
         providerErrorType: aiFailure.errorType,

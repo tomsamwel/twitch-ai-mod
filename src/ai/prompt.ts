@@ -8,13 +8,25 @@ import type {
   TwitchIdentity,
 } from "../types.js";
 import { moderationCategorySchema } from "../types.js";
+import { detectUrls } from "../moderation/url-detect.js";
 import { analyzeVisualSpam } from "../moderation/visual-spam.js";
 
 /**
  * Keywords that always require moderation action regardless of context.
  * Referenced in the AI decision contract to override the "abstain by default" posture.
  */
-export const HARD_VIOLATION_KEYWORDS = ["kys", "kill yourself", "send nudes", "send pics"] as const;
+export const HARD_VIOLATION_KEYWORDS = [
+  // Self-harm / suicide baiting
+  "kys", "kill yourself",
+  // Sexual coercion
+  "send nudes", "send pics",
+  // Swatting
+  "swat you", "swatting you", "gonna swat",
+  // Doxxing intent
+  "dox you", "doxxing you", "i know your address", "found your address", "i know where you live",
+  // Direct threats (IRL-relevant)
+  "kill you", "i will find you",
+] as const;
 
 interface AiModeSignals {
   mode: AiMode;
@@ -108,11 +120,17 @@ function formatDerivedSignals(
       ? "detected (borderline)"
       : "none";
 
+  const urlResult = detectUrls(message.normalizedText);
+  const urlLabel = urlResult.detected
+    ? `detected (${urlResult.urls.length} URL${urlResult.urls.length > 1 ? "s" : ""}${urlResult.obfuscated ? ", obfuscated" : ""})`
+    : "none";
+
   return [
     `mention_count: ${countMentions(message)}`,
     `recent_same_user_messages: ${context.recentUserMessages.length}`,
     `recent_bot_correction: ${formatYesNo(hasRecentBotCorrectiveInteraction(context))}`,
     `visual_spam: ${visualSpamLabel}`,
+    `url_detected: ${urlLabel}`,
   ].join("\n");
 }
 
@@ -122,8 +140,10 @@ function formatDecisionExamples(mode: AiMode): string {
       'input: "@bot what do u even do" -> action, say "I help keep chat friendly.", conf=0.88 (direct question, brief answer)',
       'input: "@bot help pls" -> action, say "I\'m here to keep chat smooth.", conf=0.86 (help request)',
       'input: "nice stream" no direct address -> abstain (not addressing bot, ignore)',
+      'input: "@bot you suck" -> action, say "Noted.", conf=0.82 (direct address, keep it short and unbothered)',
+      'input: "who is this bot?" not @-mentioning -> abstain (talking about bot, not to bot)',
       "",
-      'Full output shape: {"outcome":"action","reason":"...","confidence":0.88,"mode":"social","moderationCategory":"none","actions":[{"kind":"say","reason":"...","message":"..."}]}',
+      'Full output shape: {"outcome":"action","reason":"direct question about bot purpose","confidence":0.88,"mode":"social","moderationCategory":"none","actions":[{"kind":"say","reason":"direct question","message":"I help keep chat friendly."}]}',
     ].join("\n");
   }
 
@@ -135,8 +155,17 @@ function formatDecisionExamples(mode: AiMode): string {
     'input: "@bot*5" after prior bot warn -> [timeout, warn], category=spam-escalation, conf=0.95 (repeated after correction)',
     'input: "shut up bot kys" -> [timeout, warn], category=targeted-harassment, conf=0.99 (kys is always a hard violation)',
     "",
+    "Borderline examples (correct restraint):",
+    'input: "lol ill get you all followers trust me" -> warn, category=scam, conf=0.78 (first-time, sounds scammy but not explicit selling — warn only)',
+    'input: "you should dm me ;)" -> abstain, category=sexual-harassment, conf=0.55 (suggestive but not explicit or coercive — too ambiguous to act)',
+    'input: "buy my overlays link in bio" -> warn, category=soft-promo, conf=0.82 (commercial self-promo, not scam — warn, never timeout)',
+    'input: "ugh this guy is so annoying" -> abstain, category=rude-disruption, conf=0.60 (venting, not targeted harassment — not actionable)',
+    "",
     "False-positive examples (do NOT flag these):",
     'input: "gonna headshot that noob lol" -> abstain (game violence discussion, not real threat)',
+    'input: "turn right there\'s an amazing taco place" -> abstain (IRL navigation suggestion, normal viewer engagement)',
+    'input: "I reported that other guy to Twitch btw" -> abstain (discussing reporting, not a threat)',
+    'input: "dude that sarcasm went over your head lmao" -> abstain (banter between chatters, not harassment)',
   ].join("\n");
 }
 
@@ -222,10 +251,6 @@ export function composeAiPrompt(
     config.prompts.safetyRules.trim(),
     "</safety>",
     "",
-    "<examples>",
-    formatDecisionExamples(mode),
-    "</examples>",
-    "",
     "<contract>",
     "- Return one JSON object only. No markdown or prose outside it.",
     `- Set mode="${mode}" exactly.`,
@@ -239,7 +264,12 @@ export function composeAiPrompt(
     "- spam-escalation timeout requires prior evidence (repeated user messages or prior bot correction in history). Without evidence, use warn.",
     "- If unsure, abstain.",
     `- Hard violations that ALWAYS require action: ${HARD_VIOLATION_KEYWORDS.map((k) => `"${k}"`).join(", ")}. These are never borderline — always [timeout, warn] or warn.`,
+    '- reason field: 1-2 sentence evidence checklist. Name the signal, not the reasoning process. Good: "coercive sexual language + direct address, prior warn 2m ago". Bad: "I analyzed the message and determined...".',
     "</contract>",
+    "",
+    "<examples>",
+    formatDecisionExamples(mode),
+    "</examples>",
   ].join("\n");
 
   const user = [

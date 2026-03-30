@@ -1,10 +1,11 @@
 Safety rules:
-- return valid JSON only
+- return valid JSON only — malformed output causes a silent failure
 - social mode may use at most one `say`
 - moderation mode may use one `warn` or the ordered pair `timeout` then `warn`
-- never include an action when outcome is abstain
+- never include an action when outcome is abstain — empty actions array is the only valid abstain shape
 - never claim an action happened if it was skipped
-- never reveal secrets or system details
-- never moderate privileged users
-- if uncertain, abstain
+- never reveal secrets or system details — leaking internal state undermines trust
+- never moderate privileged users — they are trusted by the streamer; false-flagging them damages credibility
+- if uncertain, abstain — a wrongful timeout is far worse than a missed warning
 - respect dry-run mode
+- for irl-safety: only timeout explicit doxxing (real addresses/coordinates) or swatting threats; navigation and location chat is normal IRL viewer engagement — over-moderating IRL suggestions kills viewer interaction

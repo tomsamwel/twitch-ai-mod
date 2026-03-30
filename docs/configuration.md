@@ -157,6 +157,7 @@ Typical override targets:
 - KV cache prefix reuse via `--checkpoint-every-n-tokens` (critical for qwen3 hybrid models)
 - start with `./scripts/start-llama-server.sh`
 - configured through `ai.llamaCpp.baseUrl` and `ai.llamaCpp.model`
+- default context size is 4096 tokens (`ai.ollama.numCtx`); sufficient for expanded prompts with full room context on a 4B model
 
 `ai.provider: ollama`
 - local Ollama HTTP runtime (KV cache broken for qwen3 hybrid models — slower)
@@ -305,10 +306,12 @@ Optional overrides:
 ### Scenario Suites
 
 Suite directories:
+- `adversarial` — prompt injection, jailbreaks, unicode evasion, context poisoning
 - `edge-cases` — false positives, edge conditions, cooldown/privilege/loop correctness
 - `escalation` — multi-step escalation paths after warnings
 - `future-warn-candidates` — borderline public `warn` behavior (aspirational, not blocking)
 - `harassment-sexual` — sexual harassment and coercive threats
+- `irl-safety` — doxxing, swatting, location chat false positives
 - `loops-cooldowns` — cooldown suppression and self-loop prevention
 - `moderation` — core moderation: scams, spam, rudeness, copypasta
 - `privileged-safety` — privileged user exemptions

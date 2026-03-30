@@ -9,6 +9,7 @@ import type {
   ActionResult,
   AiDecision,
   ControlAuditRecord,
+  ModerationCategory,
   NormalizedChatMessage,
   OAuthTokenRecord,
   PersistedActionRecord,
@@ -873,6 +874,23 @@ export class BotDatabase {
     this.recordDecision("ai", message, decision.outcome, decision.reason, undefined, decision, context);
   }
 
+  public countRecentTimeoutsForUser(targetUserId: string, afterTimestamp: string): number {
+    const row = this.database
+      .prepare(
+        `
+          SELECT COUNT(*) AS count
+          FROM actions
+          WHERE target_user_id = ?
+            AND action_kind = 'timeout'
+            AND status IN ('executed', 'dry-run')
+            AND created_at > ?
+        `,
+      )
+      .get(targetUserId, afterTimestamp) as { count: number };
+
+    return row.count;
+  }
+
   public recordAction(action: ActionRequest, result: ActionResult): void {
     this.database
       .prepare(
@@ -1011,6 +1029,80 @@ export class BotDatabase {
       confidence: row.confidence ?? null,
       category: row.category ?? null,
       stage: row.stage,
+      createdAt: row.created_at,
+    }));
+  }
+
+  /**
+   * Lists AI decisions that are good candidates for promotion to eval scenarios.
+   * Interesting = actions taken (timeout/warn), low-confidence decisions, or provider failures.
+   * Excludes events already reviewed.
+   */
+  public listEvalCandidates(limit: number): Array<{
+    eventId: string;
+    chatterLogin: string;
+    text: string | null;
+    outcome: string;
+    mode: string | null;
+    reason: string;
+    confidence: number | null;
+    category: ModerationCategory | null;
+    hasTimeout: boolean;
+    hasWarn: boolean;
+    createdAt: string;
+  }> {
+    const rows = this.database
+      .prepare(
+        `SELECT
+           d.event_id,
+           d.chatter_login,
+           d.outcome,
+           d.reason,
+           d.created_at,
+           json_extract(d.payload_json, '$.mode') as mode,
+           json_extract(d.payload_json, '$.confidence') as confidence,
+           json_extract(d.payload_json, '$.moderationCategory') as category,
+           substr(json_extract(m.message_json, '$.text'), 1, 120) as text_snippet,
+           EXISTS(SELECT 1 FROM actions a WHERE a.source_event_id = d.event_id AND a.action_kind = 'timeout' AND a.status IN ('executed', 'dry-run')) as has_timeout,
+           EXISTS(SELECT 1 FROM actions a WHERE a.source_event_id = d.event_id AND a.action_kind = 'warn' AND a.status IN ('executed', 'dry-run')) as has_warn
+         FROM decisions d
+         LEFT JOIN message_snapshots m ON m.event_id = d.event_id
+         LEFT JOIN review_decisions r ON r.event_id = d.event_id
+         WHERE d.stage = 'ai'
+           AND d.processing_mode = 'live'
+           AND r.event_id IS NULL
+           AND (
+             d.outcome = 'action'
+             OR (json_extract(d.payload_json, '$.confidence') IS NOT NULL AND json_extract(d.payload_json, '$.confidence') < 0.80)
+           )
+         ORDER BY d.created_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Array<{
+      event_id: string;
+      chatter_login: string;
+      text_snippet: string | null;
+      outcome: string;
+      mode: string | null;
+      reason: string;
+      confidence: number | null;
+      category: string | null;
+      has_timeout: 0 | 1;
+      has_warn: 0 | 1;
+      created_at: string;
+    }>;
+
+    return rows.map((row) => ({
+      eventId: row.event_id,
+      chatterLogin: row.chatter_login,
+      text: row.text_snippet,
+      outcome: row.outcome,
+      mode: row.mode,
+      reason: row.reason,
+      confidence: row.confidence,
+      category: row.category as ModerationCategory | null,
+      hasTimeout: row.has_timeout === 1,
+      hasWarn: row.has_warn === 1,
       createdAt: row.created_at,
     }));
   }

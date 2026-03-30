@@ -1,0 +1,31 @@
+id: ascii-art-penis
+description: Large ASCII art penis spam should be caught by visual spam detection and timed out.
+category: edge-cases
+severity: high
+tags: [ascii-art, visual-spam, moderation]
+approval:
+  hardSafetyBlocker: false
+steps:
+  - at: "2026-03-25T15:00:00.000Z"
+    actor:
+      id: spammer-art-1
+      login: asciiartspammer
+      displayName: AsciiArtSpammer
+      roles: [viewer]
+    text: |
+      8====D
+      8=====D
+      8======D
+      8=======D
+      8========D
+      8=========D
+      8==========D
+      8===========D
+      8============D
+      8=============D
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      requiredActionKinds: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

@@ -9,6 +9,7 @@ import type {
   ControlAuditRecord,
   ControlCommand,
   ControlCommandResult,
+  RuntimeOverrideKey,
   TrustedController,
   WhisperMessage,
 } from "../types.js";
@@ -97,6 +98,9 @@ export class WhisperControlPlane {
             `${this.commandPrefix} pack <pack-name>`,
             `${this.commandPrefix} model <preset-name>`,
             `${this.commandPrefix} reset`,
+            `${this.commandPrefix} panic`,
+            `${this.commandPrefix} chill`,
+            `${this.commandPrefix} off`,
           ].join(" | "),
           highRisk: false,
           changes: [],
@@ -226,22 +230,89 @@ export class WhisperControlPlane {
           changes: Object.entries(previous)
             .filter(([key, value]) => !["updatedAt", "updatedByUserId", "updatedByLogin"].includes(key) && value !== undefined)
             .map(([key, value]) => ({
-              key: this.toOverrideKey(key),
+              key: key as RuntimeOverrideKey,
               previousValue: value,
               nextValue: null,
             })),
         };
       }
+      case "panic": {
+        const changes = this.applyBatch(
+          [
+            ["aiEnabled", true],
+            ["aiModerationEnabled", true],
+            ["liveModerationEnabled", true],
+            ["dryRun", false],
+          ],
+          settings,
+          actor,
+        );
+        return {
+          accepted: true,
+          success: true,
+          commandSummary: "panic",
+          replyMessage: "PANIC MODE: AI + moderation + live-mod ON, dry-run OFF.",
+          highRisk: true,
+          changes,
+        };
+      }
+      case "chill": {
+        const changes = this.applyBatch(
+          [
+            ["aiEnabled", true],
+            ["socialRepliesEnabled", true],
+            ["aiModerationEnabled", false],
+          ],
+          settings,
+          actor,
+        );
+        return {
+          accepted: true,
+          success: true,
+          commandSummary: "chill",
+          replyMessage: "CHILL MODE: AI + social ON, moderation OFF.",
+          highRisk: false,
+          changes,
+        };
+      }
+      case "off": {
+        const changes = this.applyBatch(
+          [["aiEnabled", false]],
+          settings,
+          actor,
+        );
+        return {
+          accepted: true,
+          success: true,
+          commandSummary: "off",
+          replyMessage: "AI disabled.",
+          highRisk: false,
+          changes,
+        };
+      }
+      default: {
+        const _exhaustive: never = command;
+        throw new Error(`Unhandled command kind: ${(command as { kind: string }).kind}`);
+      }
     }
   }
 
+  private applyBatch(
+    overrides: Array<[RuntimeOverrideKey, boolean]>,
+    settings: { [K in RuntimeOverrideKey]?: unknown },
+    actor: { userId: string; login: string },
+  ): ControlCommandResult["changes"] {
+    const changes: ControlCommandResult["changes"] = [];
+    for (const [key, value] of overrides) {
+      const previousValue = this.runtimeSettings.getOverrides()[key] ?? settings[key];
+      this.runtimeSettings.setOverride(key, value, actor);
+      changes.push({ key, previousValue, nextValue: value });
+    }
+    return changes;
+  }
+
   private applyBooleanOverride(
-    key:
-      | "aiEnabled"
-      | "aiModerationEnabled"
-      | "socialRepliesEnabled"
-      | "dryRun"
-      | "liveModerationEnabled",
+    key: RuntimeOverrideKey,
     value: boolean,
     actor: { userId: string; login: string },
     commandSummary: string,
@@ -251,14 +322,7 @@ export class WhisperControlPlane {
   }
 
   private applyOverride(
-    key:
-      | "aiEnabled"
-      | "aiModerationEnabled"
-      | "socialRepliesEnabled"
-      | "dryRun"
-      | "liveModerationEnabled"
-      | "promptPack"
-      | "modelPreset",
+    key: RuntimeOverrideKey,
     value: boolean | string,
     actor: { userId: string; login: string },
     commandSummary: string,
@@ -323,27 +387,4 @@ export class WhisperControlPlane {
     );
   }
 
-  private toOverrideKey(
-    key: string,
-  ):
-    | "aiEnabled"
-    | "aiModerationEnabled"
-    | "socialRepliesEnabled"
-    | "dryRun"
-    | "liveModerationEnabled"
-    | "promptPack"
-    | "modelPreset" {
-    switch (key) {
-      case "aiEnabled":
-      case "aiModerationEnabled":
-      case "socialRepliesEnabled":
-      case "dryRun":
-      case "liveModerationEnabled":
-      case "promptPack":
-      case "modelPreset":
-        return key;
-      default:
-        throw new Error(`Unsupported runtime override key: ${key}`);
-    }
-  }
 }

@@ -62,6 +62,21 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
         throw new Error(`Usage: ${prefix} reset`);
       }
       return { kind: "reset" };
+    case "panic":
+      if (tokens.length !== 2) {
+        throw new Error(`Usage: ${prefix} panic`);
+      }
+      return { kind: "panic" };
+    case "chill":
+      if (tokens.length !== 2) {
+        throw new Error(`Usage: ${prefix} chill`);
+      }
+      return { kind: "chill" };
+    case "off":
+      if (tokens.length !== 2) {
+        throw new Error(`Usage: ${prefix} off`);
+      }
+      return { kind: "off" };
     default:
       throw new Error(`Unknown command "${verb ?? ""}". Try "${prefix} help".`);
   }

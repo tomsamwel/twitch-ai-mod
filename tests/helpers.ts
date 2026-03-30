@@ -152,6 +152,7 @@ export function createTestConfig(): ConfigSnapshot {
             "targeted-harassment",
             "sexual-harassment",
             "spam-escalation",
+            "irl-safety",
           ],
         },
       },

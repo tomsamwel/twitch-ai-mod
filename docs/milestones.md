@@ -17,7 +17,7 @@ The repo now supports:
 - deterministic SQLite-backed AI context retrieval
 - deterministic large visual-spam / ASCII-art detection
 - replay against captured chat snapshots
-- scripted scenario-lab evaluation against curated YAML cases (55 scenarios, 11 suites)
+- scripted scenario-lab evaluation against curated YAML cases (70 scenarios, 13 suites)
 - replay inbox reports with local review verdicts
 - replay-to-scenario promotion scaffolds
 - side-by-side prompt-pack comparison reports

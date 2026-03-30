@@ -138,6 +138,14 @@ export const moderationPolicySchema = z.object({
       timeoutOnBlockedTerm: z.boolean(),
       timeoutOnSpam: z.boolean(),
     }),
+    progressiveTimeouts: z.object({
+      enabled: z.boolean(),
+      windowSeconds: z.number().int().positive(),
+      tiers: z.array(z.object({
+        maxPriorTimeouts: z.number().int().nonnegative(),
+        durationSeconds: z.number().int().positive(),
+      })).min(1),
+    }).optional(),
   }),
   publicNotices: z.object({
     blockedTerm: z.string().min(1),

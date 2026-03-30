@@ -261,3 +261,153 @@ test("WhisperControlPlane ignores duplicate whisper IDs", async () => {
   assert.equal(replyCount, 1);
   assert.equal(auditCount, 1);
 });
+
+test("WhisperControlPlane panic command enables AI + moderation + live-mod and disables dry-run", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  const appliedOverrides: Array<{ key: string; value: unknown }> = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster" }],
+    logger,
+    {
+      getEffectiveSettings() {
+        return state.effective;
+      },
+      getOverrides() {
+        return state.overrides;
+      },
+      setOverride(key, value) {
+        appliedOverrides.push({ key, value });
+      },
+      reset() {},
+      listAvailablePromptPacks() {
+        return ["witty-mod"];
+      },
+      listAvailableModelPresets() {
+        return ["local-default"];
+      },
+    },
+    {
+      registerIngestedEvent() {
+        return true;
+      },
+      recordControlAudit() {},
+    },
+    {
+      async sendWhisper(_targetUserId, message) {
+        sentReplies.push(message);
+      },
+    },
+  );
+
+  await controlPlane.processWhisper(createWhisper({ text: "aimod panic" }));
+
+  assert.match(sentReplies[0] ?? "", /PANIC MODE/u);
+  assert.deepEqual(appliedOverrides, [
+    { key: "aiEnabled", value: true },
+    { key: "aiModerationEnabled", value: true },
+    { key: "liveModerationEnabled", value: true },
+    { key: "dryRun", value: false },
+  ]);
+});
+
+test("WhisperControlPlane chill command enables AI + social, disables moderation", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  const appliedOverrides: Array<{ key: string; value: unknown }> = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster" }],
+    logger,
+    {
+      getEffectiveSettings() {
+        return state.effective;
+      },
+      getOverrides() {
+        return state.overrides;
+      },
+      setOverride(key, value) {
+        appliedOverrides.push({ key, value });
+      },
+      reset() {},
+      listAvailablePromptPacks() {
+        return ["witty-mod"];
+      },
+      listAvailableModelPresets() {
+        return ["local-default"];
+      },
+    },
+    {
+      registerIngestedEvent() {
+        return true;
+      },
+      recordControlAudit() {},
+    },
+    {
+      async sendWhisper(_targetUserId, message) {
+        sentReplies.push(message);
+      },
+    },
+  );
+
+  await controlPlane.processWhisper(createWhisper({ text: "aimod chill" }));
+
+  assert.match(sentReplies[0] ?? "", /CHILL MODE/u);
+  assert.deepEqual(appliedOverrides, [
+    { key: "aiEnabled", value: true },
+    { key: "socialRepliesEnabled", value: true },
+    { key: "aiModerationEnabled", value: false },
+  ]);
+});
+
+test("WhisperControlPlane off command disables AI", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  const appliedOverrides: Array<{ key: string; value: unknown }> = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster" }],
+    logger,
+    {
+      getEffectiveSettings() {
+        return state.effective;
+      },
+      getOverrides() {
+        return state.overrides;
+      },
+      setOverride(key, value) {
+        appliedOverrides.push({ key, value });
+      },
+      reset() {},
+      listAvailablePromptPacks() {
+        return ["witty-mod"];
+      },
+      listAvailableModelPresets() {
+        return ["local-default"];
+      },
+    },
+    {
+      registerIngestedEvent() {
+        return true;
+      },
+      recordControlAudit() {},
+    },
+    {
+      async sendWhisper(_targetUserId, message) {
+        sentReplies.push(message);
+      },
+    },
+  );
+
+  await controlPlane.processWhisper(createWhisper({ text: "aimod off" }));
+
+  assert.match(sentReplies[0] ?? "", /AI disabled/u);
+  assert.deepEqual(appliedOverrides, [{ key: "aiEnabled", value: false }]);
+});

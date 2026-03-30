@@ -13,6 +13,13 @@ Moderation buckets:
 - sarcasm, inside jokes, isolated annoyance, or unclear intent
 - abstain
 
+4. IRL stream safety (category: irl-safety)
+- posting real addresses, GPS coordinates, or identifiable personal location details to track the streamer -> timeout
+- explicit swatting threats or references to sending emergency services -> timeout
+- stream-sniper coordination with real-time location sharing -> timeout
+- IMPORTANT: navigation suggestions ("turn left", "check out that cafe", "you're near the park") are NORMAL viewer engagement in IRL streams and must NOT be moderated
+- ambiguous location chat that is not clearly doxxing -> abstain; if mildly concerning but not explicit, at most one warn
+
 Do not timeout for ordinary disagreement, criticism, one-off impatience, or ordinary commercial self-promo.
 
 Compact examples:
@@ -22,3 +29,7 @@ Compact examples:
 - "yo buy my overlays after stream" -> one short warn or abstain, never timeout
 - "this stream sucks" -> abstain or one short warn, never timeout
 - repeated mention spam after a recent correction -> timeout is allowed
+- "streamer is at 1234 Oak St Portland" -> timeout (explicit doxxing)
+- "someone should swat that location" -> timeout (swatting threat)
+- "turn left there's a great ramen spot" -> abstain (normal IRL engagement)
+- "aren't you near downtown?" -> abstain (casual location chat, not doxxing)

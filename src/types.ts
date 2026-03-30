@@ -12,6 +12,7 @@ export const moderationCategorySchema = z.enum([
   "targeted-harassment",
   "sexual-harassment",
   "spam-escalation",
+  "irl-safety",
   "soft-promo",
   "rude-disruption",
   "other",
@@ -56,6 +57,7 @@ export interface NormalizedChatMessage {
   chatterLogin: string;
   chatterDisplayName: string;
   text: string;
+  normalizedText: string;
   color: string | null;
   messageType: string;
   badges: Record<string, string>;
@@ -323,6 +325,14 @@ export interface ConfigSnapshot {
         timeoutOnBlockedTerm: boolean;
         timeoutOnSpam: boolean;
       };
+      progressiveTimeouts?: {
+        enabled: boolean;
+        windowSeconds: number;
+        tiers: Array<{
+          maxPriorTimeouts: number;
+          durationSeconds: number;
+        }>;
+      } | undefined;
     };
     publicNotices: {
       blockedTerm: string;
@@ -508,7 +518,10 @@ export type ControlCommand =
   | { kind: "set-live-moderation"; enabled: boolean }
   | { kind: "set-pack"; packName: string }
   | { kind: "set-model"; presetName: string }
-  | { kind: "reset" };
+  | { kind: "reset" }
+  | { kind: "panic" }
+  | { kind: "chill" }
+  | { kind: "off" };
 
 export interface ControlCommandResult {
   accepted: boolean;

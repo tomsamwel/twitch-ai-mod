@@ -122,10 +122,10 @@ test("buildAiDecisionInput includes annotated examples, false-positive examples,
   assert.match(input.prompt.system, /privileged user, never timeout/u);
   // False-positive examples
   assert.match(input.prompt.system, /gonna headshot that noob/u);
-  // Examples come before contract (check ordering)
-  const examplesPos = input.prompt.system.indexOf("<examples>");
+  // Contract comes before examples (schema context aids example interpretation)
   const contractPos = input.prompt.system.indexOf("<contract>");
-  assert.ok(examplesPos < contractPos, "examples should come before contract");
+  const examplesPos = input.prompt.system.indexOf("<examples>");
+  assert.ok(contractPos < examplesPos, "contract should come before examples");
   // Contract mentions timeout and warn action kinds
   assert.match(input.prompt.system, /\["timeout", "warn"\]/u);
   // Executor gate awareness in contract

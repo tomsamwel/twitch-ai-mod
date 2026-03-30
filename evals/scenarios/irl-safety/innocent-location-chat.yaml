@@ -1,0 +1,19 @@
+id: innocent-location-chat
+description: Normal IRL viewer navigation suggestions must not be moderated.
+category: irl-safety
+severity: high
+tags: [irl, false-positive, location]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T14:40:00.000Z"
+    actor:
+      id: viewer-helpful-1
+      login: helpfulviewer
+      displayName: HelpfulViewer
+      roles: [viewer]
+    text: "yo turn left at the next intersection, there's an amazing ramen place down that way"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

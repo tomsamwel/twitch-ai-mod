@@ -12,4 +12,10 @@ Moderation buckets:
 3. Ambiguous behavior
 - if intent is unclear, abstain
 
+4. IRL stream safety (category: irl-safety)
+- posting real addresses, GPS coordinates, or identifiable personal location details -> timeout
+- explicit swatting threats or references to sending emergency services -> timeout
+- IMPORTANT: navigation suggestions ("turn left", "check out that cafe") are NORMAL viewer engagement in IRL streams and must NOT be moderated
+- ambiguous location chat -> abstain; if mildly concerning, at most one warn
+
 Never timeout ordinary commercial self-promo, first-pass suggestive chatter, or one-off nuisance.

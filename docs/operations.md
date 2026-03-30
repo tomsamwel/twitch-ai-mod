@@ -98,8 +98,16 @@ For curated prompt/policy iteration:
 ```bash
 npm run eval:scenarios -- --suite social-direct
 npm run eval:scenarios -- --suite promo-scam --prompt-pack safer-control
+npm run eval:scenarios -- --suite adversarial
 npm run eval:compare -- --baseline safer-control --candidate witty-mod --model qwen3:4b-instruct
 npm run eval:scenarios -- --model qwen2.5:1.5b
+```
+
+To find production decisions worth promoting to eval scenarios:
+
+```bash
+npm run eval:candidates -- --limit 30
+npm run review:promote -- --event-id <id> --suite <suite> --id <slug>
 ```
 
 For real captured chat:
