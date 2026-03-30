@@ -70,6 +70,7 @@ When bot=broadcaster, whisper control doesn't work — use admin panel at `local
 
 ## Prompt System
 
+- **Token budget**: moderation prompts are ~2200 tokens at 4096 ctx — adding few-shot examples or safety rules can overflow; check `chars=` in eval output after changes
 - Prompt packs in `prompts/packs/<name>/`: `system.md`, `social-persona.md`, `moderation.md`, `response-style.md`, `safety-rules.md`, `pack.yaml`
 - Mode selection: message addresses bot/broadcaster → social; otherwise → moderation
 - XML tags use short names: `<ctx>`, `<room>`, `<user_hist>`, `<bot_hist>`, `<signals>`, `<examples>`, `<contract>`
@@ -110,7 +111,8 @@ Approval is precision-first: wrongful timeouts and blocking missed timeouts fail
 
 ## When Changing X, Also Update Y
 
-- **Prompt semantics** → update relevant scenario YAML, pack.yaml hypothesis, docs/configuration.md
+- **Prompt semantics** → update relevant scenario YAML, pack.yaml hypothesis + changelog, docs/configuration.md; verify token budget with a fast eval (`--suite irl-safety`)
+- **Scenario files added/removed** → update counts in CLAUDE.md (Build & Test + Eval System), docs/milestones.md, docs/configuration.md
 - **Config schema** → update `src/config/schema.ts` + `src/types.ts` ConfigSnapshot + `src/config/load-config.ts` mapping + `.env.example` if env keys change + docs/configuration.md
 - **Control commands** → update `command-parser.ts` + `control-plane.ts` + `runtime-settings.ts` + README.md + docs/operations.md + tests
 - **Eval behavior** → update docs/operations.md + docs/architecture.md + scenario tests
