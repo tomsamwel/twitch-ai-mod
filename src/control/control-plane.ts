@@ -9,14 +9,38 @@ import type {
   ControlAuditRecord,
   ControlCommand,
   ControlCommandResult,
+  ControllerRole,
   RuntimeOverrideKey,
   TrustedController,
   WhisperMessage,
 } from "../types.js";
 import type { TwurpleTwitchGateway } from "../twitch/twitch-gateway.js";
 
+function formatTimeAgo(isoTimestamp: string): string {
+  const seconds = Math.floor((Date.now() - new Date(isoTimestamp).getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  return `${Math.floor(seconds / 3600)}h`;
+}
+
 export class WhisperControlPlane {
-  private readonly trustedUserIds: Set<string>;
+  private readonly controllersByUserId: Map<string, TrustedController>;
+
+  private static readonly ROLE_PERMISSIONS: Record<ControllerRole, Set<ControlCommand["kind"]>> = {
+    broadcaster: new Set([
+      "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-dry-run",
+      "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
+      "recent", "stats", "exempt", "block",
+    ]),
+    admin: new Set([
+      "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-dry-run",
+      "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
+      "recent", "stats", "exempt", "block",
+    ]),
+    mod: new Set([
+      "help", "status", "recent", "stats", "exempt", "block",
+    ]),
+  };
 
   public constructor(
     private readonly commandPrefix: string,
@@ -31,10 +55,25 @@ export class WhisperControlPlane {
       | "listAvailablePromptPacks"
       | "listAvailableModelPresets"
     >,
-    private readonly database: Pick<BotDatabase, "recordControlAudit" | "registerIngestedEvent">,
+    private readonly database: Pick<BotDatabase,
+      | "recordControlAudit"
+      | "registerIngestedEvent"
+      | "getRecentDecisionsForAdmin"
+      | "getHourlyStats"
+      | "addExemptUser"
+      | "removeExemptUser"
+      | "listExemptUsers"
+      | "addRuntimeBlockedTerm"
+      | "removeRuntimeBlockedTerm"
+      | "listRuntimeBlockedTerms"
+      | "getRuntimeController"
+    >,
     private readonly twitchGateway: Pick<TwurpleTwitchGateway, "sendWhisper">,
+    private readonly aiReviewQueue?: { getStats(): { depth: number; processing: number } },
   ) {
-    this.trustedUserIds = new Set(trustedControllers.map((controller) => controller.userId));
+    this.controllersByUserId = new Map(
+      trustedControllers.map((controller) => [controller.userId, controller]),
+    );
   }
 
   public async processWhisper(message: WhisperMessage): Promise<void> {
@@ -43,7 +82,20 @@ export class WhisperControlPlane {
       return;
     }
 
-    if (!this.trustedUserIds.has(message.senderUserId)) {
+    let controller = this.controllersByUserId.get(message.senderUserId);
+    if (!controller) {
+      const runtimeEntry = this.database.getRuntimeController(message.senderUserLogin);
+      if (runtimeEntry) {
+        controller = {
+          userId: message.senderUserId,
+          login: message.senderUserLogin,
+          displayName: message.senderUserDisplayName,
+          source: "config",
+          role: runtimeEntry.role as ControllerRole,
+        };
+      }
+    }
+    if (!controller) {
       await this.finalize(message, null, {
         accepted: false,
         success: false,
@@ -71,6 +123,19 @@ export class WhisperControlPlane {
       return;
     }
 
+    const allowed = WhisperControlPlane.ROLE_PERMISSIONS[controller.role];
+    if (!allowed.has(command.kind)) {
+      await this.finalize(message, command, {
+        accepted: true,
+        success: false,
+        commandSummary: "permission-denied",
+        replyMessage: `You don't have permission for this command. Your role: ${controller.role}.`,
+        highRisk: false,
+        changes: [],
+      });
+      return;
+    }
+
     const result = this.executeCommand(command, message);
     await this.finalize(message, command, result);
   }
@@ -90,17 +155,17 @@ export class WhisperControlPlane {
           commandSummary: "help",
           replyMessage: [
             `${this.commandPrefix} status`,
+            `${this.commandPrefix} recent [N]`,
+            `${this.commandPrefix} stats`,
             `${this.commandPrefix} ai on|off`,
-            `${this.commandPrefix} ai-moderation on|off`,
-            `${this.commandPrefix} social on|off`,
-            `${this.commandPrefix} dry-run on|off`,
-            `${this.commandPrefix} live-moderation on|off`,
-            `${this.commandPrefix} pack <pack-name>`,
-            `${this.commandPrefix} model <preset-name>`,
-            `${this.commandPrefix} reset`,
-            `${this.commandPrefix} panic`,
-            `${this.commandPrefix} chill`,
-            `${this.commandPrefix} off`,
+            `${this.commandPrefix} aim on|off`,
+            `${this.commandPrefix} soc on|off`,
+            `${this.commandPrefix} dry on|off`,
+            `${this.commandPrefix} live on|off`,
+            `${this.commandPrefix} pack|model <name>`,
+            `${this.commandPrefix} exempt|unexempt <user>`,
+            `${this.commandPrefix} block|unblock <term>`,
+            `${this.commandPrefix} panic|chill|off|reset`,
           ].join(" | "),
           highRisk: false,
           changes: [],
@@ -290,9 +355,112 @@ export class WhisperControlPlane {
           changes,
         };
       }
+      case "recent":
+        return this.executeRecent(command.count);
+      case "stats":
+        return this.executeStats();
+      case "exempt":
+        return this.executeExempt(command, actor);
+      case "block":
+        return this.executeBlock(command, actor);
       default: {
         const _exhaustive: never = command;
         throw new Error(`Unhandled command kind: ${(command as { kind: string }).kind}`);
+      }
+    }
+  }
+
+  private executeRecent(count: number): ControlCommandResult {
+    const rows = this.database.getRecentDecisionsForAdmin(count);
+    if (rows.length === 0) {
+      return { accepted: true, success: true, commandSummary: "recent", replyMessage: "No recent decisions.", highRisk: false, changes: [] };
+    }
+    const parts: string[] = [];
+    let totalLen = 0;
+    for (const row of rows) {
+      const ago = formatTimeAgo(row.createdAt as string);
+      const entry = `@${row.chatter as string} ${row.outcome as string}${row.category ? `(${row.category as string})` : ""} ${ago}`;
+      if (totalLen + entry.length + 3 > 450) break;
+      parts.push(entry);
+      totalLen += entry.length + 3;
+    }
+    return { accepted: true, success: true, commandSummary: "recent", replyMessage: parts.join(" | "), highRisk: false, changes: [] };
+  }
+
+  private executeStats(): ControlCommandResult {
+    const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    const stats = this.database.getHourlyStats(oneHourAgo);
+    const queueStats = this.aiReviewQueue?.getStats();
+    const parts = [
+      `1h: ${stats.decisions.total} decisions`,
+      `${stats.timeouts.total} timeout`,
+      `${stats.actions.byKind["warn"] ?? 0} warn`,
+      `${stats.actions.byKind["say"] ?? 0} say`,
+    ];
+    if (queueStats) {
+      parts.push(`queue=${queueStats.depth}`);
+    }
+    return { accepted: true, success: true, commandSummary: "stats", replyMessage: parts.join(", "), highRisk: false, changes: [] };
+  }
+
+  private executeExempt(
+    command: Extract<ControlCommand, { kind: "exempt" }>,
+    actor: { userId: string; login: string },
+  ): ControlCommandResult {
+    switch (command.subcommand) {
+      case "add": {
+        const added = this.database.addExemptUser(command.userLogin!, actor.login);
+        return {
+          accepted: true, success: true, commandSummary: "exempt-add",
+          replyMessage: added ? `@${command.userLogin!} is now exempt.` : `@${command.userLogin!} was already exempt.`,
+          highRisk: false, changes: [],
+        };
+      }
+      case "remove": {
+        const removed = this.database.removeExemptUser(command.userLogin!);
+        return {
+          accepted: true, success: true, commandSummary: "exempt-remove",
+          replyMessage: removed ? `@${command.userLogin!} is no longer exempt.` : `@${command.userLogin!} was not exempt.`,
+          highRisk: false, changes: [],
+        };
+      }
+      case "list": {
+        const exempt = this.database.listExemptUsers();
+        const message = exempt.length > 0
+          ? `Exempt: ${exempt.map((u) => `@${u.userLogin}`).join(", ")}`
+          : "No exempt users.";
+        return { accepted: true, success: true, commandSummary: "exempt-list", replyMessage: message, highRisk: false, changes: [] };
+      }
+    }
+  }
+
+  private executeBlock(
+    command: Extract<ControlCommand, { kind: "block" }>,
+    actor: { userId: string; login: string },
+  ): ControlCommandResult {
+    switch (command.subcommand) {
+      case "add": {
+        const added = this.database.addRuntimeBlockedTerm(command.term!, actor.login);
+        return {
+          accepted: true, success: true, commandSummary: "block-add",
+          replyMessage: added ? `Blocked: "${command.term!}"` : `Already blocked: "${command.term!}"`,
+          highRisk: false, changes: [],
+        };
+      }
+      case "remove": {
+        const removed = this.database.removeRuntimeBlockedTerm(command.term!);
+        return {
+          accepted: true, success: true, commandSummary: "block-remove",
+          replyMessage: removed ? `Unblocked: "${command.term!}"` : `Not found: "${command.term!}"`,
+          highRisk: false, changes: [],
+        };
+      }
+      case "list": {
+        const terms = this.database.listRuntimeBlockedTerms();
+        const message = terms.length > 0
+          ? `Blocked: ${terms.map((t) => `"${t.term}"`).join(", ")}`
+          : "No runtime blocked terms.";
+        return { accepted: true, success: true, commandSummary: "block-list", replyMessage: message, highRisk: false, changes: [] };
       }
     }
   }

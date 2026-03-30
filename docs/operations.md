@@ -81,7 +81,12 @@ From the broadcaster or another trusted controller, whisper the bot account:
 
 ```text
 aimod status
+aimod recent
+aimod stats
 aimod ai off
+aimod aim on
+aimod exempt someuser
+aimod block raid spam phrase
 aimod status
 aimod reset
 ```

@@ -1,8 +1,10 @@
 enabled: true
 commandPrefix: aimod
-trustedControllerLogins:
-  - testchannel
-  - testmod
+trustedControllers:
+  - login: testchannel
+    role: admin
+  - login: testmod
+    role: admin
 broadcasterAlwaysAllowed: true
 allowedPromptPacks:
   - witty-mod

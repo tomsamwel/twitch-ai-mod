@@ -83,7 +83,11 @@ export const appConfigSchema = z.object({
 export const controlPlaneSchema = z.object({
   enabled: z.boolean(),
   commandPrefix: z.string().min(1),
-  trustedControllerLogins: z.array(z.string().min(1)),
+  trustedControllerLogins: z.array(z.string().min(1)).default([]),
+  trustedControllers: z.array(z.object({
+    login: z.string().min(1),
+    role: z.enum(["admin", "mod"]),
+  })).optional(),
   broadcasterAlwaysAllowed: z.boolean(),
   allowedPromptPacks: z.array(z.string().min(1)).min(1),
   modelPresets: z.record(

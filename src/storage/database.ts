@@ -150,6 +150,25 @@ export class BotDatabase {
 
       CREATE INDEX IF NOT EXISTS idx_actions_target_user_created_at
       ON actions(target_user_id, created_at ASC);
+
+      CREATE TABLE IF NOT EXISTS exempt_users (
+        user_login TEXT PRIMARY KEY,
+        added_by_login TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS runtime_blocked_terms (
+        term TEXT PRIMARY KEY,
+        added_by_login TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS runtime_controllers (
+        login TEXT PRIMARY KEY,
+        role TEXT NOT NULL,
+        added_by_login TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
 
     this.ensureColumn("decisions", "processing_mode", "TEXT NOT NULL DEFAULT 'live'");
@@ -1003,6 +1022,364 @@ export class BotDatabase {
     }));
   }
 
+  // --- Exempt users ---
+
+  public addExemptUser(login: string, actorLogin: string): boolean {
+    const result = this.database
+      .prepare(`INSERT OR IGNORE INTO exempt_users (user_login, added_by_login, created_at) VALUES (?, ?, ?)`)
+      .run(login.toLowerCase(), actorLogin, new Date().toISOString());
+    return result.changes > 0;
+  }
+
+  public removeExemptUser(login: string): boolean {
+    const result = this.database
+      .prepare(`DELETE FROM exempt_users WHERE user_login = ?`)
+      .run(login.toLowerCase());
+    return result.changes > 0;
+  }
+
+  public listExemptUsers(): Array<{ userLogin: string; addedByLogin: string; createdAt: string }> {
+    const rows = this.database
+      .prepare(`SELECT user_login, added_by_login, created_at FROM exempt_users ORDER BY created_at ASC`)
+      .all() as Array<{ user_login: string; added_by_login: string; created_at: string }>;
+    return rows.map((row) => ({
+      userLogin: row.user_login,
+      addedByLogin: row.added_by_login,
+      createdAt: row.created_at,
+    }));
+  }
+
+  public isUserExempt(login: string): boolean {
+    const row = this.database
+      .prepare(`SELECT 1 FROM exempt_users WHERE user_login = ? LIMIT 1`)
+      .get(login.toLowerCase()) as { 1: number } | undefined;
+    return row !== undefined;
+  }
+
+  // --- Runtime blocked terms ---
+
+  public addRuntimeBlockedTerm(term: string, actorLogin: string): boolean {
+    const result = this.database
+      .prepare(`INSERT OR IGNORE INTO runtime_blocked_terms (term, added_by_login, created_at) VALUES (?, ?, ?)`)
+      .run(term.toLowerCase().trim(), actorLogin, new Date().toISOString());
+    return result.changes > 0;
+  }
+
+  public removeRuntimeBlockedTerm(term: string): boolean {
+    const result = this.database
+      .prepare(`DELETE FROM runtime_blocked_terms WHERE term = ?`)
+      .run(term.toLowerCase().trim());
+    return result.changes > 0;
+  }
+
+  public listRuntimeBlockedTerms(): Array<{ term: string; addedByLogin: string; createdAt: string }> {
+    const rows = this.database
+      .prepare(`SELECT term, added_by_login, created_at FROM runtime_blocked_terms ORDER BY created_at ASC`)
+      .all() as Array<{ term: string; added_by_login: string; created_at: string }>;
+    return rows.map((row) => ({
+      term: row.term,
+      addedByLogin: row.added_by_login,
+      createdAt: row.created_at,
+    }));
+  }
+
+  // --- Runtime controllers ---
+
+  public addRuntimeController(login: string, role: "admin" | "mod", actorLogin: string): void {
+    this.database
+      .prepare(
+        `INSERT INTO runtime_controllers (login, role, added_by_login, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(login) DO UPDATE SET role = excluded.role, added_by_login = excluded.added_by_login`,
+      )
+      .run(login.toLowerCase(), role, actorLogin, new Date().toISOString());
+  }
+
+  public removeRuntimeController(login: string): boolean {
+    const result = this.database
+      .prepare(`DELETE FROM runtime_controllers WHERE login = ?`)
+      .run(login.toLowerCase());
+    return result.changes > 0;
+  }
+
+  public updateRuntimeControllerRole(login: string, role: "admin" | "mod"): boolean {
+    const result = this.database
+      .prepare(`UPDATE runtime_controllers SET role = ? WHERE login = ?`)
+      .run(role, login.toLowerCase());
+    return result.changes > 0;
+  }
+
+  public listRuntimeControllers(): Array<{ login: string; role: string; addedByLogin: string; createdAt: string }> {
+    const rows = this.database
+      .prepare(`SELECT login, role, added_by_login, created_at FROM runtime_controllers ORDER BY created_at ASC`)
+      .all() as Array<{ login: string; role: string; added_by_login: string; created_at: string }>;
+    return rows.map((row) => ({
+      login: row.login,
+      role: row.role,
+      addedByLogin: row.added_by_login,
+      createdAt: row.created_at,
+    }));
+  }
+
+  public getRuntimeController(login: string): { login: string; role: string } | null {
+    const row = this.database
+      .prepare(`SELECT login, role FROM runtime_controllers WHERE login = ? LIMIT 1`)
+      .get(login.toLowerCase()) as { login: string; role: string } | undefined;
+    return row ?? null;
+  }
+
+  // --- Chatter autocomplete ---
+
+  public getKnownChatterLogins(prefix: string, limit = 20): string[] {
+    const escaped = prefix.toLowerCase().replace(/[%_]/g, "\\$&");
+    const rows = this.database
+      .prepare(
+        `SELECT DISTINCT chatter_login FROM message_snapshots
+         WHERE chatter_login LIKE ? || '%' ESCAPE '\\'
+         ORDER BY chatter_login ASC
+         LIMIT ?`,
+      )
+      .all(escaped, limit) as Array<{ chatter_login: string }>;
+    return rows.map((row) => row.chatter_login);
+  }
+
+  // --- Admin queries ---
+
+  public getRecentDecisionsPaginated(
+    limit: number,
+    offset: number,
+    filters?: { chatter?: string; outcome?: string; stage?: string; after?: string },
+  ): { rows: Array<Record<string, unknown>>; total: number } {
+    const conditions: string[] = ["d.stage IN ('ai', 'rules')"];
+    const params: unknown[] = [];
+
+    if (filters?.chatter) {
+      conditions.push("d.chatter_login = ?");
+      params.push(filters.chatter.toLowerCase());
+    }
+    if (filters?.outcome) {
+      conditions.push("d.outcome = ?");
+      params.push(filters.outcome);
+    }
+    if (filters?.stage) {
+      conditions.push("d.stage = ?");
+      params.push(filters.stage);
+    }
+    if (filters?.after) {
+      conditions.push("d.created_at >= ?");
+      params.push(filters.after);
+    }
+
+    const where = conditions.join(" AND ");
+
+    const countRow = this.database
+      .prepare(`SELECT COUNT(*) as total FROM decisions d WHERE ${where}`)
+      .get(...params) as { total: number };
+
+    const rows = this.database
+      .prepare(
+        `SELECT d.event_id, d.chatter_login, d.outcome, d.reason, d.stage, d.created_at,
+                json_extract(d.payload_json, '$.mode') as mode,
+                json_extract(d.payload_json, '$.confidence') as confidence,
+                json_extract(d.payload_json, '$.moderationCategory') as category,
+                substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet,
+                (SELECT GROUP_CONCAT(action_kind || ':' || status, ', ')
+                 FROM actions WHERE source_event_id = d.event_id) as actions_summary
+         FROM decisions d
+         LEFT JOIN message_snapshots m ON m.event_id = d.event_id
+         WHERE ${where}
+         ORDER BY d.created_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(...params, limit, offset) as Array<Record<string, unknown>>;
+
+    return {
+      rows: rows.map((row) => ({
+        eventId: row.event_id,
+        chatter: row.chatter_login,
+        text: row.text_snippet ?? null,
+        outcome: row.outcome,
+        mode: row.mode ?? null,
+        reason: row.reason,
+        confidence: row.confidence ?? null,
+        category: row.category ?? null,
+        stage: row.stage,
+        actions: row.actions_summary ?? null,
+        createdAt: row.created_at,
+      })),
+      total: countRow.total,
+    };
+  }
+
+  public getControlAuditLog(
+    limit: number,
+    offset: number,
+  ): { rows: Array<Record<string, unknown>>; total: number } {
+    const countRow = this.database
+      .prepare(`SELECT COUNT(*) as total FROM control_audit`)
+      .get() as { total: number };
+
+    const rows = this.database
+      .prepare(
+        `SELECT id, actor_login, command_summary, raw_command_text, accepted, success,
+                high_risk, reply_message, changes_json, created_at
+         FROM control_audit
+         ORDER BY created_at DESC
+         LIMIT ? OFFSET ?`,
+      )
+      .all(limit, offset) as Array<Record<string, unknown>>;
+
+    return {
+      rows: rows.map((row) => ({
+        id: row.id,
+        actorLogin: row.actor_login,
+        command: row.command_summary,
+        rawText: row.raw_command_text,
+        accepted: row.accepted === 1,
+        success: row.success === 1,
+        highRisk: row.high_risk === 1,
+        reply: row.reply_message,
+        changes: JSON.parse(row.changes_json as string) as unknown[],
+        createdAt: row.created_at,
+      })),
+      total: countRow.total,
+    };
+  }
+
+  public getUserHistory(
+    login: string,
+    limit = 25,
+  ): {
+    messages: Array<Record<string, unknown>>;
+    decisions: Array<Record<string, unknown>>;
+    actions: Array<Record<string, unknown>>;
+    isExempt: boolean;
+  } {
+    const lowerLogin = login.toLowerCase();
+
+    const messages = this.database
+      .prepare(
+        `SELECT event_id, received_at,
+                substr(json_extract(message_json, '$.text'), 1, 120) as text_snippet
+         FROM message_snapshots
+         WHERE chatter_login = ?
+         ORDER BY received_at DESC
+         LIMIT ?`,
+      )
+      .all(lowerLogin, limit) as Array<Record<string, unknown>>;
+
+    const decisions = this.database
+      .prepare(
+        `SELECT d.id, d.stage, d.outcome, d.reason, d.matched_rule, d.created_at,
+                json_extract(d.payload_json, '$.confidence') as confidence,
+                json_extract(d.payload_json, '$.moderationCategory') as category
+         FROM decisions d
+         WHERE d.chatter_login = ?
+         ORDER BY d.created_at DESC
+         LIMIT ?`,
+      )
+      .all(lowerLogin, limit) as Array<Record<string, unknown>>;
+
+    const actions = this.database
+      .prepare(
+        `SELECT id, action_kind, status, source, reason, dry_run, created_at
+         FROM actions
+         WHERE target_user_name = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(lowerLogin, limit) as Array<Record<string, unknown>>;
+
+    return {
+      messages: messages.map((row) => ({
+        eventId: row.event_id,
+        receivedAt: row.received_at,
+        text: row.text_snippet,
+      })),
+      decisions: decisions.map((row) => ({
+        id: row.id,
+        stage: row.stage,
+        outcome: row.outcome,
+        reason: row.reason,
+        matchedRule: row.matched_rule ?? null,
+        confidence: row.confidence ?? null,
+        category: row.category ?? null,
+        createdAt: row.created_at,
+      })),
+      actions: actions.map((row) => ({
+        id: row.id,
+        kind: row.action_kind,
+        status: row.status,
+        source: row.source,
+        reason: row.reason,
+        dryRun: row.dry_run === 1,
+        createdAt: row.created_at,
+      })),
+      isExempt: this.isUserExempt(lowerLogin),
+    };
+  }
+
+  public getHourlyStats(sinceIso: string): {
+    decisions: { total: number; byOutcome: Record<string, number> };
+    actions: { total: number; byKind: Record<string, number>; byStatus: Record<string, number> };
+    timeouts: { total: number; bySource: Record<string, number> };
+  } {
+    const decisionRows = this.database
+      .prepare(
+        `SELECT outcome, COUNT(*) as cnt
+         FROM decisions
+         WHERE created_at >= ? AND stage IN ('ai', 'rules')
+         GROUP BY outcome`,
+      )
+      .all(sinceIso) as Array<{ outcome: string; cnt: number }>;
+
+    const byOutcome: Record<string, number> = {};
+    let decisionTotal = 0;
+    for (const row of decisionRows) {
+      byOutcome[row.outcome] = row.cnt;
+      decisionTotal += row.cnt;
+    }
+
+    const actionRows = this.database
+      .prepare(
+        `SELECT action_kind, status, COUNT(*) as cnt
+         FROM actions
+         WHERE created_at >= ?
+         GROUP BY action_kind, status`,
+      )
+      .all(sinceIso) as Array<{ action_kind: string; status: string; cnt: number }>;
+
+    const byKind: Record<string, number> = {};
+    const byStatus: Record<string, number> = {};
+    let actionTotal = 0;
+    for (const row of actionRows) {
+      byKind[row.action_kind] = (byKind[row.action_kind] ?? 0) + row.cnt;
+      byStatus[row.status] = (byStatus[row.status] ?? 0) + row.cnt;
+      actionTotal += row.cnt;
+    }
+
+    const timeoutRows = this.database
+      .prepare(
+        `SELECT source, COUNT(*) as cnt
+         FROM actions
+         WHERE created_at >= ? AND action_kind = 'timeout' AND status IN ('executed', 'dry-run')
+         GROUP BY source`,
+      )
+      .all(sinceIso) as Array<{ source: string; cnt: number }>;
+
+    const bySource: Record<string, number> = {};
+    let timeoutTotal = 0;
+    for (const row of timeoutRows) {
+      bySource[row.source] = row.cnt;
+      timeoutTotal += row.cnt;
+    }
+
+    return {
+      decisions: { total: decisionTotal, byOutcome },
+      actions: { total: actionTotal, byKind, byStatus },
+      timeouts: { total: timeoutTotal, bySource },
+    };
+  }
+
   public getRecentDecisionsForAdmin(limit: number): Array<Record<string, unknown>> {
     const rows = this.database
       .prepare(
@@ -1010,7 +1387,9 @@ export class BotDatabase {
                 json_extract(d.payload_json, '$.mode') as mode,
                 json_extract(d.payload_json, '$.confidence') as confidence,
                 json_extract(d.payload_json, '$.moderationCategory') as category,
-                substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet
+                substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet,
+                (SELECT GROUP_CONCAT(action_kind || ':' || status, ', ')
+                 FROM actions WHERE source_event_id = d.event_id) as actions_summary
          FROM decisions d
          LEFT JOIN message_snapshots m ON m.event_id = d.event_id
          WHERE d.stage IN ('ai', 'rules')
@@ -1029,6 +1408,7 @@ export class BotDatabase {
       confidence: row.confidence ?? null,
       category: row.category ?? null,
       stage: row.stage,
+      actions: row.actions_summary ?? null,
       createdAt: row.created_at,
     }));
   }

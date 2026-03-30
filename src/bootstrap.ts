@@ -50,7 +50,9 @@ export async function createAppServices(): Promise<AppServices> {
   const aiProviders = new AiProviderRegistry(config, logger);
   await aiProviders.getProvider(aiProviders.createEffectiveConfig(runtimeSettings.getEffectiveSettings()));
   const cooldowns = new CooldownManager(config.cooldowns);
-  const ruleEngine = new RuleEngine(config, cooldowns);
+  const isUserExempt = (login: string) => database.isUserExempt(login);
+  const getRuntimeBlockedTerms = () => database.listRuntimeBlockedTerms();
+  const ruleEngine = new RuleEngine(config, cooldowns, isUserExempt, getRuntimeBlockedTerms);
   const contextBuilder = new AiContextBuilder(config, database);
   const outboundMessageTracker = new OutboundMessageTracker();
   const aiReviewQueue = new AiReviewQueue<AiReviewWorkItem>(config.ai.queue, logger);
@@ -72,6 +74,7 @@ export async function createAppServices(): Promise<AppServices> {
     twitchGateway,
     runtimeSettings,
     outboundMessageTracker,
+    isUserExempt,
   );
   const messageProcessor = new MessageProcessor(
     config,
@@ -98,9 +101,14 @@ export async function createAppServices(): Promise<AppServices> {
           runtimeSettings,
           database,
           twitchGateway,
+          aiReviewQueue,
         )
       : null;
 
+  const configControllers = (config.controlPlane.trustedControllers ?? []).map((c) => ({
+    login: c.login,
+    role: c.role,
+  }));
   const adminServer =
     config.admin?.enabled
       ? new AdminServer({
@@ -110,6 +118,7 @@ export async function createAppServices(): Promise<AppServices> {
           port: config.admin.port,
           llamaServerManager: llamaServerManager ?? undefined,
           aiReviewQueue,
+          configControllers,
         })
       : null;
 
@@ -171,13 +180,23 @@ async function resolveTrustedControllers(
   const requestedLogins = new Set(config.controlPlane.trustedControllerLogins.map((login) => login.toLowerCase()));
   const resolved: TrustedController[] = [];
 
+  const roleMap = new Map<string, "admin" | "mod">();
+  if (config.controlPlane.trustedControllers) {
+    for (const entry of config.controlPlane.trustedControllers) {
+      roleMap.set(entry.login.toLowerCase(), entry.role);
+    }
+  }
+
   for (const login of requestedLogins) {
+    const role = roleMap.get(login) ?? "admin";
+
     if (login === authContext.broadcaster.login.toLowerCase()) {
       resolved.push({
         userId: authContext.broadcaster.id,
         login: authContext.broadcaster.login,
         displayName: authContext.broadcaster.displayName,
         source: "config",
+        role,
       });
       continue;
     }
@@ -192,6 +211,7 @@ async function resolveTrustedControllers(
       login: user.name,
       displayName: user.displayName,
       source: "config",
+      role,
     });
   }
 
@@ -204,6 +224,7 @@ async function resolveTrustedControllers(
       login: authContext.broadcaster.login,
       displayName: authContext.broadcaster.displayName,
       source: "broadcaster",
+      role: "broadcaster",
     });
   }
 

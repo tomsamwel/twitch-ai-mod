@@ -45,3 +45,35 @@ test("parseControlCommand rejects malformed commands with helpful usage", () => 
   );
   assert.throws(() => parseControlCommand("hello there", "aimod"), /must start with "aimod"/u);
 });
+
+test("parseControlCommand resolves aliases", () => {
+  assert.deepEqual(parseControlCommand("aimod aim on", "aimod"), { kind: "set-ai-moderation", enabled: true });
+  assert.deepEqual(parseControlCommand("aimod live off", "aimod"), { kind: "set-live-moderation", enabled: false });
+  assert.deepEqual(parseControlCommand("aimod dry on", "aimod"), { kind: "set-dry-run", enabled: true });
+  assert.deepEqual(parseControlCommand("aimod soc off", "aimod"), { kind: "set-social", enabled: false });
+});
+
+test("parseControlCommand parses recent with optional count", () => {
+  assert.deepEqual(parseControlCommand("aimod recent", "aimod"), { kind: "recent", count: 3 });
+  assert.deepEqual(parseControlCommand("aimod recent 5", "aimod"), { kind: "recent", count: 5 });
+  assert.throws(() => parseControlCommand("aimod recent 0", "aimod"), /1-10/u);
+  assert.throws(() => parseControlCommand("aimod recent 11", "aimod"), /1-10/u);
+  assert.throws(() => parseControlCommand("aimod recent abc", "aimod"), /1-10/u);
+});
+
+test("parseControlCommand parses stats", () => {
+  assert.deepEqual(parseControlCommand("aimod stats", "aimod"), { kind: "stats" });
+});
+
+test("parseControlCommand parses exempt and unexempt", () => {
+  assert.deepEqual(parseControlCommand("aimod exempt spammer123", "aimod"), { kind: "exempt", subcommand: "add", userLogin: "spammer123" });
+  assert.deepEqual(parseControlCommand("aimod exempt @SpamUser", "aimod"), { kind: "exempt", subcommand: "add", userLogin: "spamuser" });
+  assert.deepEqual(parseControlCommand("aimod exempt list", "aimod"), { kind: "exempt", subcommand: "list" });
+  assert.deepEqual(parseControlCommand("aimod unexempt spammer123", "aimod"), { kind: "exempt", subcommand: "remove", userLogin: "spammer123" });
+});
+
+test("parseControlCommand parses block and unblock with multi-word terms", () => {
+  assert.deepEqual(parseControlCommand("aimod block buy followers", "aimod"), { kind: "block", subcommand: "add", term: "buy followers" });
+  assert.deepEqual(parseControlCommand("aimod block list", "aimod"), { kind: "block", subcommand: "list" });
+  assert.deepEqual(parseControlCommand("aimod unblock buy followers", "aimod"), { kind: "block", subcommand: "remove", term: "buy followers" });
+});

@@ -79,7 +79,9 @@ This keeps live, replay, and eval behavior aligned instead of hand-rolling mode-
 Important invariants:
 - dedicated bot account recommended
 - verified phone number required for outgoing whisper replies
-- allowlist is file-managed, never mutated from Twitch
+- controller allowlist is file-managed, never mutated from Twitch
+- three permission tiers: broadcaster (everything), admin (all toggles + management), mod (status + exempt + block)
+- runtime exemptions and blocked terms stored in SQLite, checked before rule engine and action execution
 
 ## Replay Flow
 

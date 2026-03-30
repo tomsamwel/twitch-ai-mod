@@ -111,24 +111,74 @@ Whisper control requirements:
 - rerun `npm run auth:login` after scope changes
 - verify a phone number on the bot account if whisper replies should work
 
-Supported commands:
+### Permission Tiers
+
+Controllers are assigned roles in `control-plane.yaml`:
+
+```yaml
+trustedControllers:
+  - login: mymod
+    role: admin
+  - login: helpermod
+    role: mod
+```
+
+| Role | Can do |
+|------|--------|
+| `broadcaster` | Everything (auto-assigned when `broadcasterAlwaysAllowed`) |
+| `admin` | All toggles, pack, model, reset, exempt, block, panic, chill, off |
+| `mod` | status, recent, stats, exempt, block |
+
+The old `trustedControllerLogins` format still works — all entries default to `admin` role.
+
+### Supported Commands
 
 - `aimod help`
 - `aimod status`
+- `aimod recent [N]` — last N actions (default 3, max 10)
+- `aimod stats` — one-line hourly summary
 - `aimod ai on|off`
-- `aimod ai-moderation on|off`
-- `aimod social on|off`
-- `aimod dry-run on|off`
-- `aimod live-moderation on|off`
+- `aimod aim on|off` — alias for `ai-moderation`
+- `aimod soc on|off` — alias for `social`
+- `aimod dry on|off` — alias for `dry-run`
+- `aimod live on|off` — alias for `live-moderation`
 - `aimod pack <pack-name>`
 - `aimod model <preset-name>`
+- `aimod exempt <user>` / `aimod unexempt <user>` / `aimod exempt list`
+- `aimod block <term...>` / `aimod unblock <term...>` / `aimod block list`
+- `aimod panic` / `aimod chill` / `aimod off`
 - `aimod reset`
+
+### Command Aliases
+
+| Alias | Expands to |
+|-------|-----------|
+| `aim` | `ai-moderation` |
+| `live` | `live-moderation` |
+| `dry` | `dry-run` |
+| `soc` | `social` |
 
 Rules:
 - controller access is allowlist-only
 - controller logins are managed locally in YAML, not from Twitch chat
 - `model` only switches between named presets, not arbitrary model strings
-- `reset` clears SQLite overrides and restores file defaults
+- `reset` clears SQLite overrides, runtime exemptions, and runtime blocked terms
+
+## Runtime Exemptions
+
+Exempt users bypass deterministic rules and AI timeout execution. Managed via:
+- `aimod exempt <user>` / `aimod unexempt <user>` (whisper)
+- Admin panel Tuning tab
+
+Stored in SQLite `exempt_users` table. Cleared on `aimod reset`.
+
+## Runtime Blocked Terms
+
+Additional blocked terms added at runtime, merged with config `deterministicRules.blockedTerms`. Managed via:
+- `aimod block <term>` / `aimod unblock <term>` (whisper)
+- Admin panel Tuning tab
+
+Stored in SQLite `runtime_blocked_terms` table.
 
 ## Runtime Overrides
 

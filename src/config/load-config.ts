@@ -98,7 +98,17 @@ export async function loadConfig(
       sqlitePath: path.resolve(rootDir, appConfig.storage.sqlitePath),
     },
     promptPacks: appConfig.promptPacks,
-    controlPlane,
+    controlPlane: {
+      enabled: controlPlane.enabled,
+      commandPrefix: controlPlane.commandPrefix,
+      trustedControllerLogins: controlPlane.trustedControllerLogins.length > 0
+        ? controlPlane.trustedControllerLogins
+        : (controlPlane.trustedControllers ?? []).map((c) => c.login),
+      broadcasterAlwaysAllowed: controlPlane.broadcasterAlwaysAllowed,
+      allowedPromptPacks: controlPlane.allowedPromptPacks,
+      modelPresets: controlPlane.modelPresets,
+      ...(controlPlane.trustedControllers ? { trustedControllers: controlPlane.trustedControllers } : {}),
+    },
     secrets: {
       ...(env.OPENAI_API_KEY ? { openaiApiKey: env.OPENAI_API_KEY } : {}),
     },

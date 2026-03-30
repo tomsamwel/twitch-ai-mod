@@ -19,6 +19,7 @@ export const moderationCategorySchema = z.enum([
 ]);
 export type ModerationCategory = z.infer<typeof moderationCategorySchema>;
 export type ProcessingMode = "live" | "replay" | "scenario";
+export type ControllerRole = "broadcaster" | "admin" | "mod";
 export type RuntimeOverrideKey =
   | "aiEnabled"
   | "aiModerationEnabled"
@@ -229,6 +230,7 @@ export interface ConfigSnapshot {
     enabled: boolean;
     commandPrefix: string;
     trustedControllerLogins: string[];
+    trustedControllers?: Array<{ login: string; role: "admin" | "mod" }>;
     broadcasterAlwaysAllowed: boolean;
     allowedPromptPacks: string[];
     modelPresets: Record<
@@ -506,6 +508,7 @@ export interface TrustedController {
   login: string;
   displayName: string;
   source: "config" | "broadcaster";
+  role: ControllerRole;
 }
 
 export type ControlCommand =
@@ -521,7 +524,11 @@ export type ControlCommand =
   | { kind: "reset" }
   | { kind: "panic" }
   | { kind: "chill" }
-  | { kind: "off" };
+  | { kind: "off" }
+  | { kind: "recent"; count: number }
+  | { kind: "stats" }
+  | { kind: "exempt"; subcommand: "add" | "remove" | "list"; userLogin?: string }
+  | { kind: "block"; subcommand: "add" | "remove" | "list"; term?: string };
 
 export interface ControlCommandResult {
   accepted: boolean;

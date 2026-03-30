@@ -42,6 +42,7 @@ export class ActionExecutor {
     private readonly twitchGateway: Pick<TwurpleTwitchGateway, "sendChatMessage" | "timeoutUser">,
     private readonly runtimeSettings: Pick<RuntimeSettingsStore, "getEffectiveSettings">,
     private readonly outboundMessages?: OutboundMessageRecorder,
+    private readonly isUserExempt?: (login: string) => boolean,
   ) {}
 
   public createActionRequest(
@@ -198,6 +199,10 @@ export class ActionExecutor {
 
     if (!action.durationSeconds || action.durationSeconds <= 0) {
       throw new Error("timeout action is missing a valid durationSeconds");
+    }
+
+    if (this.isUserExempt?.(action.targetUserName ?? "")) {
+      return buildResult(action, "skipped", { reason: "target user is exempt from moderation" });
     }
 
     const now = resolveActionTimestamp(action);

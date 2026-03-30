@@ -4,7 +4,7 @@
 
 ```bash
 npm run check            # TypeScript type check
-npm test                 # 94 unit tests (~1.5s), node:test framework
+npm test                 # 151 unit tests (~1.5s), node:test framework
 npm run build            # Compile to dist/
 npm run eval:scenarios   # 70 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
 npm run eval:candidates  # List production decisions worth promoting to eval scenarios
@@ -62,11 +62,17 @@ Three providers: `llama-cpp` (default), `ollama`, `openai` — all behind `AiPro
 Seven overridable settings (SQLite-persisted, survive restart):
 `aiEnabled`, `aiModerationEnabled`, `socialRepliesEnabled`, `dryRun`, `liveModerationEnabled`, `promptPack`, `modelPreset`
 
+Runtime exemptions (`exempt_users` table) and blocked terms (`runtime_blocked_terms` table) are also SQLite-persisted and managed via whisper commands or admin panel.
+
 **`aiModerationEnabled` defaults to `false`** — this is a separate safety gate from `allowLiveModeration` in app.yaml. Both must be on for AI timeouts to execute.
 
 Live AI timeout execution requires ALL of: `dryRun: false` + `allowLiveModeration: true` + `aiModerationEnabled: true` + confidence >= 0.90 + category in allowlist + target not privileged + spam-escalation needs prior evidence.
 
 When bot=broadcaster, whisper control doesn't work — use admin panel at `localhost:3001`.
+
+**Whisper command aliases**: `aim`=ai-moderation, `live`=live-moderation, `dry`=dry-run, `soc`=social. New commands: `recent [N]`, `stats`, `exempt`/`unexempt`, `block`/`unblock`.
+
+**Permission tiers** (in `control-plane.yaml`): `broadcaster` (everything), `admin` (all toggles + management), `mod` (status + exempt + block only). Config uses `trustedControllers: [{login, role}]` format; old `trustedControllerLogins` still works (all default to admin).
 
 ## Prompt System
 

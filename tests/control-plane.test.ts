@@ -21,6 +21,23 @@ function createWhisper(overrides: Partial<WhisperMessage> = {}): WhisperMessage 
   };
 }
 
+function createMockDatabase(overrides: Record<string, unknown> = {}) {
+  return {
+    registerIngestedEvent() { return true; },
+    recordControlAudit() {},
+    getRecentDecisionsForAdmin() { return []; },
+    getHourlyStats() { return { decisions: { total: 0, byOutcome: {} }, actions: { total: 0, byKind: {}, byStatus: {} }, timeouts: { total: 0, bySource: {} } }; },
+    addExemptUser() { return true; },
+    removeExemptUser() { return true; },
+    listExemptUsers() { return []; },
+    addRuntimeBlockedTerm() { return true; },
+    removeRuntimeBlockedTerm() { return true; },
+    listRuntimeBlockedTerms() { return []; },
+    getRuntimeController() { return null; },
+    ...overrides,
+  };
+}
+
 function createRuntimeSettingsState(config = createTestConfig()): {
   effective: EffectiveRuntimeSettings;
   overrides: RuntimeOverrideSnapshot;
@@ -63,6 +80,7 @@ test("WhisperControlPlane denies unauthorized senders without mutating runtime s
         login: "trustedmod",
         displayName: "TrustedMod",
         source: "config",
+        role: "admin",
       },
     ],
     logger,
@@ -86,14 +104,7 @@ test("WhisperControlPlane denies unauthorized senders without mutating runtime s
         return ["local-default", "local-fast"];
       },
     },
-    {
-      registerIngestedEvent() {
-        return true;
-      },
-      recordControlAudit(entry) {
-        audits.push(entry.commandSummary);
-      },
-    },
+    createMockDatabase({ recordControlAudit(entry: { commandSummary: string }) { audits.push(entry.commandSummary); } }),
     {
       async sendWhisper(_targetUserId, message) {
         sentReplies.push(message);
@@ -129,6 +140,7 @@ test("WhisperControlPlane applies trusted commands and replies with status", asy
         login: "testchannel",
         displayName: "TestChannel",
         source: "broadcaster",
+        role: "broadcaster",
       },
     ],
     logger,
@@ -172,14 +184,7 @@ test("WhisperControlPlane applies trusted commands and replies with status", asy
         return ["local-default", "local-fast"];
       },
     },
-    {
-      registerIngestedEvent() {
-        return true;
-      },
-      recordControlAudit(entry) {
-        audits.push(entry.commandSummary);
-      },
-    },
+    createMockDatabase({ recordControlAudit(entry: { commandSummary: string }) { audits.push(entry.commandSummary); } }),
     {
       async sendWhisper(_targetUserId, message) {
         sentReplies.push(message);
@@ -215,6 +220,7 @@ test("WhisperControlPlane ignores duplicate whisper IDs", async () => {
         login: "testchannel",
         displayName: "TestChannel",
         source: "broadcaster",
+        role: "broadcaster",
       },
     ],
     logger,
@@ -234,19 +240,14 @@ test("WhisperControlPlane ignores duplicate whisper IDs", async () => {
         return ["local-default", "local-fast"];
       },
     },
-    {
-      registerIngestedEvent(eventId) {
-        if (seen.has(eventId)) {
-          return false;
-        }
-
+    createMockDatabase({
+      registerIngestedEvent(eventId: string) {
+        if (seen.has(eventId)) return false;
         seen.add(eventId);
         return true;
       },
-      recordControlAudit() {
-        auditCount += 1;
-      },
-    },
+      recordControlAudit() { auditCount += 1; },
+    }),
     {
       async sendWhisper() {
         replyCount += 1;
@@ -270,7 +271,7 @@ test("WhisperControlPlane panic command enables AI + moderation + live-mod and d
 
   const controlPlane = new WhisperControlPlane(
     "aimod",
-    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster" }],
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster", role: "broadcaster" as const }],
     logger,
     {
       getEffectiveSettings() {
@@ -290,12 +291,7 @@ test("WhisperControlPlane panic command enables AI + moderation + live-mod and d
         return ["local-default"];
       },
     },
-    {
-      registerIngestedEvent() {
-        return true;
-      },
-      recordControlAudit() {},
-    },
+    createMockDatabase(),
     {
       async sendWhisper(_targetUserId, message) {
         sentReplies.push(message);
@@ -322,7 +318,7 @@ test("WhisperControlPlane chill command enables AI + social, disables moderation
 
   const controlPlane = new WhisperControlPlane(
     "aimod",
-    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster" }],
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster", role: "broadcaster" as const }],
     logger,
     {
       getEffectiveSettings() {
@@ -342,12 +338,7 @@ test("WhisperControlPlane chill command enables AI + social, disables moderation
         return ["local-default"];
       },
     },
-    {
-      registerIngestedEvent() {
-        return true;
-      },
-      recordControlAudit() {},
-    },
+    createMockDatabase(),
     {
       async sendWhisper(_targetUserId, message) {
         sentReplies.push(message);
@@ -373,7 +364,7 @@ test("WhisperControlPlane off command disables AI", async () => {
 
   const controlPlane = new WhisperControlPlane(
     "aimod",
-    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster" }],
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster", role: "broadcaster" as const }],
     logger,
     {
       getEffectiveSettings() {
@@ -393,12 +384,7 @@ test("WhisperControlPlane off command disables AI", async () => {
         return ["local-default"];
       },
     },
-    {
-      registerIngestedEvent() {
-        return true;
-      },
-      recordControlAudit() {},
-    },
+    createMockDatabase(),
     {
       async sendWhisper(_targetUserId, message) {
         sentReplies.push(message);
@@ -410,4 +396,53 @@ test("WhisperControlPlane off command disables AI", async () => {
 
   assert.match(sentReplies[0] ?? "", /AI disabled/u);
   assert.deepEqual(appliedOverrides, [{ key: "aiEnabled", value: false }]);
+});
+
+test("mod role is denied from set-ai but allowed for status", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "mod-1", login: "channelmod", displayName: "ChannelMod", source: "config", role: "mod" as const }],
+    logger,
+    {
+      getEffectiveSettings() {
+        return state.effective;
+      },
+      getOverrides() {
+        return state.overrides;
+      },
+      setOverride() {
+        throw new Error("should not mutate state for mod role on set-ai");
+      },
+      reset() {
+        throw new Error("should not reset for mod role");
+      },
+      listAvailablePromptPacks() {
+        return ["witty-mod"];
+      },
+      listAvailableModelPresets() {
+        return ["local-default"];
+      },
+    },
+    createMockDatabase(),
+    {
+      async sendWhisper(_targetUserId, message) {
+        sentReplies.push(message);
+      },
+    },
+  );
+
+  await controlPlane.processWhisper(
+    createWhisper({ senderUserId: "mod-1", senderUserLogin: "channelmod", text: "aimod ai on" }),
+  );
+  assert.match(sentReplies[0] ?? "", /don't have permission/u);
+
+  sentReplies.length = 0;
+  await controlPlane.processWhisper(
+    createWhisper({ id: "whisper-2", senderUserId: "mod-1", senderUserLogin: "channelmod", text: "aimod status" }),
+  );
+  assert.match(sentReplies[0] ?? "", /ai=/u);
 });

@@ -6,10 +6,10 @@
 <title>twitch-ai-mod</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0e0e10; color: #efeff1; padding: 1.5rem; max-width: 800px; margin: 0 auto; }
-  h1 { font-size: 1.2rem; color: #9147ff; margin-bottom: 1.5rem; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0e0e10; color: #efeff1; padding: 1.5rem; max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.2rem; color: #9147ff; margin-bottom: 0.75rem; }
   h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: #adadb8; margin-bottom: 0.75rem; }
-  section { background: #18181b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  .panel { background: #18181b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
   .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #2f2f35; }
   .toggle-row:last-child { border-bottom: none; }
   .toggle-label { font-size: 0.85rem; }
@@ -17,96 +17,365 @@
   .toggle-btn { background: #2f2f35; border: none; color: #efeff1; padding: 0.35rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; min-width: 50px; }
   .toggle-btn.on { background: #00c853; color: #000; }
   .toggle-btn.off { background: #c62828; color: #fff; }
-  select { background: #2f2f35; border: 1px solid #3f3f46; color: #efeff1; padding: 0.35rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-  .reset-btn { background: #c62828; border: none; color: #fff; padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; margin-top: 0.5rem; }
-  .reset-btn:hover { background: #e53935; }
+
+  select, input[type=text], input[type=number] {
+    background: #2f2f35; border: 1px solid #3f3f46; color: #efeff1;
+    padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.82rem;
+    outline: none; transition: border-color 0.15s;
+  }
+  select:focus, input:focus { border-color: #9147ff; }
+  input[type=text] { width: 200px; }
+  input[type=text]::placeholder { color: #71717a; }
+
+  .btn { background: #9147ff; border: none; color: #fff; padding: 0.35rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
+  .btn:hover { background: #7c3aed; }
+  .btn-danger { background: #c62828; }
+  .btn-danger:hover { background: #e53935; }
+  .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.7rem; }
+  .btn-ghost { background: transparent; color: #adadb8; border: 1px solid #3f3f46; }
+  .btn-ghost:hover { color: #efeff1; border-color: #9147ff; }
+
   .status-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.8rem; }
   .status-value { color: #adadb8; }
   .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
   .status-dot.green { background: #00c853; }
   .status-dot.red { background: #c62828; }
+
   .activity-item { padding: 0.5rem 0; border-bottom: 1px solid #2f2f35; font-size: 0.8rem; }
   .activity-item:last-child { border-bottom: none; }
   .activity-meta { color: #adadb8; font-size: 0.7rem; margin-top: 0.2rem; }
+
   .badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
-  .badge-abstain { background: #2f2f35; color: #adadb8; }
+  .badge-abstain, .badge-ignored, .badge-no_action, .badge-suppressed { background: #2f2f35; color: #adadb8; }
   .badge-action { background: #9147ff; color: #fff; }
-  .badge-ignored { background: #2f2f35; color: #666; }
-  .badge-no_action { background: #2f2f35; color: #adadb8; }
+  .badge-say { background: #1565c0; color: #fff; }
+  .badge-warn { background: #e65100; color: #fff; }
+  .badge-timeout { background: #b71c1c; color: #fff; }
+  .badge-admin { background: #9147ff; color: #fff; }
+  .badge-mod { background: #2f8a46; color: #fff; }
+  .badge-broadcaster { background: #d4a017; color: #000; }
+  .badge-config { background: #2f2f35; color: #adadb8; }
+  .badge-runtime { background: #1e3a5f; color: #7ec8f0; }
+
   .error { color: #c62828; font-size: 0.8rem; padding: 0.5rem; }
+
+  nav { display: flex; gap: 0.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  nav button { background: #2f2f35; border: none; color: #adadb8; padding: 0.5rem 1rem; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 0.8rem; }
+  nav button.active { background: #18181b; color: #efeff1; border-bottom: 2px solid #9147ff; }
+
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  th { text-align: left; color: #adadb8; font-size: 0.7rem; text-transform: uppercase; padding: 0.4rem 0.3rem; border-bottom: 1px solid #2f2f35; }
+  td { padding: 0.4rem 0.3rem; border-bottom: 1px solid #1f1f23; vertical-align: top; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+  .stat-card { background: #1f1f23; border-radius: 6px; padding: 0.75rem; text-align: center; }
+  .stat-card .stat-value { font-size: 1.5rem; font-weight: 700; color: #9147ff; }
+  .stat-card .stat-label { font-size: 0.7rem; color: #adadb8; text-transform: uppercase; }
+
+  .inline-form { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; background: #2f2f35; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.75rem; margin: 0.15rem; gap: 0.3rem; }
+  .chip .remove { cursor: pointer; color: #c62828; font-size: 0.85rem; line-height: 1; }
+  .chip .remove:hover { color: #e53935; }
+  .load-more { text-align: center; padding: 0.5rem; }
+
+  /* Autocomplete */
+  .autocomplete-wrap { position: relative; display: inline-block; }
+  .autocomplete-wrap input { width: 200px; }
+  .ac-list { position: absolute; top: 100%; left: 0; right: 0; background: #2f2f35; border: 1px solid #3f3f46; border-radius: 0 0 6px 6px; max-height: 180px; overflow-y: auto; z-index: 10; display: none; }
+  .ac-list.open { display: block; }
+  .ac-item { padding: 0.35rem 0.6rem; font-size: 0.8rem; cursor: pointer; }
+  .ac-item:hover, .ac-item.active { background: #3f3f46; color: #fff; }
+
+  /* Filter bar */
+  .filter-bar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.75rem; }
+  .filter-bar select { min-width: 100px; }
+
+  /* Clickable usernames */
+  .user-link { color: #bf94ff; cursor: pointer; text-decoration: none; font-weight: 600; }
+  .user-link:hover { text-decoration: underline; color: #d4b5ff; }
+
+  /* Controller table */
+  .ctrl-table td:last-child { text-align: right; }
 </style>
 </head>
 <body>
 
 <h1>twitch-ai-mod admin</h1>
 
-<section id="llama-section">
-  <h2>LLM Server</h2>
-  <div id="llama-status">Loading...</div>
-</section>
+<nav id="tabs">
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="activity">Activity</button>
+  <button data-tab="audit">Audit Log</button>
+  <button data-tab="users">Users</button>
+  <button data-tab="tuning">Tuning</button>
+</nav>
 
-<section>
-  <h2>Settings</h2>
-  <div id="settings">Loading...</div>
-</section>
+<!-- Dashboard Tab -->
+<div id="tab-dashboard" class="tab active">
+  <section class="panel" id="llama-section">
+    <h2>LLM Server</h2>
+    <div id="llama-status">Loading...</div>
+  </section>
+  <section class="panel" id="stats-section">
+    <h2>Last Hour</h2>
+    <div id="stats-summary"></div>
+  </section>
+  <section class="panel">
+    <h2>Settings</h2>
+    <div id="settings">Loading...</div>
+  </section>
+  <section class="panel">
+    <h2>Pack / Model</h2>
+    <div id="selectors">Loading...</div>
+  </section>
+  <section class="panel">
+    <h2>Recent Activity</h2>
+    <div id="activity">Loading...</div>
+  </section>
+</div>
 
-<section>
-  <h2>Pack / Model</h2>
-  <div id="selectors">Loading...</div>
-</section>
+<!-- Activity Tab -->
+<div id="tab-activity" class="tab">
+  <section class="panel">
+    <h2>Activity Feed <button class="btn btn-sm" onclick="loadActivity(true)">Refresh</button></h2>
+    <div class="filter-bar">
+      <div class="autocomplete-wrap" id="act-chatter-wrap">
+        <input type="text" id="act-chatter" placeholder="chatter..." autocomplete="off">
+      </div>
+      <select id="act-outcome"><option value="">outcome</option><option>action</option><option>abstain</option><option>no_action</option><option>suppressed</option></select>
+      <select id="act-stage"><option value="">stage</option><option>ai</option><option>rules</option></select>
+      <select id="act-range"><option value="">all time</option><option value="1">1h</option><option value="6">6h</option><option value="24">24h</option></select>
+    </div>
+    <div id="activity-feed"></div>
+    <div class="load-more"><button class="btn btn-sm" id="act-more" onclick="loadActivity(false, true)" style="display:none">Load more</button></div>
+  </section>
+</div>
 
-<section>
-  <h2>Recent Activity</h2>
-  <div id="activity">Loading...</div>
-</section>
+<!-- Audit Log Tab -->
+<div id="tab-audit" class="tab">
+  <section class="panel">
+    <h2>Control Audit Log <button class="btn btn-sm" onclick="loadAudit()">Refresh</button></h2>
+    <div id="audit-feed"></div>
+    <div class="load-more"><button class="btn btn-sm" id="audit-more" onclick="loadAudit(true)" style="display:none">Load more</button></div>
+  </section>
+</div>
+
+<!-- Users Tab -->
+<div id="tab-users" class="tab">
+  <section class="panel">
+    <h2>User Lookup</h2>
+    <div class="inline-form">
+      <div class="autocomplete-wrap" id="user-login-wrap">
+        <input type="text" id="user-login" placeholder="search chatter..." autocomplete="off">
+      </div>
+    </div>
+    <div id="user-result"></div>
+  </section>
+</div>
+
+<!-- Tuning Tab -->
+<div id="tab-tuning" class="tab">
+  <section class="panel">
+    <h2>Controllers</h2>
+    <div class="inline-form">
+      <input type="text" id="ctrl-login" placeholder="login">
+      <select id="ctrl-role"><option value="admin">admin</option><option value="mod">mod</option></select>
+      <button class="btn" onclick="addController()">Add</button>
+    </div>
+    <div id="controller-list"></div>
+  </section>
+  <section class="panel">
+    <h2>Exempt Users</h2>
+    <div class="inline-form">
+      <input type="text" id="exempt-login" placeholder="login to exempt">
+      <button class="btn" onclick="addExemption()">Add</button>
+    </div>
+    <div id="exempt-list"></div>
+  </section>
+  <section class="panel">
+    <h2>Runtime Blocked Terms</h2>
+    <div class="inline-form">
+      <input type="text" id="block-term" placeholder="term to block">
+      <button class="btn" onclick="addBlockedTerm()">Add</button>
+    </div>
+    <div id="blocked-list"></div>
+  </section>
+  <section class="panel">
+    <h2>Provider Health</h2>
+    <div id="health-info">Loading...</div>
+  </section>
+</div>
 
 <script>
 const API = '';
+let activityOffset = 0;
+let auditOffset = 0;
+
+// --- Utilities ---
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = String(str ?? '');
+  return d.innerHTML;
+}
+
+function timeAgo(iso) {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  return Math.floor(s / 3600) + 'h ago';
+}
+
+function jsonPost(url, body) {
+  return fetch(API + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function userLink(login) {
+  return `<a class="user-link" data-user="${esc(login)}">@${esc(login)}</a>`;
+}
+
+function renderActions(actionsSummary) {
+  if (!actionsSummary) return '';
+  return actionsSummary.split(', ').map(pair => {
+    const [kind, status] = pair.split(':');
+    const label = status === 'dry-run' ? kind + '(dry)' : status === 'skipped' ? kind + '(skip)' : kind;
+    return `<span class="badge badge-${esc(kind)}">${esc(label)}</span>`;
+  }).join(' ');
+}
+
+// Global click handler for user links
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('.user-link');
+  if (!link) return;
+  e.preventDefault();
+  const login = link.dataset.user;
+  if (!login) return;
+  // Switch to users tab
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-users').classList.add('active');
+  document.querySelector('#tabs button[data-tab="users"]').classList.add('active');
+  document.getElementById('user-login').value = login;
+  doLoadUser(login);
+});
+
+// --- Tab switching ---
+
+document.getElementById('tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  const name = btn.dataset.tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'activity') loadActivity(true);
+  if (name === 'audit') loadAudit();
+  if (name === 'tuning') { loadControllers(); loadExemptions(); loadBlockedTerms(); loadHealth(); }
+});
+
+// --- Autocomplete ---
+
+function setupAutocomplete(wrapId, inputId, onSelect) {
+  const wrap = document.getElementById(wrapId);
+  const input = document.getElementById(inputId);
+  let list = wrap.querySelector('.ac-list');
+  if (!list) {
+    list = document.createElement('div');
+    list.className = 'ac-list';
+    wrap.appendChild(list);
+  }
+  let activeIdx = -1;
+  let items = [];
+
+  const fetchSuggestions = debounce(async () => {
+    const v = input.value.trim().toLowerCase().replace(/^@/, '');
+    if (v.length < 1) { list.classList.remove('open'); return; }
+    try {
+      const r = await fetch(API + '/api/chatters?prefix=' + encodeURIComponent(v));
+      items = await r.json();
+      if (items.length === 0) { list.classList.remove('open'); return; }
+      activeIdx = -1;
+      list.innerHTML = items.map((login, i) => `<div class="ac-item" data-i="${i}">@${esc(login)}</div>`).join('');
+      list.classList.add('open');
+    } catch { list.classList.remove('open'); }
+  }, 200);
+
+  input.addEventListener('input', fetchSuggestions);
+
+  input.addEventListener('keydown', (e) => {
+    if (!list.classList.contains('open')) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx + 1, items.length - 1); highlightAc(list, activeIdx); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx - 1, 0); highlightAc(list, activeIdx); }
+    else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); pick(items[activeIdx]); }
+    else if (e.key === 'Escape') { list.classList.remove('open'); }
+  });
+
+  list.addEventListener('click', (e) => {
+    const item = e.target.closest('.ac-item');
+    if (item) pick(items[Number(item.dataset.i)]);
+  });
+
+  function pick(login) {
+    input.value = login;
+    list.classList.remove('open');
+    if (onSelect) onSelect(login);
+  }
+
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) list.classList.remove('open'); });
+}
+
+function highlightAc(list, idx) {
+  list.querySelectorAll('.ac-item').forEach((el, i) => el.classList.toggle('active', i === idx));
+}
+
+// --- Activity rendering (shared) ---
+
+function renderActivityHtml(items) {
+  return items.map(a => {
+    const badge = `<span class="badge badge-${esc(a.outcome)}">${esc(a.outcome)}</span>`;
+    const acts = renderActions(a.actions);
+    const text = a.text ? ` "${esc(a.text)}"` : '';
+    const conf = a.confidence ? ` conf=${Number(a.confidence).toFixed(2)}` : '';
+    const cat = a.category && a.category !== 'none' ? ` [${esc(a.category)}]` : '';
+    return `<div class="activity-item">${badge} ${acts} ${userLink(a.chatter)}${text}<div class="activity-meta">${esc(a.mode || a.stage)}${conf}${cat} &mdash; ${esc(a.reason)} &mdash; ${timeAgo(a.createdAt)}</div></div>`;
+  }).join('');
+}
+
+// --- Dashboard ---
 
 async function fetchStatus() {
-  try {
-    const res = await fetch(API + '/api/status');
-    if (!res.ok) throw new Error('fetch failed');
-    return await res.json();
-  } catch (e) {
-    return null;
-  }
+  try { const r = await fetch(API + '/api/status'); return r.ok ? await r.json() : null; } catch { return null; }
 }
 
-async function setSetting(key, value) {
-  await fetch(API + '/api/settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value }),
-  });
-  refresh();
-}
+async function setSetting(key, value) { await jsonPost('/api/settings', { key, value }); refreshDashboard(); }
 
 async function resetAll() {
   if (!confirm('Reset all overrides to defaults?')) return;
   await fetch(API + '/api/reset', { method: 'POST' });
-  refresh();
+  refreshDashboard();
 }
 
-function renderToggle(key, label, description, value) {
-  return `<div class="toggle-row">
-    <div class="toggle-label">${label}<small>${description}</small></div>
-    <button class="toggle-btn ${value ? 'on' : 'off'}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button>
-  </div>`;
+function renderToggle(key, label, desc, value) {
+  return `<div class="toggle-row"><div class="toggle-label">${label}<small>${desc}</small></div><button class="toggle-btn ${value ? 'on' : 'off'}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button></div>`;
 }
 
 function renderLlama(llama) {
-  if (!llama) {
-    document.getElementById('llama-section').style.display = 'none';
-    return;
-  }
+  if (!llama) { document.getElementById('llama-section').style.display = 'none'; return; }
   document.getElementById('llama-section').style.display = '';
   const dot = llama.running ? 'green' : 'red';
   document.getElementById('llama-status').innerHTML = `
     <div class="status-row"><span><span class="status-dot ${dot}"></span>${llama.running ? 'Running' : 'Stopped'}</span><span class="status-value">PID ${llama.pid || '-'}</span></div>
-    <div class="status-row"><span>Model</span><span class="status-value">${llama.model}</span></div>
-    <div class="status-row"><span>Port</span><span class="status-value">${llama.port}</span></div>
-  `;
+    <div class="status-row"><span>Model</span><span class="status-value">${esc(llama.model)}</span></div>
+    <div class="status-row"><span>Port</span><span class="status-value">${llama.port}</span></div>`;
 }
 
 function renderSettings(s) {
@@ -116,78 +385,296 @@ function renderSettings(s) {
     renderToggle('socialRepliesEnabled', 'Social Replies', 'Allow social chat responses', s.socialRepliesEnabled),
     renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled),
     renderToggle('dryRun', 'Dry Run', 'Prevent all real actions', s.dryRun),
-    `<button class="reset-btn" onclick="resetAll()">Reset All Overrides</button>`,
+    `<button class="btn btn-danger" style="margin-top:0.5rem" onclick="resetAll()">Reset All Overrides</button>`,
   ].join('');
 }
 
 function renderSelectors(data) {
-  const packOptions = data.availablePacks.map(p =>
-    `<option value="${p}" ${data.settings.promptPack === p ? 'selected' : ''}>${p}</option>`
-  ).join('');
-  const modelOptions = data.availableModels.map(m =>
-    `<option value="${m}" ${data.settings.modelPreset === m ? 'selected' : ''}>${m}</option>`
-  ).join('');
+  const pOpts = data.availablePacks.map(p => `<option value="${p}" ${data.settings.promptPack === p ? 'selected' : ''}>${p}</option>`).join('');
+  const mOpts = data.availableModels.map(m => `<option value="${m}" ${data.settings.modelPreset === m ? 'selected' : ''}>${m}</option>`).join('');
   document.getElementById('selectors').innerHTML = `
-    <div class="toggle-row">
-      <div class="toggle-label">Prompt Pack</div>
-      <select onchange="setSetting('promptPack', this.value)">${packOptions}</select>
-    </div>
-    <div class="toggle-row">
-      <div class="toggle-label">Model Preset</div>
-      <select onchange="setSetting('modelPreset', this.value)">
-        <option value="">default</option>
-        ${modelOptions}
-      </select>
-    </div>
-  `;
+    <div class="toggle-row"><div class="toggle-label">Prompt Pack</div><select onchange="setSetting('promptPack', this.value)">${pOpts}</select></div>
+    <div class="toggle-row"><div class="toggle-label">Model Preset</div><select onchange="setSetting('modelPreset', this.value)"><option value="">default</option>${mOpts}</select></div>`;
 }
 
-function timeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return s + 's ago';
-  const m = Math.floor(s / 60);
-  if (m < 60) return m + 'm ago';
-  return Math.floor(m / 60) + 'h ago';
-}
-
-function esc(str) {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
-}
-
-function renderActivity(items) {
-  if (!items || items.length === 0) {
-    document.getElementById('activity').innerHTML = '<div class="activity-meta">No recent activity</div>';
-    return;
-  }
-  document.getElementById('activity').innerHTML = items.map(a => {
-    const badge = `<span class="badge badge-${esc(a.outcome)}">${esc(a.outcome)}</span>`;
-    const text = a.text ? `"${esc(a.text)}"` : '';
-    const conf = a.confidence ? ` conf=${esc(String(a.confidence))}` : '';
-    const cat = a.category && a.category !== 'none' ? ` [${esc(a.category)}]` : '';
-    return `<div class="activity-item">
-      ${badge} <strong>@${esc(a.chatter)}</strong> ${text}
-      <div class="activity-meta">${esc(a.mode || a.stage)}${conf}${cat} &mdash; ${esc(a.reason)} &mdash; ${timeAgo(a.createdAt)}</div>
+async function renderStats() {
+  try {
+    const r = await fetch(API + '/api/stats');
+    const data = await r.json();
+    const s = data.stats;
+    const q = data.aiQueue;
+    document.getElementById('stats-summary').innerHTML = `<div class="stat-grid">
+      <div class="stat-card"><div class="stat-value">${s.decisions.total}</div><div class="stat-label">Decisions</div></div>
+      <div class="stat-card"><div class="stat-value">${s.timeouts.total}</div><div class="stat-label">Timeouts</div></div>
+      <div class="stat-card"><div class="stat-value">${s.actions.byKind?.warn ?? 0}</div><div class="stat-label">Warns</div></div>
+      <div class="stat-card"><div class="stat-value">${s.actions.byKind?.say ?? 0}</div><div class="stat-label">Says</div></div>
+      <div class="stat-card"><div class="stat-value">${q ? q.depth : '-'}</div><div class="stat-label">Queue</div></div>
     </div>`;
-  }).join('');
+  } catch { document.getElementById('stats-summary').innerHTML = ''; }
 }
 
-async function refresh() {
+async function refreshDashboard() {
   const data = await fetchStatus();
-  if (!data) {
-    document.getElementById('settings').innerHTML = '<div class="error">Failed to connect to bot</div>';
-    return;
-  }
+  if (!data) { document.getElementById('settings').innerHTML = '<div class="error">Failed to connect</div>'; return; }
   renderLlama(data.llamaServer);
   renderSettings(data.settings);
   renderSelectors(data);
-  renderActivity(data.recentActivity);
+  const actEl = document.getElementById('activity');
+  if (!data.recentActivity || data.recentActivity.length === 0) actEl.innerHTML = '<div class="activity-meta">No activity</div>';
+  else actEl.innerHTML = renderActivityHtml(data.recentActivity);
+  renderStats();
 }
 
-refresh();
-setInterval(refresh, 3000);
+// --- Activity Feed ---
+
+const debouncedActivity = debounce(() => loadActivity(true), 300);
+
+async function loadActivity(reset, more) {
+  if (reset) activityOffset = 0;
+  if (more) activityOffset += 25;
+  const params = new URLSearchParams({ limit: '25', offset: String(activityOffset) });
+  const chatter = document.getElementById('act-chatter').value.trim().toLowerCase().replace(/^@/, '');
+  const outcome = document.getElementById('act-outcome').value;
+  const stage = document.getElementById('act-stage').value;
+  const range = document.getElementById('act-range').value;
+  if (chatter) params.set('chatter', chatter);
+  if (outcome) params.set('outcome', outcome);
+  if (stage) params.set('stage', stage);
+  if (range) params.set('after', new Date(Date.now() - Number(range) * 3600000).toISOString());
+  try {
+    const r = await fetch(API + '/api/activity?' + params);
+    const data = await r.json();
+    const container = document.getElementById('activity-feed');
+    if (activityOffset === 0) container.innerHTML = '';
+    if (data.rows.length === 0 && activityOffset === 0) { container.innerHTML = '<div class="activity-meta">No activity</div>'; }
+    else { container.innerHTML += renderActivityHtml(data.rows); }
+    document.getElementById('act-more').style.display = data.rows.length === 25 ? '' : 'none';
+  } catch { document.getElementById('activity-feed').innerHTML = '<div class="error">Failed to load</div>'; }
+}
+
+// --- Audit Log ---
+
+async function loadAudit(more) {
+  if (!more) auditOffset = 0;
+  else auditOffset += 25;
+  try {
+    const r = await fetch(API + `/api/audit?limit=25&offset=${auditOffset}`);
+    const data = await r.json();
+    const container = document.getElementById('audit-feed');
+    if (auditOffset === 0) container.innerHTML = '';
+    if (data.rows.length === 0 && auditOffset === 0) { container.innerHTML = '<div class="activity-meta">No audit entries</div>'; return; }
+    const rowsHtml = data.rows.map(a => `<tr><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : 'FAIL'}</td><td>${a.highRisk ? '<span style="color:#c62828">YES</span>' : '-'}</td></tr>`).join('');
+    if (auditOffset === 0) {
+      container.innerHTML = `<table><thead><tr><th>Time</th><th>Actor</th><th>Command</th><th>Status</th><th>High Risk</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+    } else {
+      container.querySelector('tbody').innerHTML += rowsHtml;
+    }
+    document.getElementById('audit-more').style.display = data.rows.length === 25 ? '' : 'none';
+  } catch { document.getElementById('audit-feed').innerHTML = '<div class="error">Failed to load</div>'; }
+}
+
+// --- User Lookup ---
+
+const debouncedUser = debounce((login) => {
+  if (login && login.length >= 2) doLoadUser(login);
+}, 400);
+
+async function doLoadUser(login) {
+  login = login.trim().toLowerCase().replace(/^@/, '');
+  if (!login) return;
+  try {
+    const r = await fetch(API + '/api/user?login=' + encodeURIComponent(login));
+    const data = await r.json();
+    let html = `<div style="margin-top:0.75rem"><strong>@${esc(login)}</strong> &mdash; ${data.isExempt ? '<span style="color:#00c853">Exempt</span>' : 'Not exempt'}</div>`;
+    if (data.messages.length > 0) {
+      html += `<h2 style="margin-top:1rem">Messages (${data.messages.length})</h2><table><thead><tr><th>Time</th><th>Text</th></tr></thead><tbody>` +
+        data.messages.map(m => `<tr><td>${timeAgo(m.receivedAt)}</td><td>${esc(m.text)}</td></tr>`).join('') + `</tbody></table>`;
+    }
+    if (data.decisions.length > 0) {
+      html += `<h2 style="margin-top:1rem">Decisions (${data.decisions.length})</h2><table><thead><tr><th>Time</th><th>Stage</th><th>Outcome</th><th>Reason</th></tr></thead><tbody>` +
+        data.decisions.map(d => `<tr><td>${timeAgo(d.createdAt)}</td><td>${esc(d.stage)}</td><td><span class="badge badge-${esc(d.outcome)}">${esc(d.outcome)}</span></td><td>${esc(d.reason)}</td></tr>`).join('') + `</tbody></table>`;
+    }
+    if (data.actions.length > 0) {
+      html += `<h2 style="margin-top:1rem">Actions (${data.actions.length})</h2><table><thead><tr><th>Time</th><th>Kind</th><th>Status</th><th>Source</th></tr></thead><tbody>` +
+        data.actions.map(a => `<tr><td>${timeAgo(a.createdAt)}</td><td>${esc(a.kind)}</td><td>${esc(a.status)}</td><td>${esc(a.source)}</td></tr>`).join('') + `</tbody></table>`;
+    }
+    if (data.messages.length === 0 && data.decisions.length === 0 && data.actions.length === 0) {
+      html += '<div class="activity-meta" style="margin-top:0.5rem">No history found</div>';
+    }
+    document.getElementById('user-result').innerHTML = html;
+  } catch { document.getElementById('user-result').innerHTML = '<div class="error">Failed to load</div>'; }
+}
+
+// --- Controllers ---
+
+async function loadControllers() {
+  try {
+    const r = await fetch(API + '/api/controllers');
+    const data = await r.json();
+    const runtimeLogins = new Set(data.runtime.map(c => c.login));
+    const all = [
+      ...data.config.map(c => ({ ...c, source: 'config', overridden: runtimeLogins.has(c.login) })),
+      ...data.runtime.map(c => ({ ...c, source: 'runtime', overridden: false })),
+    ];
+    if (all.length === 0) {
+      document.getElementById('controller-list').innerHTML = '<div class="activity-meta">No controllers configured</div>';
+      return;
+    }
+    let html = '<table class="ctrl-table"><thead><tr><th>Login</th><th>Role</th><th>Source</th><th></th></tr></thead><tbody>';
+    for (const c of all) {
+      if (c.source === 'config' && c.overridden) continue;
+      const roleBadge = `<span class="badge badge-${esc(c.role)}">${esc(c.role)}</span>`;
+      const srcBadge = `<span class="badge badge-${esc(c.source)}">${esc(c.source)}</span>`;
+      const otherRole = c.role === 'admin' ? 'mod' : 'admin';
+      let actions;
+      if (c.source === 'runtime') {
+        actions = `<button class="btn-ghost btn-sm" onclick="changeControllerRole('${esc(c.login)}','${otherRole}')">set ${otherRole}</button> `;
+        actions += `<button class="btn-danger btn-sm" onclick="removeController('${esc(c.login)}')">remove</button>`;
+      } else {
+        actions = `<button class="btn-ghost btn-sm" onclick="overrideController('${esc(c.login)}','${otherRole}')">set ${otherRole}</button> `;
+        actions += `<button class="btn-danger btn-sm" onclick="overrideRemoveController('${esc(c.login)}')">remove</button>`;
+      }
+      html += `<tr><td>${userLink(c.login)}</td><td>${roleBadge}</td><td>${srcBadge}</td><td>${actions}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('controller-list').innerHTML = html;
+  } catch { document.getElementById('controller-list').innerHTML = '<div class="error">Failed to load</div>'; }
+}
+
+async function addController() {
+  const login = document.getElementById('ctrl-login').value.trim().toLowerCase();
+  const role = document.getElementById('ctrl-role').value;
+  if (!login) return;
+  await jsonPost('/api/controllers', { login, role });
+  document.getElementById('ctrl-login').value = '';
+  loadControllers();
+}
+
+async function removeController(login) {
+  await jsonPost('/api/controllers/remove', { login });
+  loadControllers();
+}
+
+async function changeControllerRole(login, role) {
+  await jsonPost('/api/controllers/role', { login, role });
+  loadControllers();
+}
+
+async function overrideController(login, role) {
+  await jsonPost('/api/controllers', { login, role });
+  loadControllers();
+}
+
+async function overrideRemoveController(login) {
+  // For config controllers, "removing" means adding a runtime entry that the control plane
+  // will check. Since we can't delete YAML entries, we note this is config-managed.
+  if (!confirm(`@${login} is defined in YAML config. Remove the runtime override? To fully remove, edit control-plane.yaml.`)) return;
+  await jsonPost('/api/controllers/remove', { login });
+  loadControllers();
+}
+
+// --- Exemptions ---
+
+async function loadExemptions() {
+  try {
+    const r = await fetch(API + '/api/exemptions');
+    const list = await r.json();
+    if (list.length === 0) { document.getElementById('exempt-list').innerHTML = '<div class="activity-meta">No exempt users</div>'; return; }
+    document.getElementById('exempt-list').innerHTML = list.map(u =>
+      `<span class="chip">@${esc(u.userLogin)} <span class="remove" onclick="removeExemption('${esc(u.userLogin)}')">&times;</span></span>`
+    ).join('');
+  } catch { document.getElementById('exempt-list').innerHTML = ''; }
+}
+
+async function addExemption() {
+  const login = document.getElementById('exempt-login').value.trim().toLowerCase();
+  if (!login) return;
+  await jsonPost('/api/exemptions', { login });
+  document.getElementById('exempt-login').value = '';
+  loadExemptions();
+}
+
+async function removeExemption(login) {
+  await jsonPost('/api/exemptions/remove', { login });
+  loadExemptions();
+}
+
+// --- Blocked Terms ---
+
+async function loadBlockedTerms() {
+  try {
+    const r = await fetch(API + '/api/blocked-terms');
+    const list = await r.json();
+    if (list.length === 0) { document.getElementById('blocked-list').innerHTML = '<div class="activity-meta">No runtime blocked terms</div>'; return; }
+    document.getElementById('blocked-list').innerHTML = list.map(t =>
+      `<span class="chip">"${esc(t.term)}" <span class="remove" onclick="removeBlockedTerm('${esc(t.term)}')">&times;</span></span>`
+    ).join('');
+  } catch { document.getElementById('blocked-list').innerHTML = ''; }
+}
+
+async function addBlockedTerm() {
+  const term = document.getElementById('block-term').value.trim();
+  if (!term) return;
+  await jsonPost('/api/blocked-terms', { term });
+  document.getElementById('block-term').value = '';
+  loadBlockedTerms();
+}
+
+async function removeBlockedTerm(term) {
+  await jsonPost('/api/blocked-terms/remove', { term });
+  loadBlockedTerms();
+}
+
+// --- Health ---
+
+async function loadHealth() {
+  try {
+    const r = await fetch(API + '/api/health');
+    const data = await r.json();
+    let html = '';
+    if (data.llamaServer) {
+      const dot = data.llamaServer.running ? 'green' : 'red';
+      html += `<div class="status-row"><span><span class="status-dot ${dot}"></span>llama-server ${data.llamaServer.running ? 'Running' : 'Stopped'}</span><span class="status-value">PID ${data.llamaServer.pid || '-'} / port ${data.llamaServer.port}</span></div>`;
+      html += `<div class="status-row"><span>Model</span><span class="status-value">${esc(data.llamaServer.model)}</span></div>`;
+    }
+    if (data.aiQueue) {
+      const q = data.aiQueue;
+      html += `<div class="status-row"><span>Queue depth</span><span class="status-value">${q.depth}</span></div>`;
+      html += `<div class="status-row"><span>Processing</span><span class="status-value">${q.processing}</span></div>`;
+      html += `<div class="status-row"><span>Total processed</span><span class="status-value">${q.totalProcessed}</span></div>`;
+      html += `<div class="status-row"><span>Dropped (capacity)</span><span class="status-value">${q.totalDroppedCapacity}</span></div>`;
+      html += `<div class="status-row"><span>Dropped (stale)</span><span class="status-value">${q.totalDroppedStale}</span></div>`;
+    }
+    if (!html) html = '<div class="activity-meta">No provider info available</div>';
+    document.getElementById('health-info').innerHTML = html;
+  } catch { document.getElementById('health-info').innerHTML = '<div class="error">Failed to load</div>'; }
+}
+
+// --- Init ---
+
+// Autocomplete on activity chatter filter
+setupAutocomplete('act-chatter-wrap', 'act-chatter', () => loadActivity(true));
+
+// Autocomplete on user lookup (also triggers search)
+setupAutocomplete('user-login-wrap', 'user-login', (login) => doLoadUser(login));
+
+// Live filtering: dropdowns trigger immediately, chatter input is debounced
+document.getElementById('act-outcome').addEventListener('change', () => loadActivity(true));
+document.getElementById('act-stage').addEventListener('change', () => loadActivity(true));
+document.getElementById('act-range').addEventListener('change', () => loadActivity(true));
+document.getElementById('act-chatter').addEventListener('input', debouncedActivity);
+
+// User lookup: search as you type
+document.getElementById('user-login').addEventListener('input', (e) => debouncedUser(e.target.value));
+
+// Enter key on inputs
+document.getElementById('exempt-login').addEventListener('keydown', (e) => { if (e.key === 'Enter') addExemption(); });
+document.getElementById('block-term').addEventListener('keydown', (e) => { if (e.key === 'Enter') addBlockedTerm(); });
+document.getElementById('ctrl-login').addEventListener('keydown', (e) => { if (e.key === 'Enter') addController(); });
+document.getElementById('user-login').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLoadUser(e.target.value); });
+
+refreshDashboard();
+setInterval(() => { if (document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard(); }, 3000);
 </script>
 </body>
 </html>

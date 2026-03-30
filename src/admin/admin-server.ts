@@ -26,6 +26,11 @@ interface AiReviewQueueLike {
   getStats(): AiReviewQueueStats;
 }
 
+interface ConfigController {
+  login: string;
+  role: string;
+}
+
 interface AdminServerOptions {
   runtimeSettings: RuntimeSettingsStore;
   database: BotDatabase;
@@ -33,6 +38,7 @@ interface AdminServerOptions {
   port: number;
   llamaServerManager?: LlamaServerManager | undefined;
   aiReviewQueue?: AiReviewQueueLike | undefined;
+  configControllers?: ConfigController[] | undefined;
 }
 
 export class AdminServer {
@@ -84,6 +90,54 @@ export class AdminServer {
     }
     if (req.method === "POST" && url.pathname === "/api/reset") {
       return this.handlePostReset(res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/activity") {
+      return this.handleGetActivity(url, res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/audit") {
+      return this.handleGetAudit(url, res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/user") {
+      return this.handleGetUser(url, res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/stats") {
+      return this.handleGetStats(res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/exemptions") {
+      return this.handleGetExemptions(res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/exemptions") {
+      return this.handlePostExemptions(req, res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/exemptions/remove") {
+      return this.handlePostExemptionsRemove(req, res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/blocked-terms") {
+      return this.handleGetBlockedTerms(res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/blocked-terms") {
+      return this.handlePostBlockedTerms(req, res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/blocked-terms/remove") {
+      return this.handlePostBlockedTermsRemove(req, res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/health") {
+      return this.handleGetHealth(res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/controllers") {
+      return this.handleGetControllers(res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/controllers") {
+      return this.handlePostControllers(req, res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/controllers/remove") {
+      return this.handlePostControllersRemove(req, res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/controllers/role") {
+      return this.handlePostControllersRole(req, res);
+    }
+    if (req.method === "GET" && url.pathname === "/api/chatters") {
+      return this.handleGetChatters(url, res);
     }
 
     res.writeHead(404, { "Content-Type": "application/json" });
@@ -166,6 +220,168 @@ export class AdminServer {
     res.end(JSON.stringify({ ok: true }));
   }
 
+  private handleGetActivity(url: URL, res: http.ServerResponse): void {
+    const limit = Math.min(Number(url.searchParams.get("limit") ?? "25"), 100);
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    const filters: Record<string, string> = {};
+    for (const key of ["chatter", "outcome", "stage", "after"] as const) {
+      const value = url.searchParams.get(key);
+      if (value) filters[key] = value;
+    }
+    const result = this.options.database.getRecentDecisionsPaginated(limit, offset, filters);
+    this.jsonResponse(res, 200, result);
+  }
+
+  private handleGetAudit(url: URL, res: http.ServerResponse): void {
+    const limit = Math.min(Number(url.searchParams.get("limit") ?? "25"), 100);
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    const result = this.options.database.getControlAuditLog(limit, offset);
+    this.jsonResponse(res, 200, result);
+  }
+
+  private handleGetUser(url: URL, res: http.ServerResponse): void {
+    const login = url.searchParams.get("login");
+    if (!login) {
+      this.jsonResponse(res, 400, { error: "login parameter is required" });
+      return;
+    }
+    const result = this.options.database.getUserHistory(login);
+    this.jsonResponse(res, 200, result);
+  }
+
+  private handleGetStats(res: http.ServerResponse): void {
+    const sinceIso = new Date(Date.now() - 3_600_000).toISOString();
+    const stats = this.options.database.getHourlyStats(sinceIso);
+    const aiQueue = this.options.aiReviewQueue?.getStats() ?? null;
+    const llamaServer = this.options.llamaServerManager?.getStatus() ?? null;
+    this.jsonResponse(res, 200, { stats, aiQueue, llamaServer });
+  }
+
+  private handleGetExemptions(res: http.ServerResponse): void {
+    this.jsonResponse(res, 200, this.options.database.listExemptUsers());
+  }
+
+  private async handlePostExemptions(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ login?: string }>(body);
+    if (!parsed?.login) {
+      this.jsonResponse(res, 400, { error: "login is required" });
+      return;
+    }
+    const added = this.options.database.addExemptUser(parsed.login, ADMIN_ACTOR.login);
+    this.jsonResponse(res, 200, { ok: true, added });
+  }
+
+  private async handlePostExemptionsRemove(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ login?: string }>(body);
+    if (!parsed?.login) {
+      this.jsonResponse(res, 400, { error: "login is required" });
+      return;
+    }
+    const removed = this.options.database.removeExemptUser(parsed.login);
+    this.jsonResponse(res, 200, { ok: true, removed });
+  }
+
+  private handleGetBlockedTerms(res: http.ServerResponse): void {
+    this.jsonResponse(res, 200, this.options.database.listRuntimeBlockedTerms());
+  }
+
+  private async handlePostBlockedTerms(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ term?: string }>(body);
+    if (!parsed?.term) {
+      this.jsonResponse(res, 400, { error: "term is required" });
+      return;
+    }
+    const added = this.options.database.addRuntimeBlockedTerm(parsed.term, ADMIN_ACTOR.login);
+    this.jsonResponse(res, 200, { ok: true, added });
+  }
+
+  private async handlePostBlockedTermsRemove(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ term?: string }>(body);
+    if (!parsed?.term) {
+      this.jsonResponse(res, 400, { error: "term is required" });
+      return;
+    }
+    const removed = this.options.database.removeRuntimeBlockedTerm(parsed.term);
+    this.jsonResponse(res, 200, { ok: true, removed });
+  }
+
+  private handleGetHealth(res: http.ServerResponse): void {
+    const llamaServer = this.options.llamaServerManager?.getStatus() ?? null;
+    const aiQueue = this.options.aiReviewQueue?.getStats() ?? null;
+    this.jsonResponse(res, 200, { llamaServer, aiQueue });
+  }
+
+  private handleGetControllers(res: http.ServerResponse): void {
+    const configControllers = (this.options.configControllers ?? []).map((c) => ({
+      login: c.login,
+      role: c.role,
+      source: "config" as const,
+    }));
+    const runtimeControllers = this.options.database.listRuntimeControllers().map((c) => ({
+      login: c.login,
+      role: c.role,
+      source: "runtime" as const,
+    }));
+    this.jsonResponse(res, 200, { config: configControllers, runtime: runtimeControllers });
+  }
+
+  private async handlePostControllers(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ login?: string; role?: string }>(body);
+    if (!parsed?.login) {
+      this.jsonResponse(res, 400, { error: "login is required" });
+      return;
+    }
+    const role = parsed.role === "mod" ? "mod" : "admin";
+    this.options.database.addRuntimeController(parsed.login, role, ADMIN_ACTOR.login);
+    this.jsonResponse(res, 200, { ok: true });
+  }
+
+  private async handlePostControllersRemove(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ login?: string }>(body);
+    if (!parsed?.login) {
+      this.jsonResponse(res, 400, { error: "login is required" });
+      return;
+    }
+    const removed = this.options.database.removeRuntimeController(parsed.login);
+    this.jsonResponse(res, 200, { ok: true, removed });
+  }
+
+  private async handlePostControllersRole(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ login?: string; role?: string }>(body);
+    if (!parsed?.login || !parsed.role) {
+      this.jsonResponse(res, 400, { error: "login and role are required" });
+      return;
+    }
+    if (parsed.role !== "admin" && parsed.role !== "mod") {
+      this.jsonResponse(res, 400, { error: "role must be admin or mod" });
+      return;
+    }
+    const updated = this.options.database.updateRuntimeControllerRole(parsed.login, parsed.role);
+    this.jsonResponse(res, 200, { ok: true, updated });
+  }
+
+  private handleGetChatters(url: URL, res: http.ServerResponse): void {
+    const prefix = url.searchParams.get("prefix") ?? "";
+    if (prefix.length < 1) {
+      this.jsonResponse(res, 200, []);
+      return;
+    }
+    const logins = this.options.database.getKnownChatterLogins(prefix);
+    this.jsonResponse(res, 200, logins);
+  }
+
+  private jsonResponse(res: http.ServerResponse, status: number, body: unknown): void {
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(body));
+  }
+
   private getRecentActivity(): Array<Record<string, unknown>> {
     try {
       return this.options.database.getRecentDecisionsForAdmin(10);
@@ -183,4 +399,12 @@ function readRequestBody(req: http.IncomingMessage): Promise<string> {
     req.once("end", () => resolve(Buffer.concat(chunks).toString()));
     req.once("error", reject);
   });
+}
+
+function parseJsonBody<T>(body: string): T | null {
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    return null;
+  }
 }

@@ -18,9 +18,18 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
     throw new Error(`Commands must start with "${prefix}". Try "${prefix} help".`);
   }
 
-  const [_, verb, value] = tokens;
+  const ALIASES: Record<string, string> = {
+    aim: "ai-moderation",
+    live: "live-moderation",
+    dry: "dry-run",
+    soc: "social",
+  };
 
-  switch ((verb ?? "").toLowerCase()) {
+  const rawVerb = (tokens[1] ?? "").toLowerCase();
+  const verb = ALIASES[rawVerb] ?? rawVerb;
+  const value = tokens[2];
+
+  switch (verb) {
     case "help":
       if (tokens.length !== 2) {
         throw new Error(`Usage: ${prefix} help`);
@@ -77,8 +86,55 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
         throw new Error(`Usage: ${prefix} off`);
       }
       return { kind: "off" };
+    case "recent": {
+      if (tokens.length > 3) {
+        throw new Error(`Usage: ${prefix} recent [count]`);
+      }
+      const count = value ? Number.parseInt(value, 10) : 3;
+      if (Number.isNaN(count) || count < 1 || count > 10) {
+        throw new Error(`Count must be 1-10. Usage: ${prefix} recent [count]`);
+      }
+      return { kind: "recent", count };
+    }
+    case "stats":
+      if (tokens.length !== 2) {
+        throw new Error(`Usage: ${prefix} stats`);
+      }
+      return { kind: "stats" };
+    case "exempt": {
+      if (tokens.length < 3 || !value) {
+        throw new Error(`Usage: ${prefix} exempt <user> | ${prefix} exempt list`);
+      }
+      if (value.toLowerCase() === "list") {
+        return { kind: "exempt", subcommand: "list" };
+      }
+      return { kind: "exempt", subcommand: "add", userLogin: value.toLowerCase().replace(/^@/, "") };
+    }
+    case "unexempt": {
+      if (tokens.length !== 3 || !value) {
+        throw new Error(`Usage: ${prefix} unexempt <user>`);
+      }
+      return { kind: "exempt", subcommand: "remove", userLogin: value.toLowerCase().replace(/^@/, "") };
+    }
+    case "block": {
+      if (tokens.length < 3 || !value) {
+        throw new Error(`Usage: ${prefix} block <term...> | ${prefix} block list`);
+      }
+      if (value.toLowerCase() === "list" && tokens.length === 3) {
+        return { kind: "block", subcommand: "list" };
+      }
+      const term = tokens.slice(2).join(" ").toLowerCase();
+      return { kind: "block", subcommand: "add", term };
+    }
+    case "unblock": {
+      if (tokens.length < 3 || !value) {
+        throw new Error(`Usage: ${prefix} unblock <term...>`);
+      }
+      const term = tokens.slice(2).join(" ").toLowerCase();
+      return { kind: "block", subcommand: "remove", term };
+    }
     default:
-      throw new Error(`Unknown command "${verb ?? ""}". Try "${prefix} help".`);
+      throw new Error(`Unknown command "${verb}". Try "${prefix} help".`);
   }
 }
 

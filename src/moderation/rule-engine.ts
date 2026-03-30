@@ -33,6 +33,8 @@ export class RuleEngine {
   public constructor(
     private readonly config: ConfigSnapshot,
     private readonly cooldowns: CooldownManager,
+    private readonly isUserExempt?: (login: string) => boolean,
+    private readonly getRuntimeBlockedTerms?: () => Array<{ term: string }>,
   ) {
     this.blockedTermMatchers = this.config.moderationPolicy.deterministicRules.blockedTerms
       .map((term) => term.trim())
@@ -49,6 +51,15 @@ export class RuleEngine {
         source: "rules",
         outcome: "no_action",
         reason: "privileged chatter exempt from deterministic moderation",
+        actions: [],
+      };
+    }
+
+    if (this.isUserExempt?.(message.chatterLogin)) {
+      return {
+        source: "rules",
+        outcome: "no_action",
+        reason: "user exempt from moderation by runtime exemption",
         actions: [],
       };
     }
@@ -160,6 +171,14 @@ export class RuleEngine {
 
     for (const entry of this.blockedTermMatchers) {
       if (entry.matcher.test(lowerText)) {
+        return entry.term;
+      }
+    }
+
+    const runtimeTerms = this.getRuntimeBlockedTerms?.() ?? [];
+    for (const entry of runtimeTerms) {
+      const matcher = new RegExp(`\\b${escapeRegExp(entry.term.toLowerCase())}\\b`, "iu");
+      if (matcher.test(lowerText)) {
         return entry.term;
       }
     }
