@@ -44,7 +44,6 @@ interface AdminServerOptions {
 export class AdminServer {
   private server: http.Server | null = null;
   private readonly options: AdminServerOptions;
-  private cachedHtml: string | null = null;
 
   public constructor(options: AdminServerOptions) {
     this.options = options;
@@ -136,6 +135,12 @@ export class AdminServer {
     if (req.method === "POST" && url.pathname === "/api/controllers/role") {
       return this.handlePostControllersRole(req, res);
     }
+    if (req.method === "POST" && url.pathname === "/api/purge/user") {
+      return this.handlePostPurgeUser(req, res);
+    }
+    if (req.method === "POST" && url.pathname === "/api/purge/all") {
+      return this.handlePostPurgeAll(res);
+    }
     if (req.method === "GET" && url.pathname === "/api/chatters") {
       return this.handleGetChatters(url, res);
     }
@@ -145,28 +150,28 @@ export class AdminServer {
   }
 
   private serveHtml(res: http.ServerResponse): void {
-    if (!this.cachedHtml) {
-      const thisDir = path.dirname(fileURLToPath(import.meta.url));
-      const candidates = [
-        path.join(thisDir, "public", "index.html"),
-        path.resolve(thisDir, "../../../src/admin/public/index.html"),
-      ];
-      for (const candidate of candidates) {
-        try {
-          this.cachedHtml = fs.readFileSync(candidate, "utf8");
-          break;
-        } catch {
-          continue;
-        }
-      }
-      if (!this.cachedHtml) {
-        res.writeHead(500, { "Content-Type": "text/plain" });
-        res.end("Admin HTML not found");
-        return;
+    // Always read fresh from disk so edits are reflected without restart
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const candidates = [
+      path.join(thisDir, "public", "index.html"),
+      path.resolve(thisDir, "../../../src/admin/public/index.html"),
+    ];
+    let html: string | null = null;
+    for (const candidate of candidates) {
+      try {
+        html = fs.readFileSync(candidate, "utf8");
+        break;
+      } catch {
+        continue;
       }
     }
+    if (!html) {
+      res.writeHead(500, { "Content-Type": "text/plain" });
+      res.end("Admin HTML not found");
+      return;
+    }
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    res.end(this.cachedHtml);
+    res.end(html);
   }
 
   private handleGetStatus(res: http.ServerResponse): void {
@@ -365,6 +370,22 @@ export class AdminServer {
     }
     const updated = this.options.database.updateRuntimeControllerRole(parsed.login, parsed.role);
     this.jsonResponse(res, 200, { ok: true, updated });
+  }
+
+  private async handlePostPurgeUser(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    const parsed = parseJsonBody<{ login?: string }>(body);
+    if (!parsed?.login) {
+      this.jsonResponse(res, 400, { error: "login is required" });
+      return;
+    }
+    const result = this.options.database.purgeUserHistory(parsed.login);
+    this.jsonResponse(res, 200, { ok: true, ...result });
+  }
+
+  private handlePostPurgeAll(res: http.ServerResponse): void {
+    const result = this.options.database.purgeOperationalData();
+    this.jsonResponse(res, 200, { ok: true, ...result });
   }
 
   private handleGetChatters(url: URL, res: http.ServerResponse): void {

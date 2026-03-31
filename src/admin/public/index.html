@@ -3,211 +3,1374 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>twitch-ai-mod</title>
+<title>twitch-ai-mod // mission control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0e0e10; color: #efeff1; padding: 1.5rem; max-width: 900px; margin: 0 auto; }
-  h1 { font-size: 1.2rem; color: #9147ff; margin-bottom: 0.75rem; }
-  h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: #adadb8; margin-bottom: 0.75rem; }
-  .panel { background: #18181b; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
-  .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #2f2f35; }
-  .toggle-row:last-child { border-bottom: none; }
-  .toggle-label { font-size: 0.85rem; }
-  .toggle-label small { color: #adadb8; display: block; font-size: 0.75rem; }
-  .toggle-btn { background: #2f2f35; border: none; color: #efeff1; padding: 0.35rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; min-width: 50px; }
-  .toggle-btn.on { background: #00c853; color: #000; }
-  .toggle-btn.off { background: #c62828; color: #fff; }
+  /* ═══════════════════════════════════════════
+     MISSION CONTROL — Design System
+     ═══════════════════════════════════════════ */
+  :root {
+    --bg-deep:     #060a12;
+    --bg-base:     #0a0e17;
+    --bg-surface:  #0f1520;
+    --bg-elevated: #141c2b;
+    --bg-panel:    rgba(12, 20, 35, 0.85);
+    --border:      rgba(0, 240, 255, 0.08);
+    --border-glow: rgba(0, 240, 255, 0.2);
+    --border-hot:  rgba(0, 240, 255, 0.45);
 
-  select, input[type=text], input[type=number] {
-    background: #2f2f35; border: 1px solid #3f3f46; color: #efeff1;
-    padding: 0.4rem 0.6rem; border-radius: 6px; font-size: 0.82rem;
-    outline: none; transition: border-color 0.15s;
+    --cyan:        #00f0ff;
+    --cyan-dim:    #00889a;
+    --cyan-glow:   rgba(0, 240, 255, 0.12);
+    --amber:       #f0a500;
+    --amber-dim:   #9a6b00;
+    --amber-glow:  rgba(240, 165, 0, 0.1);
+    --red:         #e53935;
+    --red-dim:     #8b2220;
+    --red-glow:    rgba(229, 57, 53, 0.1);
+    --green:       #00e676;
+    --green-dim:   #009950;
+    --green-glow:  rgba(0, 230, 118, 0.1);
+    --blue:        #42a5f5;
+
+    --text:        #d0d8e8;
+    --text-bright: #eaf0ff;
+    --text-dim:    #5a6a85;
+    --text-muted:  #384560;
+
+    --font-display: 'Oxanium', sans-serif;
+    --font-mono:    'IBM Plex Mono', monospace;
+
+    --radius:      4px;
+    --radius-lg:   8px;
+    --panel-blur:  12px;
   }
-  select:focus, input:focus { border-color: #9147ff; }
-  input[type=text] { width: 200px; }
-  input[type=text]::placeholder { color: #71717a; }
 
-  .btn { background: #9147ff; border: none; color: #fff; padding: 0.35rem 0.75rem; border-radius: 4px; cursor: pointer; font-size: 0.8rem; }
-  .btn:hover { background: #7c3aed; }
-  .btn-danger { background: #c62828; }
-  .btn-danger:hover { background: #e53935; }
-  .btn-sm { padding: 0.2rem 0.5rem; font-size: 0.7rem; }
-  .btn-ghost { background: transparent; color: #adadb8; border: 1px solid #3f3f46; }
-  .btn-ghost:hover { color: #efeff1; border-color: #9147ff; }
+  /* ── Reset & base ── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html { font-size: 14px; }
+  body {
+    font-family: var(--font-mono);
+    background: var(--bg-deep);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
 
-  .status-row { display: flex; justify-content: space-between; padding: 0.3rem 0; font-size: 0.8rem; }
-  .status-value { color: #adadb8; }
-  .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-  .status-dot.green { background: #00c853; }
-  .status-dot.red { background: #c62828; }
+  /* ── Dot-grid background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle, rgba(0,240,255,0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+  }
 
-  .activity-item { padding: 0.5rem 0; border-bottom: 1px solid #2f2f35; font-size: 0.8rem; }
-  .activity-item:last-child { border-bottom: none; }
-  .activity-meta { color: #adadb8; font-size: 0.7rem; margin-top: 0.2rem; }
+  /* ── Scan-line overlay ── */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0, 240, 255, 0.008) 2px,
+      rgba(0, 240, 255, 0.008) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
 
-  .badge { display: inline-block; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.7rem; font-weight: 600; }
-  .badge-abstain, .badge-ignored, .badge-no_action, .badge-suppressed { background: #2f2f35; color: #adadb8; }
-  .badge-action { background: #9147ff; color: #fff; }
-  .badge-say { background: #1565c0; color: #fff; }
-  .badge-warn { background: #e65100; color: #fff; }
-  .badge-timeout { background: #b71c1c; color: #fff; }
-  .badge-admin { background: #9147ff; color: #fff; }
-  .badge-mod { background: #2f8a46; color: #fff; }
-  .badge-broadcaster { background: #d4a017; color: #000; }
-  .badge-config { background: #2f2f35; color: #adadb8; }
-  .badge-runtime { background: #1e3a5f; color: #7ec8f0; }
+  /* ── Shell layout ── */
+  .hud-shell {
+    position: relative;
+    z-index: 1;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 1.25rem 2rem;
+  }
 
-  .error { color: #c62828; font-size: 0.8rem; padding: 0.5rem; }
+  /* ── HUD top bar ── */
+  .hud-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .hud-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--cyan);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .hud-title .sigil {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: var(--cyan);
+    border-radius: 2px;
+    box-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(0,240,255,0.2);
+    animation: pulse-sigil 3s ease-in-out infinite;
+  }
+  @keyframes pulse-sigil {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--cyan), 0 0 20px rgba(0,240,255,0.2); }
+    50% { opacity: 0.6; box-shadow: 0 0 4px var(--cyan), 0 0 10px rgba(0,240,255,0.1); }
+  }
+  .hud-indicators {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    align-items: center;
+  }
+  .hud-ind {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+  .hud-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .hud-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse-dot 2s ease-in-out infinite; }
+  .hud-dot.dead { background: var(--red-dim); }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
 
-  nav { display: flex; gap: 0.25rem; margin-bottom: 1rem; flex-wrap: wrap; }
-  nav button { background: #2f2f35; border: none; color: #adadb8; padding: 0.5rem 1rem; border-radius: 4px 4px 0 0; cursor: pointer; font-size: 0.8rem; }
-  nav button.active { background: #18181b; color: #efeff1; border-bottom: 2px solid #9147ff; }
+  /* ── Typography ── */
+  h1 { font-family: var(--font-display); font-size: 1rem; color: var(--cyan); letter-spacing: 0.06em; }
+  h2 {
+    font-family: var(--font-display);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  h2::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 0.75em;
+    background: var(--cyan);
+    border-radius: 1px;
+    box-shadow: 0 0 4px rgba(0,240,255,0.3);
+  }
+
+  /* ── Panels ── */
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1rem 1.15rem;
+    margin-bottom: 0.85rem;
+    backdrop-filter: blur(var(--panel-blur));
+    transition: border-color 0.3s ease;
+    animation: panel-in 0.5s ease-out both;
+  }
+  .panel:hover {
+    border-color: var(--border-glow);
+  }
+  @keyframes panel-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .panel:nth-child(2) { animation-delay: 0.05s; }
+  .panel:nth-child(3) { animation-delay: 0.1s; }
+  .panel:nth-child(4) { animation-delay: 0.15s; }
+  .panel:nth-child(5) { animation-delay: 0.2s; }
+
+  /* ── Navigation tabs ── */
+  nav {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 1.15rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+    flex-wrap: wrap;
+  }
+  nav button {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 0.65rem 1.1rem;
+    cursor: pointer;
+    position: relative;
+    transition: color 0.2s;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.active {
+    color: var(--cyan);
+  }
+  nav button.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--cyan);
+    box-shadow: 0 0 8px rgba(0,240,255,0.4), 0 2px 12px rgba(0,240,255,0.15);
+  }
 
   .tab { display: none; }
-  .tab.active { display: block; }
+  .tab.active { display: block; animation: tab-fade 0.3s ease-out; }
+  @keyframes tab-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
 
-  table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-  th { text-align: left; color: #adadb8; font-size: 0.7rem; text-transform: uppercase; padding: 0.4rem 0.3rem; border-bottom: 1px solid #2f2f35; }
-  td { padding: 0.4rem 0.3rem; border-bottom: 1px solid #1f1f23; vertical-align: top; }
+  /* ── Forms & inputs ── */
+  select, input[type=text], input[type=number] {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.4rem 0.65rem;
+    border-radius: var(--radius);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  select:focus, input:focus {
+    border-color: var(--cyan-dim);
+    box-shadow: 0 0 0 2px rgba(0,240,255,0.08);
+  }
+  input[type=text] { width: 200px; }
+  input[type=text]::placeholder { color: var(--text-muted); }
+  select { cursor: pointer; }
 
-  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
-  .stat-card { background: #1f1f23; border-radius: 6px; padding: 0.75rem; text-align: center; }
-  .stat-card .stat-value { font-size: 1.5rem; font-weight: 700; color: #9147ff; }
-  .stat-card .stat-label { font-size: 0.7rem; color: #adadb8; text-transform: uppercase; }
+  /* ── Buttons ── */
+  .btn {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: rgba(0, 240, 255, 0.08);
+    border: 1px solid rgba(0, 240, 255, 0.25);
+    color: var(--cyan);
+    padding: 0.38rem 0.85rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:hover {
+    background: rgba(0, 240, 255, 0.15);
+    border-color: rgba(0, 240, 255, 0.5);
+    box-shadow: 0 0 12px rgba(0,240,255,0.1);
+  }
+  .btn-danger {
+    background: rgba(229, 57, 53, 0.08);
+    border-color: rgba(229, 57, 53, 0.25);
+    color: var(--red);
+  }
+  .btn-danger:hover {
+    background: rgba(229, 57, 53, 0.15);
+    border-color: rgba(229, 57, 53, 0.5);
+    box-shadow: 0 0 12px rgba(229,57,53,0.1);
+  }
+  .btn-sm { padding: 0.22rem 0.55rem; font-size: 0.65rem; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover {
+    color: var(--cyan);
+    border-color: var(--border-glow);
+  }
 
-  .inline-form { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
-  .chip { display: inline-flex; align-items: center; background: #2f2f35; padding: 0.2rem 0.5rem; border-radius: 12px; font-size: 0.75rem; margin: 0.15rem; gap: 0.3rem; }
-  .chip .remove { cursor: pointer; color: #c62828; font-size: 0.85rem; line-height: 1; }
-  .chip .remove:hover { color: #e53935; }
-  .load-more { text-align: center; padding: 0.5rem; }
+  /* ── Toggle switches (instrument-style) ── */
+  .toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .toggle-row:last-child { border-bottom: none; }
+  .toggle-label {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--text);
+  }
+  .toggle-label small {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    margin-top: 0.1rem;
+  }
+  .toggle-btn {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    border: 1px solid;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    min-width: 54px;
+    text-align: center;
+    transition: all 0.25s ease;
+  }
+  .toggle-btn.on {
+    background: rgba(0, 230, 118, 0.1);
+    border-color: rgba(0, 230, 118, 0.4);
+    color: var(--green);
+    box-shadow: 0 0 10px rgba(0,230,118,0.08);
+  }
+  .toggle-btn.off {
+    background: rgba(229, 57, 53, 0.06);
+    border-color: rgba(229, 57, 53, 0.2);
+    color: var(--red);
+  }
+  .toggle-btn:hover {
+    transform: scale(1.02);
+  }
 
-  /* Autocomplete */
+  /* ── Status indicators ── */
+  .status-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.3rem 0;
+    font-size: 0.78rem;
+  }
+  .status-value { color: var(--text-dim); font-family: var(--font-mono); }
+  .status-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .status-dot.green { background: var(--green); box-shadow: 0 0 6px rgba(0,230,118,0.4); }
+  .status-dot.red { background: var(--red-dim); }
+
+  /* ── Stat cards (instrument gauge style) ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.65rem;
+    margin-bottom: 0.85rem;
+  }
+  .stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 0.75rem 0.85rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+  .stat-card:hover {
+    border-color: var(--border-glow);
+  }
+  .stat-card .stat-value {
+    font-family: var(--font-display);
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--cyan);
+    line-height: 1.2;
+  }
+  .stat-card .stat-label {
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-top: 0.15rem;
+  }
+  .stat-spark { height: 22px; margin-top: 0.35rem; overflow: hidden; }
+  .stat-spark svg { display: block; width: 100%; height: 22px; }
+
+  /* ── Badges ── */
+  .badge {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 0.12rem 0.45rem;
+    border-radius: 3px;
+    border: 1px solid;
+    vertical-align: middle;
+  }
+  .badge-ignored {
+    background: transparent;
+    border-color: var(--text-muted);
+    color: var(--text-dim);
+  }
+  .badge-no_action {
+    background: var(--green-glow);
+    border-color: rgba(0, 230, 118, 0.25);
+    color: var(--green);
+  }
+  .badge-abstain {
+    background: var(--amber-glow);
+    border-color: rgba(240, 165, 0, 0.25);
+    color: var(--amber);
+  }
+  .badge-suppressed {
+    background: var(--red-glow);
+    border-color: rgba(229, 57, 53, 0.2);
+    color: var(--red);
+  }
+  .badge-action {
+    background: rgba(0, 240, 255, 0.08);
+    border-color: rgba(0, 240, 255, 0.3);
+    color: var(--cyan);
+  }
+  .badge-say {
+    background: rgba(66, 165, 245, 0.08);
+    border-color: rgba(66, 165, 245, 0.3);
+    color: var(--blue);
+  }
+  .badge-warn {
+    background: var(--amber-glow);
+    border-color: rgba(240, 165, 0, 0.3);
+    color: var(--amber);
+  }
+  .badge-timeout {
+    background: var(--red-glow);
+    border-color: rgba(229, 57, 53, 0.3);
+    color: var(--red);
+  }
+  .badge-admin {
+    background: rgba(0, 240, 255, 0.06);
+    border-color: rgba(0, 240, 255, 0.25);
+    color: var(--cyan);
+  }
+  .badge-mod {
+    background: var(--green-glow);
+    border-color: rgba(0, 230, 118, 0.25);
+    color: var(--green);
+  }
+  .badge-broadcaster {
+    background: rgba(66, 165, 245, 0.06);
+    border-color: rgba(66, 165, 245, 0.25);
+    color: var(--blue);
+  }
+  .badge-config {
+    background: transparent;
+    border-color: var(--text-muted);
+    color: var(--text-dim);
+  }
+  .badge-runtime {
+    background: rgba(0, 240, 255, 0.05);
+    border-color: rgba(0, 240, 255, 0.15);
+    color: var(--cyan-dim);
+  }
+
+  /* Category badges */
+  .badge-cat-harass {
+    background: rgba(229,57,53,0.08);
+    border-color: rgba(229,57,53,0.25);
+    color: var(--red);
+  }
+  .badge-cat-spam {
+    background: var(--amber-glow);
+    border-color: rgba(240,165,0,0.25);
+    color: var(--amber);
+  }
+  .badge-cat-safe {
+    background: var(--green-glow);
+    border-color: rgba(0,230,118,0.2);
+    color: var(--green);
+  }
+  .badge-cat-social {
+    background: rgba(66,165,245,0.08);
+    border-color: rgba(66,165,245,0.2);
+    color: var(--blue);
+  }
+
+  /* ── Activity items ── */
+  .activity-item {
+    position: relative;
+    padding: 0.55rem 0.1rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    padding-left: 0.65rem;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .activity-item:hover {
+    background: rgba(0, 240, 255, 0.015);
+    border-left-color: rgba(0, 240, 255, 0.15);
+  }
+  .activity-item:last-child { border-bottom: none; }
+  .activity-meta {
+    color: var(--text-dim);
+    font-size: 0.68rem;
+    margin-top: 0.2rem;
+    font-family: var(--font-mono);
+  }
+  .activity-item .ai-expand {
+    display: none;
+    padding-top: 0.45rem;
+    margin-top: 0.45rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.76rem;
+    color: var(--text-dim);
+    line-height: 1.55;
+    animation: expand-in 0.2s ease-out;
+  }
+  @keyframes expand-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .activity-item.expanded {
+    border-left-color: var(--cyan);
+    background: rgba(0, 240, 255, 0.02);
+  }
+  .activity-item.expanded .ai-expand { display: block; }
+  .activity-item.kb-focus {
+    outline: 1px solid var(--cyan-dim);
+    outline-offset: 1px;
+  }
+
+  /* ── Quick-action buttons ── */
+  .quick-btns {
+    position: absolute;
+    top: 0.45rem;
+    right: 0.1rem;
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.15s;
+    pointer-events: none;
+  }
+  .activity-item:hover .quick-btns { opacity: 1; pointer-events: auto; }
+  .quick-btn {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.15rem 0.4rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+  .quick-btn:hover {
+    color: var(--cyan);
+    border-color: var(--border-glow);
+  }
+
+  /* ── Confidence meter (compact inline gauge) ── */
+  .conf-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.35rem;
+  }
+  .conf-val {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.82rem;
+    min-width: 2.2rem;
+  }
+  .conf-val.high { color: var(--cyan); }
+  .conf-val.mid  { color: var(--amber); }
+  .conf-val.low  { color: var(--red); }
+  .conf-bar {
+    width: 120px;
+    height: 6px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    position: relative;
+    overflow: visible;
+  }
+  .conf-fill {
+    display: block;
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease-out;
+  }
+  .conf-fill.high {
+    background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+    box-shadow: 0 0 6px rgba(0,240,255,0.2);
+  }
+  .conf-fill.mid {
+    background: linear-gradient(90deg, var(--amber-dim), var(--amber));
+    box-shadow: 0 0 6px rgba(240,165,0,0.15);
+  }
+  .conf-fill.low {
+    background: linear-gradient(90deg, var(--red-dim), var(--red));
+  }
+  .conf-bar::after {
+    content: '';
+    position: absolute;
+    left: 90%;
+    top: -4px;
+    bottom: -4px;
+    width: 1.5px;
+    background: var(--text-dim);
+    opacity: 0.5;
+  }
+  .conf-threshold {
+    font-family: var(--font-mono);
+    font-size: 0.56rem;
+    color: var(--text-muted);
+  }
+
+  /* ── New decisions banner ── */
+  .new-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    background: rgba(0, 240, 255, 0.04);
+    border: 1px solid rgba(0, 240, 255, 0.15);
+    padding: 0.4rem 0.75rem;
+    border-radius: var(--radius);
+    margin-bottom: 0.5rem;
+    font-size: 0.76rem;
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    animation: banner-pulse 2s ease-in-out infinite;
+  }
+  @keyframes banner-pulse {
+    0%, 100% { border-color: rgba(0, 240, 255, 0.15); }
+    50% { border-color: rgba(0, 240, 255, 0.35); }
+  }
+  .new-banner strong { font-weight: 600; }
+
+  /* ── Filter bar ── */
+  .filter-bar-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg-panel);
+    padding: 0.5rem 0;
+    margin-bottom: 0.4rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-bar {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .filter-label {
+    font-family: var(--font-display);
+    font-size: 0.55rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    padding-left: 0.1rem;
+  }
+  .filter-bar select {
+    min-width: 90px;
+    background: var(--bg-surface);
+    color: var(--text-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.3rem 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+  }
+  .filter-bar select:focus { border-color: var(--border-glow); outline: none; }
+  .filter-bar input[type=text] {
+    width: 130px;
+  }
+  .filter-clear {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    align-self: flex-end;
+    margin-bottom: 1px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .filter-clear:hover {
+    color: var(--red);
+    border-color: rgba(229,57,53,0.3);
+  }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+  th {
+    text-align: left;
+    font-family: var(--font-display);
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    padding: 0.45rem 0.35rem;
+    border-bottom: 1px solid var(--border-glow);
+  }
+  td {
+    padding: 0.4rem 0.35rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+    font-family: var(--font-mono);
+  }
+  tr:hover td { background: rgba(0, 240, 255, 0.01); }
+
+  /* ── User links ── */
+  .user-link {
+    color: var(--cyan);
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.15s, text-shadow 0.15s;
+  }
+  .user-link:hover {
+    color: var(--text-bright);
+    text-shadow: 0 0 8px rgba(0,240,255,0.3);
+  }
+
+  /* ── Forms ── */
+  .inline-form {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── Chips ── */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.55rem;
+    border-radius: 14px;
+    font-size: 0.72rem;
+    margin: 0.15rem;
+    gap: 0.35rem;
+    font-family: var(--font-mono);
+    transition: border-color 0.2s;
+  }
+  .chip:hover { border-color: var(--border-glow); }
+  .chip .remove {
+    cursor: pointer;
+    color: var(--red-dim);
+    font-size: 0.85rem;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+  .chip .remove:hover { color: var(--red); }
+
+  /* ── Autocomplete ── */
   .autocomplete-wrap { position: relative; display: inline-block; }
   .autocomplete-wrap input { width: 200px; }
-  .ac-list { position: absolute; top: 100%; left: 0; right: 0; background: #2f2f35; border: 1px solid #3f3f46; border-radius: 0 0 6px 6px; max-height: 180px; overflow-y: auto; z-index: 10; display: none; }
+  .ac-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-glow);
+    border-radius: 0 0 var(--radius) var(--radius);
+    max-height: 180px;
+    overflow-y: auto;
+    z-index: 10;
+    display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
   .ac-list.open { display: block; }
-  .ac-item { padding: 0.35rem 0.6rem; font-size: 0.8rem; cursor: pointer; }
-  .ac-item:hover, .ac-item.active { background: #3f3f46; color: #fff; }
+  .ac-item {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    transition: background 0.1s;
+  }
+  .ac-item:hover, .ac-item.active {
+    background: rgba(0, 240, 255, 0.06);
+    color: var(--cyan);
+  }
 
-  /* Filter bar */
-  .filter-bar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.75rem; }
-  .filter-bar select { min-width: 100px; }
-
-  /* Clickable usernames */
-  .user-link { color: #bf94ff; cursor: pointer; text-decoration: none; font-weight: 600; }
-  .user-link:hover { text-decoration: underline; color: #d4b5ff; }
-
-  /* Controller table */
+  /* ── Controller table ── */
   .ctrl-table td:last-child { text-align: right; }
+
+  /* ── Load more ── */
+  .load-more { text-align: center; padding: 0.6rem; }
+
+  /* ── Error ── */
+  .error { color: var(--red); font-size: 0.78rem; padding: 0.5rem; }
+
+  /* ═══════════════════════════════════════════
+     SPARK TABLE — Last Hour Stats
+     ═══════════════════════════════════════════ */
+  .spark-table {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 0.25rem 0.6rem;
+    align-items: center;
+    padding: 0.4rem 0;
+  }
+  .spark-row { display: contents; }
+  .spark-row.dim { opacity: 0.3; }
+  .spark-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    text-align: right;
+  }
+  .spark-val {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    min-width: 1.5rem;
+    text-align: right;
+  }
+  .spark-val[data-color="cyan"]  { color: #00f0ff; }
+  .spark-val[data-color="red"]   { color: #e53935; }
+  .spark-val[data-color="amber"] { color: #f0a500; }
+  .spark-val[data-color="blue"]  { color: #42a5f5; }
+  .spark-line {
+    height: 24px;
+    overflow: hidden;
+  }
+  .spark-line svg {
+    display: block;
+    width: 100%;
+    height: 24px;
+  }
+  .spark-axis {
+    grid-column: 3;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 0.58rem;
+    color: var(--text-muted);
+    padding-top: 0.15rem;
+  }
+  .queue-badge {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--text-dim);
+    float: right;
+    font-weight: 400;
+  }
+  .stats-pulse {
+    animation: stats-pulse-glow 0.8s ease-out;
+  }
+  @keyframes stats-pulse-glow {
+    0%   { box-shadow: inset 0 0 0 1px rgba(0,240,255,0); }
+    30%  { box-shadow: inset 0 0 0 1px rgba(0,240,255,0.4), 0 0 12px rgba(0,240,255,0.15); }
+    100% { box-shadow: inset 0 0 0 1px rgba(0,240,255,0); }
+  }
+
+  /* ── Scrollbar styling ── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg-deep); }
+  ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  /* ── Dashboard two-column grid ── */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+    align-items: start;
+  }
+  .dashboard-col { display: flex; flex-direction: column; gap: 0.85rem; }
+
+  /* ── Quick-action bar (top bar) ── */
+  .hud-quick-actions {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+  .hud-toggle {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.25rem 0.6rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    border: 1px solid;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .hud-toggle.on {
+    background: rgba(0, 230, 118, 0.08);
+    border-color: rgba(0, 230, 118, 0.3);
+    color: var(--green);
+  }
+  .hud-toggle.off {
+    background: rgba(229, 57, 53, 0.06);
+    border-color: rgba(229, 57, 53, 0.2);
+    color: var(--red);
+  }
+  .hud-toggle.caution-on {
+    background: rgba(240, 165, 0, 0.08);
+    border-color: rgba(240, 165, 0, 0.3);
+    color: var(--amber);
+  }
+  .hud-toggle:hover { filter: brightness(1.2); }
+
+  /* ── Status strip (richer indicators) ── */
+  .hud-status-tag {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.15rem 0.45rem;
+    border-radius: 3px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .hud-status-tag.ok {
+    border-color: rgba(0, 230, 118, 0.25);
+    color: var(--green);
+  }
+  .hud-status-tag.warn {
+    border-color: rgba(240, 165, 0, 0.3);
+    color: var(--amber);
+    animation: pulse-amber 2.5s ease-in-out infinite;
+  }
+  .hud-status-tag.err {
+    border-color: rgba(229, 57, 53, 0.2);
+    color: var(--red-dim);
+  }
+  .hud-status-tag.hidden { display: none; }
+  @keyframes pulse-amber {
+    0%, 100% { border-color: rgba(240, 165, 0, 0.3); }
+    50% { border-color: rgba(240, 165, 0, 0.6); }
+  }
+
+  /* ── Safety toggles group ── */
+  .safety-toggles {
+    border-left: 2px solid rgba(240, 165, 0, 0.35);
+    background: rgba(240, 165, 0, 0.02);
+    padding: 0.55rem 0.75rem;
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin-top: 0.5rem;
+  }
+  .safety-label {
+    font-family: var(--font-display);
+    font-size: 0.58rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--amber-dim);
+    margin-bottom: 0.3rem;
+  }
+  .toggle-btn.safety-on {
+    background: rgba(240, 165, 0, 0.1);
+    border-color: rgba(240, 165, 0, 0.4);
+    color: var(--amber);
+    box-shadow: 0 0 10px rgba(240,165,0,0.08);
+  }
+  .toggle-btn.safety-off {
+    background: rgba(229, 57, 53, 0.06);
+    border-color: rgba(229, 57, 53, 0.2);
+    color: var(--red);
+  }
+
+  /* ── Inline user mini-panel ── */
+  .user-mini {
+    margin-top: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-size: 0.74rem;
+    animation: expand-in 0.2s ease-out;
+  }
+  .user-mini-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.35rem;
+  }
+  .user-mini-header strong { color: var(--cyan); }
+  .user-mini-exempt {
+    font-size: 0.62rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+  }
+  .user-mini-exempt.yes {
+    background: var(--green-glow);
+    border: 1px solid rgba(0,230,118,0.2);
+    color: var(--green);
+  }
+  .user-mini-exempt.no {
+    color: var(--text-dim);
+  }
+  .user-mini-msgs {
+    margin-top: 0.35rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--border);
+  }
+  .user-mini-msg {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.15rem 0;
+    font-size: 0.7rem;
+  }
+  .user-mini-msg .time { color: var(--text-muted); flex-shrink: 0; min-width: 3.5rem; }
+  .user-mini-msg .text { color: var(--text-dim); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .user-mini-btn, .user-mini-toggle {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    background: none;
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .user-mini-btn:hover, .user-mini-toggle:hover { color: var(--cyan); border-color: var(--border-glow); }
+  .user-mini-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 700px) {
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .hud-quick-actions { display: none; }
+  }
+  @media (max-width: 600px) {
+    .hud-shell { padding: 0 0.75rem 1.5rem; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    nav button { padding: 0.5rem 0.7rem; font-size: 0.65rem; }
+    input[type=text] { width: 150px; }
+    .hud-search { width: 120px; }
+    .spark-line { height: 20px; }
+  }
+
+  /* ── Pack/Model divider ── */
+  .pack-model-divider {
+    border-top: 1px solid var(--border);
+    margin: 0.6rem 0;
+  }
+
+  /* ── User actions toolbar ── */
+  .user-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  /* ── Role select (controller table) ── */
+  .role-select {
+    background: var(--bg-surface);
+    color: var(--text-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.15rem 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    cursor: pointer;
+  }
+  .role-select:focus { border-color: var(--border-glow); outline: none; }
+
+  /* ── Audit section ── */
+  .audit-toggle {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+  }
+  #audit-section { margin-top: 0.4rem; }
+
+  /* ── Global user result panel ── */
+  .global-user-panel {
+    margin: 0 0 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-panel);
+    border: 1px solid var(--border-glow);
+    border-radius: var(--radius);
+    backdrop-filter: blur(12px);
+    animation: panel-in 0.3s ease-out;
+  }
+  .global-user-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    color: var(--text-bright);
+    font-family: var(--font-display);
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Global search (top bar) ── */
+  .hud-search {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    width: 160px;
+    padding: 0.25rem 0.5rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-base);
+    transition: border-color 0.2s;
+  }
+  .hud-search:focus {
+    outline: none;
+    border-color: var(--border-glow);
+  }
+  .hud-search-wrap {
+    position: relative;
+    display: inline-block;
+  }
+
+
+  /* ── Color-coded activity row borders ── */
+  .activity-item[data-outcome="action"] { border-left-color: var(--cyan); }
+  .activity-item[data-outcome="action"]:not(.expanded) { border-left-color: rgba(0,240,255,0.4); }
+  .activity-item[data-outcome="no_action"] { border-left-color: var(--green-dim); }
+  .activity-item[data-outcome="no_action"]:not(.expanded) { border-left-color: rgba(0,230,118,0.25); }
+  .activity-item[data-outcome="abstain"] { border-left-color: var(--amber-dim); }
+  .activity-item[data-outcome="abstain"]:not(.expanded) { border-left-color: rgba(240,165,0,0.25); }
+  .activity-item[data-outcome="suppressed"] { border-left-color: var(--red-dim); }
+  .activity-item[data-outcome="suppressed"]:not(.expanded) { border-left-color: rgba(229,57,53,0.25); }
+
+  /* ── Flag counter badge ── */
+  .flag-count {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--amber);
+    margin-left: 0.25rem;
+    opacity: 0.8;
+  }
+
+  /* ── Toggle flash animation ── */
+  .toggle-flash { animation: toggle-saved 0.6s ease-out; }
+  @keyframes toggle-saved {
+    0% { box-shadow: 0 0 0 0 rgba(0,230,118,0.4); }
+    50% { box-shadow: 0 0 12px 2px rgba(0,230,118,0.2); }
+    100% { box-shadow: none; }
+  }
+
+  /* ── Activity hierarchy: text snippet ── */
+  .activity-text-snip {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 0.1rem;
+    font-family: var(--font-mono);
+    line-height: 1.4;
+  }
+  .activity-meta-line {
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+    font-family: var(--font-mono);
+    opacity: 0.7;
+  }
+  .activity-item .activity-username {
+    font-weight: 600;
+    color: var(--cyan);
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 0.78rem;
+  }
 </style>
 </head>
 <body>
+<div class="hud-shell">
 
-<h1>twitch-ai-mod admin</h1>
-
-<nav id="tabs">
-  <button class="active" data-tab="dashboard">Dashboard</button>
-  <button data-tab="activity">Activity</button>
-  <button data-tab="audit">Audit Log</button>
-  <button data-tab="users">Users</button>
-  <button data-tab="tuning">Tuning</button>
-</nav>
-
-<!-- Dashboard Tab -->
-<div id="tab-dashboard" class="tab active">
-  <section class="panel" id="llama-section">
-    <h2>LLM Server</h2>
-    <div id="llama-status">Loading...</div>
-  </section>
-  <section class="panel" id="stats-section">
-    <h2>Last Hour</h2>
-    <div id="stats-summary"></div>
-  </section>
-  <section class="panel">
-    <h2>Settings</h2>
-    <div id="settings">Loading...</div>
-  </section>
-  <section class="panel">
-    <h2>Pack / Model</h2>
-    <div id="selectors">Loading...</div>
-  </section>
-  <section class="panel">
-    <h2>Recent Activity</h2>
-    <div id="activity">Loading...</div>
-  </section>
-</div>
-
-<!-- Activity Tab -->
-<div id="tab-activity" class="tab">
-  <section class="panel">
-    <h2>Activity Feed <button class="btn btn-sm" onclick="loadActivity(true)">Refresh</button></h2>
-    <div class="filter-bar">
-      <div class="autocomplete-wrap" id="act-chatter-wrap">
-        <input type="text" id="act-chatter" placeholder="chatter..." autocomplete="off">
-      </div>
-      <select id="act-outcome"><option value="">outcome</option><option>action</option><option>abstain</option><option>no_action</option><option>suppressed</option></select>
-      <select id="act-stage"><option value="">stage</option><option>ai</option><option>rules</option></select>
-      <select id="act-range"><option value="">all time</option><option value="1">1h</option><option value="6">6h</option><option value="24">24h</option></select>
+  <!-- HUD Top Bar -->
+  <div class="hud-topbar">
+    <div class="hud-title">
+      <span class="sigil"></span>
+      twitch-ai-mod
     </div>
-    <div id="activity-feed"></div>
-    <div class="load-more"><button class="btn btn-sm" id="act-more" onclick="loadActivity(false, true)" style="display:none">Load more</button></div>
-  </section>
-</div>
+    <div class="hud-search-wrap" id="global-search-wrap">
+      <input type="text" class="hud-search" id="global-search" placeholder="@user..." autocomplete="off">
+    </div>
+    <div class="hud-quick-actions">
+      <button class="hud-toggle off" id="hud-qk-dryrun" onclick="quickToggle('dryRun')">Dry Run: --</button>
+      <button class="hud-toggle off" id="hud-qk-aimod" onclick="quickToggle('aiModerationEnabled')">AI Mod: --</button>
+    </div>
+    <div class="hud-indicators">
+      <span class="hud-status-tag err" id="hud-ai-tag">AI OFF</span>
+      <span class="hud-status-tag hidden" id="hud-dry-tag">DRY RUN</span>
+      <span class="hud-ind" id="hud-llm"><span class="hud-dot dead"></span><span class="hud-llm-text">LLM</span></span>
+      <span class="hud-ind" id="hud-queue-ind"><span class="hud-dot dead"></span><span class="hud-queue-text">Q: -</span></span>
+    </div>
+  </div>
 
-<!-- Audit Log Tab -->
-<div id="tab-audit" class="tab">
-  <section class="panel">
-    <h2>Control Audit Log <button class="btn btn-sm" onclick="loadAudit()">Refresh</button></h2>
-    <div id="audit-feed"></div>
-    <div class="load-more"><button class="btn btn-sm" id="audit-more" onclick="loadAudit(true)" style="display:none">Load more</button></div>
-  </section>
-</div>
+  <nav id="tabs">
+    <button class="active" data-tab="dashboard">Dashboard</button>
+    <button data-tab="activity">Activity</button>
+    <button data-tab="config">Config</button>
+  </nav>
 
-<!-- Users Tab -->
-<div id="tab-users" class="tab">
-  <section class="panel">
-    <h2>User Lookup</h2>
-    <div class="inline-form">
-      <div class="autocomplete-wrap" id="user-login-wrap">
-        <input type="text" id="user-login" placeholder="search chatter..." autocomplete="off">
+  <!-- Dashboard Tab -->
+  <div id="tab-dashboard" class="tab active">
+    <div class="dashboard-grid">
+      <div class="dashboard-col">
+        <section class="panel">
+          <h2>Settings</h2>
+          <div id="settings">Loading...</div>
+          <div class="pack-model-divider"></div>
+          <div id="selectors">Loading...</div>
+        </section>
+      </div>
+      <div class="dashboard-col">
+        <section class="panel" id="stats-section">
+          <h2>Last Hour <span class="queue-badge" id="queue-badge"></span></h2>
+          <div id="spark-table"></div>
+        </section>
+        <section class="panel">
+          <h2>Recent Activity</h2>
+          <div id="activity">Loading...</div>
+        </section>
       </div>
     </div>
-    <div id="user-result"></div>
-  </section>
-</div>
+  </div>
 
-<!-- Tuning Tab -->
-<div id="tab-tuning" class="tab">
-  <section class="panel">
-    <h2>Controllers</h2>
-    <div class="inline-form">
-      <input type="text" id="ctrl-login" placeholder="login">
-      <select id="ctrl-role"><option value="admin">admin</option><option value="mod">mod</option></select>
-      <button class="btn" onclick="addController()">Add</button>
+  <!-- Activity Tab -->
+  <div id="tab-activity" class="tab">
+    <!-- User Lookup (shown by global search or username click) -->
+    <div id="global-user-result" class="global-user-panel" style="display:none">
+      <div class="global-user-header">
+        <strong>User Lookup</strong>
+        <button class="btn-ghost btn-sm" onclick="document.getElementById('global-user-result').style.display='none'">&times;</button>
+      </div>
+      <div id="user-result"></div>
     </div>
-    <div id="controller-list"></div>
-  </section>
-  <section class="panel">
-    <h2>Exempt Users</h2>
-    <div class="inline-form">
-      <input type="text" id="exempt-login" placeholder="login to exempt">
-      <button class="btn" onclick="addExemption()">Add</button>
-    </div>
-    <div id="exempt-list"></div>
-  </section>
-  <section class="panel">
-    <h2>Runtime Blocked Terms</h2>
-    <div class="inline-form">
-      <input type="text" id="block-term" placeholder="term to block">
-      <button class="btn" onclick="addBlockedTerm()">Add</button>
-    </div>
-    <div id="blocked-list"></div>
-  </section>
-  <section class="panel">
-    <h2>Provider Health</h2>
-    <div id="health-info">Loading...</div>
-  </section>
-</div>
+    <section class="panel">
+      <h2>Activity Feed</h2>
+      <div class="filter-bar-sticky">
+        <div class="filter-bar">
+          <div class="filter-group">
+            <label class="filter-label">User</label>
+            <div class="autocomplete-wrap" id="act-chatter-wrap">
+              <input type="text" id="act-chatter" placeholder="@chatter" autocomplete="off">
+            </div>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Outcome</label>
+            <select id="act-outcome"><option value="">all</option><option>action</option><option>abstain</option><option>no_action</option><option>suppressed</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Stage</label>
+            <select id="act-stage"><option value="">all</option><option selected>ai</option><option>rules</option></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label">Range</label>
+            <select id="act-range"><option value="">all time</option><option value="1">1h</option><option value="6">6h</option><option value="24">24h</option></select>
+          </div>
+          <button class="btn btn-sm" onclick="loadActivity(true)" style="align-self:flex-end;margin-bottom:1px">Refresh</button>
+          <button class="btn btn-sm filter-clear" onclick="clearFilters()" title="Clear all filters">&times;</button>
+        </div>
+      </div>
+      <div id="act-new-banner" class="new-banner" style="display:none">
+        &#9889; <strong id="act-new-count"></strong> &mdash;
+        <button class="btn btn-sm" onclick="loadActivity(true);document.getElementById('act-new-banner').style.display='none'">Load</button>
+        <button class="btn-ghost btn-sm" onclick="document.getElementById('act-new-banner').style.display='none'">Dismiss</button>
+      </div>
+      <div id="activity-feed"></div>
+      <div class="load-more"><button class="btn btn-sm" id="act-more" onclick="loadActivity(false, true)" style="display:none">Load more</button></div>
+    </section>
+    <section class="panel">
+      <h2 style="display:flex;justify-content:space-between;align-items:center">
+        Audit Log
+        <button class="btn btn-sm btn-ghost audit-toggle" onclick="toggleAuditSection()">&#9652;</button>
+      </h2>
+      <div id="audit-section">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:0.4rem"><button class="btn btn-sm" onclick="loadAudit()">Refresh</button></div>
+        <div id="audit-feed"></div>
+        <div class="load-more"><button class="btn btn-sm" id="audit-more" onclick="loadAudit(true)" style="display:none">Load more</button></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Config Tab -->
+  <div id="tab-config" class="tab">
+    <section class="panel">
+      <h2>Controllers</h2>
+      <div class="inline-form">
+        <div class="autocomplete-wrap" id="ctrl-login-wrap">
+          <input type="text" id="ctrl-login" placeholder="login" autocomplete="off">
+        </div>
+        <select id="ctrl-role"><option value="admin">admin</option><option value="mod">mod</option></select>
+        <button class="btn" onclick="addController()">Add</button>
+      </div>
+      <div id="controller-list"></div>
+    </section>
+    <section class="panel">
+      <h2>Exempt Users</h2>
+      <div class="inline-form">
+        <div class="autocomplete-wrap" id="exempt-login-wrap">
+          <input type="text" id="exempt-login" placeholder="login to exempt" autocomplete="off">
+        </div>
+        <button class="btn" onclick="addExemption()">Add</button>
+      </div>
+      <div id="exempt-list"></div>
+    </section>
+    <section class="panel">
+      <h2>Runtime Blocked Terms</h2>
+      <div class="inline-form">
+        <input type="text" id="block-term" placeholder="term to block">
+        <button class="btn" onclick="addBlockedTerm()">Add</button>
+      </div>
+      <div id="blocked-list"></div>
+    </section>
+    <section class="panel">
+      <h2>Provider Health</h2>
+      <div id="health-info">Loading...</div>
+    </section>
+  </div>
+
+</div><!-- .hud-shell -->
 
 <script>
 const API = '';
@@ -246,7 +1409,7 @@ function renderActions(actionsSummary) {
   if (!actionsSummary) return '';
   return actionsSummary.split(', ').map(pair => {
     const [kind, status] = pair.split(':');
-    const label = status === 'dry-run' ? kind + '(dry)' : status === 'skipped' ? kind + '(skip)' : kind;
+    const label = status === 'dry-run' ? kind + '(dry)' : status === 'skipped' ? kind + '(skipped)' : status === 'failed' ? kind + '(failed)' : kind;
     return `<span class="badge badge-${esc(kind)}">${esc(label)}</span>`;
   }).join(' ');
 }
@@ -257,14 +1420,7 @@ document.addEventListener('click', (e) => {
   if (!link) return;
   e.preventDefault();
   const login = link.dataset.user;
-  if (!login) return;
-  // Switch to users tab
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-users').classList.add('active');
-  document.querySelector('#tabs button[data-tab="users"]').classList.add('active');
-  document.getElementById('user-login').value = login;
-  doLoadUser(login);
+  if (login) switchToUserTab(login);
 });
 
 // --- Tab switching ---
@@ -277,9 +1433,46 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   btn.classList.add('active');
-  if (name === 'activity') loadActivity(true);
-  if (name === 'audit') loadAudit();
-  if (name === 'tuning') { loadControllers(); loadExemptions(); loadBlockedTerms(); loadHealth(); }
+  if (name === 'activity') {
+    loadActivity(true);
+    loadAudit();
+    startActivityPoll();
+    document.addEventListener('keydown', actKbHandler);
+  } else {
+    stopActivityPoll();
+    document.removeEventListener('keydown', actKbHandler);
+  }
+  if (name === 'config') { loadControllers(); loadExemptions(); loadBlockedTerms(); loadHealth(); }
+});
+
+function toggleAuditSection() {
+  const section = document.getElementById('audit-section');
+  const btn = document.querySelector('.audit-toggle');
+  if (section.style.display === 'none') {
+    section.style.display = 'block';
+    btn.innerHTML = '&#9652;';
+    loadAudit();
+  } else {
+    section.style.display = 'none';
+    btn.innerHTML = '&#9662;';
+  }
+}
+
+// Quick-action button handler (delegated)
+document.addEventListener('click', (e) => {
+  const exemptBtn = e.target.closest('.exempt-btn');
+  const copyBtn = e.target.closest('.copy-reason-btn');
+  if (exemptBtn) {
+    const login = exemptBtn.closest('.quick-btns')?.dataset.login;
+    if (login) { jsonPost('/api/exemptions', { login }).then(() => { loadExemptions(); alert('Exempted: @' + login); }).catch(() => alert('Failed')); }
+  }
+  if (copyBtn) {
+    const reason = copyBtn.closest('.quick-btns')?.dataset.reason || '';
+    navigator.clipboard.writeText(reason).catch(() => {
+      const el = document.createElement('textarea'); el.value = reason;
+      document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+    });
+  }
 });
 
 // --- Autocomplete ---
@@ -337,17 +1530,84 @@ function highlightAc(list, idx) {
   list.querySelectorAll('.ac-item').forEach((el, i) => el.classList.toggle('active', i === idx));
 }
 
+// --- Category badge class ---
+
+function categoryBadgeClass(cat) {
+  if (!cat || cat === 'none') return '';
+  const c = cat.toLowerCase();
+  if (c.includes('harass') || c.includes('hate') || c.includes('threat') || c.includes('sexual') || c.includes('irl')) return 'badge-cat-harass';
+  if (c.includes('spam') || c.includes('flood') || c.includes('rude') || c.includes('promo') || c.includes('scam')) return 'badge-cat-spam';
+  if (c === 'safe') return 'badge-cat-safe';
+  if (c.includes('social') || c.includes('off')) return 'badge-cat-social';
+  return '';
+}
+
+// --- Confidence meter ---
+
+function buildConfMeter(c) {
+  const n = Number(c);
+  const cls = n >= 0.7 ? 'high' : n >= 0.4 ? 'mid' : 'low';
+  return `<div class="conf-wrap"><span class="conf-val ${cls}">${n.toFixed(2)}</span><div class="conf-bar"><span class="conf-fill ${cls}" style="width:${Math.round(n*100)}%"></span></div><span class="conf-threshold">90%</span></div>`;
+}
+
 // --- Activity rendering (shared) ---
 
-function renderActivityHtml(items) {
-  return items.map(a => {
-    const badge = `<span class="badge badge-${esc(a.outcome)}">${esc(a.outcome)}</span>`;
+function renderActivityHtml(items, compact) {
+  // Build per-user flag counts for "Nth flag" indicator
+  const flagCounts = new Map();
+  for (const a of items) {
+    if (a.chatter) flagCounts.set(a.chatter, (flagCounts.get(a.chatter) || 0) + 1);
+  }
+  const flagSeen = new Map();
+
+  return items.map((a, idx) => {
+    // Track ordinal for this user
+    let flagHtml = '';
+    if (a.chatter && flagCounts.get(a.chatter) > 1) {
+      const seen = (flagSeen.get(a.chatter) || 0) + 1;
+      flagSeen.set(a.chatter, seen);
+      flagHtml = `<span class="flag-count">(${seen}${seen===1?'st':seen===2?'nd':seen===3?'rd':'th'})</span>`;
+    }
+
+    const outcomeBadge = `<span class="badge badge-${esc(a.outcome)}">${esc(a.outcome)}</span>`;
     const acts = renderActions(a.actions);
-    const text = a.text ? ` "${esc(a.text)}"` : '';
-    const conf = a.confidence ? ` conf=${Number(a.confidence).toFixed(2)}` : '';
-    const cat = a.category && a.category !== 'none' ? ` [${esc(a.category)}]` : '';
-    return `<div class="activity-item">${badge} ${acts} ${userLink(a.chatter)}${text}<div class="activity-meta">${esc(a.mode || a.stage)}${conf}${cat} &mdash; ${esc(a.reason)} &mdash; ${timeAgo(a.createdAt)}</div></div>`;
+    const catCls = categoryBadgeClass(a.category);
+    const catBadge = (a.category && a.category !== 'none') ? ` <span class="badge ${catCls}">${esc(a.category)}</span>` : '';
+    const textSnip = a.text ? `<div class="activity-text-snip">"${esc(a.text.length > 100 ? a.text.slice(0,100) + '\u2026' : a.text)}"</div>` : '';
+    const quickBtns = a.chatter ? `<span class="quick-btns" data-login="${esc(a.chatter)}" data-reason="${esc(a.reason||'')}"><button class="quick-btn exempt-btn" onclick="event.stopPropagation()">Exempt</button><button class="quick-btn copy-reason-btn" onclick="event.stopPropagation()">Copy reason</button></span>` : '';
+    const expandHtml = compact ? '' : `<div class="ai-expand">
+      ${a.text ? `<div style="font-style:italic;margin-bottom:0.3rem">"${esc(a.text)}"</div>` : ''}
+      ${a.reason ? `<div><span style="color:var(--text-bright)">Reason:</span> ${esc(a.reason)}</div>` : ''}
+      ${a.confidence != null ? buildConfMeter(a.confidence) : ''}
+      <div class="activity-meta" style="margin-top:0.3rem">${[a.stage ? 'Stage: '+esc(a.stage) : '', a.mode ? 'Mode: '+esc(a.mode) : '', (a.category && a.category !== 'none') ? 'Category: '+esc(a.category) : ''].filter(Boolean).join(' \u00b7 ') || ''}</div>
+      <div style="margin-top:0.4rem"><button class="user-mini-toggle" data-login="${esc(a.chatter)}" onclick="event.stopPropagation();toggleUserMini(this)">Show user \u25BE</button><div style="display:none"></div></div>
+    </div>`;
+    const onclick = compact
+      ? ` onclick="document.querySelector('#tabs button[data-tab=\\'activity\\']').click()"`
+      : ` onclick="this.classList.toggle('expanded')"`;
+    const delay = compact ? '' : ` style="animation: panel-in 0.3s ease-out ${idx * 0.02}s both"`;
+    const outcome = esc(a.outcome);
+    return `<div class="activity-item" data-outcome="${outcome}"${onclick}${delay}>${quickBtns}${userLink(a.chatter)}${flagHtml} ${outcomeBadge} ${acts}${catBadge}${textSnip}<div class="activity-meta-line">${esc(a.mode || a.stage)} &middot; ${timeAgo(a.createdAt)}</div>${expandHtml}</div>`;
   }).join('');
+}
+
+function switchToUserTab(login) {
+  // Delegate to the tab button click so all side effects (poll, keyboard handler) fire
+  document.querySelector('#tabs button[data-tab="activity"]').click();
+  const panel = document.getElementById('global-user-result');
+  panel.style.display = 'block';
+  document.getElementById('global-search').value = login;
+  doLoadUser(login);
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// --- Stats Pulse ---
+
+function triggerStatsPulse() {
+  const el = document.getElementById('stats-section');
+  if (!el) return;
+  el.classList.add('stats-pulse');
+  setTimeout(() => el.classList.remove('stats-pulse'), 800);
 }
 
 // --- Dashboard ---
@@ -356,7 +1616,18 @@ async function fetchStatus() {
   try { const r = await fetch(API + '/api/status'); return r.ok ? await r.json() : null; } catch { return null; }
 }
 
-async function setSetting(key, value) { await jsonPost('/api/settings', { key, value }); refreshDashboard(); }
+async function setSetting(key, value) {
+  await jsonPost('/api/settings', { key, value });
+  refreshDashboard();
+  // Flash only the specific toggle that was clicked (by data-key after re-render)
+  setTimeout(() => {
+    const btn = document.querySelector(`.toggle-btn[data-key="${key}"]`);
+    if (btn) {
+      btn.classList.add('toggle-flash');
+      setTimeout(() => btn.classList.remove('toggle-flash'), 600);
+    }
+  }, 100);
+}
 
 async function resetAll() {
   if (!confirm('Reset all overrides to defaults?')) return;
@@ -364,29 +1635,90 @@ async function resetAll() {
   refreshDashboard();
 }
 
-function renderToggle(key, label, desc, value) {
-  return `<div class="toggle-row"><div class="toggle-label">${label}<small>${desc}</small></div><button class="toggle-btn ${value ? 'on' : 'off'}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button></div>`;
-}
-
-function renderLlama(llama) {
-  if (!llama) { document.getElementById('llama-section').style.display = 'none'; return; }
-  document.getElementById('llama-section').style.display = '';
-  const dot = llama.running ? 'green' : 'red';
-  document.getElementById('llama-status').innerHTML = `
-    <div class="status-row"><span><span class="status-dot ${dot}"></span>${llama.running ? 'Running' : 'Stopped'}</span><span class="status-value">PID ${llama.pid || '-'}</span></div>
-    <div class="status-row"><span>Model</span><span class="status-value">${esc(llama.model)}</span></div>
-    <div class="status-row"><span>Port</span><span class="status-value">${llama.port}</span></div>`;
+function renderToggle(key, label, desc, value, safety) {
+  const cls = safety
+    ? (value ? 'toggle-btn safety-on' : 'toggle-btn safety-off')
+    : (value ? 'toggle-btn on' : 'toggle-btn off');
+  return `<div class="toggle-row"><div class="toggle-label">${label}<small>${desc}</small></div><button class="${cls}" data-key="${key}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button></div>`;
 }
 
 function renderSettings(s) {
-  document.getElementById('settings').innerHTML = [
+  const regular = [
     renderToggle('aiEnabled', 'AI Enabled', 'Master AI toggle', s.aiEnabled),
     renderToggle('aiModerationEnabled', 'AI Moderation', 'Allow AI to propose timeouts and warns', s.aiModerationEnabled),
     renderToggle('socialRepliesEnabled', 'Social Replies', 'Allow social chat responses', s.socialRepliesEnabled),
-    renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled),
-    renderToggle('dryRun', 'Dry Run', 'Prevent all real actions', s.dryRun),
-    `<button class="btn btn-danger" style="margin-top:0.5rem" onclick="resetAll()">Reset All Overrides</button>`,
   ].join('');
+  const safety = [
+    renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled, true),
+    renderToggle('dryRun', 'Dry Run', 'Prevent all real actions', s.dryRun, true),
+  ].join('');
+  document.getElementById('settings').innerHTML = regular +
+    `<div class="safety-toggles"><div class="safety-label">Safety Controls</div>${safety}</div>` +
+    `<div style="margin-top:0.6rem"><button class="btn btn-danger" onclick="resetAll()">Reset All Overrides</button></div>`;
+}
+
+// --- Status Strip & Quick Actions ---
+
+function updateStatusStrip(data) {
+  if (!data) return;
+  const s = data.settings;
+
+  // AI status tag
+  const aiTag = document.getElementById('hud-ai-tag');
+  if (aiTag) {
+    aiTag.textContent = s.aiEnabled ? 'AI ON' : 'AI OFF';
+    aiTag.className = 'hud-status-tag ' + (s.aiEnabled ? 'ok' : 'err');
+  }
+
+  // Dry run tag
+  const dryTag = document.getElementById('hud-dry-tag');
+  if (dryTag) {
+    dryTag.className = 'hud-status-tag ' + (s.dryRun ? 'warn' : 'hidden');
+  }
+
+  // LLM indicator
+  const llama = data.llamaServer;
+  const llmDot = document.querySelector('#hud-llm .hud-dot');
+  const llmText = document.querySelector('.hud-llm-text');
+  if (llmDot) { llmDot.className = (llama && llama.running) ? 'hud-dot live' : 'hud-dot dead'; }
+  if (llmText) { llmText.textContent = (llama && llama.running) ? 'LLM \u2713' : 'LLM \u2717'; }
+  if (llama && llama.model) { document.getElementById('hud-llm').title = `Model: ${llama.model} (port ${llama.port})`; }
+
+  // Queue indicator
+  const q = data.aiQueue;
+  const qDot = document.querySelector('#hud-queue-ind .hud-dot');
+  const qText = document.querySelector('.hud-queue-text');
+  if (qDot && q) { qDot.className = q.depth > 0 ? 'hud-dot live' : 'hud-dot dead'; }
+  if (qText) { qText.textContent = q ? `Q: ${q.depth}` : 'Q: -'; }
+
+  // Quick toggles
+  const dryBtn = document.getElementById('hud-qk-dryrun');
+  if (dryBtn) {
+    dryBtn.textContent = s.dryRun ? 'Dry Run: ON' : 'Dry Run: OFF';
+    dryBtn.className = 'hud-toggle ' + (s.dryRun ? 'caution-on' : 'off');
+  }
+  const aiModBtn = document.getElementById('hud-qk-aimod');
+  if (aiModBtn) {
+    aiModBtn.textContent = s.aiModerationEnabled ? 'AI Mod: ON' : 'AI Mod: OFF';
+    aiModBtn.className = 'hud-toggle ' + (s.aiModerationEnabled ? 'on' : 'off');
+  }
+}
+
+async function quickToggle(key) {
+  const data = await fetchStatus();
+  if (!data) return;
+  const current = data.settings[key];
+  await jsonPost('/api/settings', { key, value: !current });
+  // Immediately refresh strip and dashboard if visible
+  const fresh = await fetchStatus();
+  if (fresh) updateStatusStrip(fresh);
+  if (document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard();
+  // Flash the quick-toggle button
+  const btnId = key === 'dryRun' ? 'hud-qk-dryrun' : key === 'aiModerationEnabled' ? 'hud-qk-aimod' : null;
+  if (btnId) {
+    const btn = document.getElementById(btnId);
+    if (btn) { btn.classList.add('toggle-flash'); setTimeout(() => btn.classList.remove('toggle-flash'), 600); }
+  }
 }
 
 function renderSelectors(data) {
@@ -397,37 +1729,115 @@ function renderSelectors(data) {
     <div class="toggle-row"><div class="toggle-label">Model Preset</div><select onchange="setSetting('modelPreset', this.value)"><option value="">default</option>${mOpts}</select></div>`;
 }
 
+let lastDecisionCount = 0;
+
 async function renderStats() {
   try {
-    const r = await fetch(API + '/api/stats');
-    const data = await r.json();
+    const [statsResp, actResp] = await Promise.all([
+      fetch(API + '/api/stats'),
+      fetch(API + '/api/activity?limit=100&after=' + new Date(Date.now() - 3600000).toISOString())
+    ]);
+    const data = await statsResp.json();
+    const actData = actResp.ok ? await actResp.json() : null;
     const s = data.stats;
     const q = data.aiQueue;
-    document.getElementById('stats-summary').innerHTML = `<div class="stat-grid">
-      <div class="stat-card"><div class="stat-value">${s.decisions.total}</div><div class="stat-label">Decisions</div></div>
-      <div class="stat-card"><div class="stat-value">${s.timeouts.total}</div><div class="stat-label">Timeouts</div></div>
-      <div class="stat-card"><div class="stat-value">${s.actions.byKind?.warn ?? 0}</div><div class="stat-label">Warns</div></div>
-      <div class="stat-card"><div class="stat-value">${s.actions.byKind?.say ?? 0}</div><div class="stat-label">Says</div></div>
-      <div class="stat-card"><div class="stat-value">${q ? q.depth : '-'}</div><div class="stat-label">Queue</div></div>
+    const dec = s.decisions.total, tmt = s.timeouts.total,
+          warn = s.actions.byKind?.warn ?? 0, say = s.actions.byKind?.say ?? 0;
+
+    if (dec > lastDecisionCount && lastDecisionCount > 0) triggerStatsPulse();
+    lastDecisionCount = dec;
+
+    // Queue badge
+    const qb = document.getElementById('queue-badge');
+    if (qb) qb.textContent = q ? `${q.depth} queued` : '';
+
+    // Bucket activity into 24 bins (2.5 min each)
+    const buckets = buildBuckets(actData ? actData.rows : []);
+
+    // Build spark table
+    const rows = [
+      { label: 'decisions', val: dec, color: 'cyan',  hex: '#00f0ff', buckets: buckets.dec },
+      { label: 'timeouts',  val: tmt, color: 'red',   hex: '#e53935', buckets: buckets.tmt },
+      { label: 'warns',     val: warn, color: 'amber', hex: '#f0a500', buckets: buckets.warn },
+      { label: 'says',      val: say, color: 'blue',  hex: '#42a5f5', buckets: buckets.say },
+    ];
+    const html = `<div class="spark-table">
+      ${rows.map(r => `<div class="spark-row${r.val === 0 ? ' dim' : ''}">
+        <span class="spark-label">${r.label}</span>
+        <span class="spark-val" data-color="${r.color}">${r.val}</span>
+        <span class="spark-line">${renderSparkline(r.buckets, r.hex)}</span>
+      </div>`).join('')}
+      <span></span><span></span>
+      <div class="spark-axis"><span>-45m</span><span>-30m</span><span>-15m</span><span>now</span></div>
     </div>`;
-  } catch { document.getElementById('stats-summary').innerHTML = ''; }
+    document.getElementById('spark-table').innerHTML = html;
+  } catch { document.getElementById('spark-table').innerHTML = ''; }
+}
+
+function renderSparkline(buckets, color) {
+  const max = Math.max(...buckets, 1);
+  const W = 100, H = 22, n = buckets.length;
+  const pts = buckets.map((v, i) => {
+    const x = (i / (n - 1)) * W;
+    const y = H - (v / max) * (H - 3) - 1.5;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const gid = 'sg' + Math.random().toString(36).slice(2, 8);
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <polygon points="${pts} ${W},${H} 0,${H}" fill="url(#${gid})"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function buildBuckets(rows) {
+  const now = Date.now(), N = 24, bMs = (60 * 60 * 1000) / N;
+  const dec = Array(N).fill(0), tmt = Array(N).fill(0),
+        warn = Array(N).fill(0), say = Array(N).fill(0);
+  for (const d of rows) {
+    const age = now - new Date(d.createdAt).getTime();
+    const idx = Math.floor(age / bMs);
+    if (idx >= N) continue;
+    const b = N - 1 - idx;
+    dec[b]++;
+    if (d.outcome === 'action') {
+      if ((d.actions || '').includes('timeout')) tmt[b]++;
+      if ((d.actions || '').includes('warn'))    warn[b]++;
+      if ((d.actions || '').includes('say'))     say[b]++;
+    }
+  }
+  return { dec, tmt, warn, say };
 }
 
 async function refreshDashboard() {
   const data = await fetchStatus();
   if (!data) { document.getElementById('settings').innerHTML = '<div class="error">Failed to connect</div>'; return; }
-  renderLlama(data.llamaServer);
+  updateStatusStrip(data);
   renderSettings(data.settings);
   renderSelectors(data);
   const actEl = document.getElementById('activity');
   if (!data.recentActivity || data.recentActivity.length === 0) actEl.innerHTML = '<div class="activity-meta">No activity</div>';
-  else actEl.innerHTML = renderActivityHtml(data.recentActivity);
+  else actEl.innerHTML = renderActivityHtml(data.recentActivity, true);
   renderStats();
 }
 
 // --- Activity Feed ---
 
 const debouncedActivity = debounce(() => loadActivity(true), 300);
+
+function clearFilters() {
+  document.getElementById('act-chatter').value = '';
+  document.getElementById('act-outcome').value = '';
+  document.getElementById('act-stage').value = 'ai';
+  document.getElementById('act-range').value = '';
+  loadActivity(true);
+}
+let actHighWaterTs = null;
+let actPollTimer = null;
+let kbIdx = -1;
 
 async function loadActivity(reset, more) {
   if (reset) activityOffset = 0;
@@ -445,11 +1855,57 @@ async function loadActivity(reset, more) {
     const r = await fetch(API + '/api/activity?' + params);
     const data = await r.json();
     const container = document.getElementById('activity-feed');
-    if (activityOffset === 0) container.innerHTML = '';
+    if (activityOffset === 0) {
+      container.innerHTML = '';
+      if (data.rows.length) actHighWaterTs = data.rows[0].createdAt;
+      document.getElementById('act-new-banner').style.display = 'none';
+    }
     if (data.rows.length === 0 && activityOffset === 0) { container.innerHTML = '<div class="activity-meta">No activity</div>'; }
-    else { container.innerHTML += renderActivityHtml(data.rows); }
+    else { container.innerHTML += renderActivityHtml(data.rows, false); }
     document.getElementById('act-more').style.display = data.rows.length === 25 ? '' : 'none';
+    kbIdx = -1;
   } catch { document.getElementById('activity-feed').innerHTML = '<div class="error">Failed to load</div>'; }
+}
+
+function startActivityPoll() {
+  stopActivityPoll();
+  actPollTimer = setInterval(pollNewDecisions, 10000);
+}
+
+function stopActivityPoll() {
+  if (actPollTimer) { clearInterval(actPollTimer); actPollTimer = null; }
+}
+
+async function pollNewDecisions() {
+  if (!actHighWaterTs) return;
+  // Bump by 1ms so the query excludes the row we already have
+  const after = new Date(new Date(actHighWaterTs).getTime() + 1).toISOString();
+  try {
+    const data = await fetch(API + '/api/activity?limit=1&after=' + encodeURIComponent(after)).then(r => r.json());
+    if (data.rows && data.rows.length > 0) {
+      const count = data.total ?? data.rows.length;
+      document.getElementById('act-new-count').textContent = count + ' new decision' + (count !== 1 ? 's' : '');
+      document.getElementById('act-new-banner').style.display = 'flex';
+    }
+  } catch {}
+}
+
+// Keyboard navigation for activity feed
+function actKbHandler(e) {
+  if (['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)) return;
+  const cards = [...document.querySelectorAll('#activity-feed .activity-item')];
+  if (!cards.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); kbIdx = Math.min(kbIdx < 0 ? 0 : kbIdx + 1, cards.length - 1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); kbIdx = Math.max(kbIdx <= 0 ? 0 : kbIdx - 1, 0); }
+  else if (e.key === 'Enter' && kbIdx >= 0) { e.preventDefault(); cards[kbIdx].classList.toggle('expanded'); }
+  else if (e.key === 'Escape' && kbIdx >= 0) { cards[kbIdx].classList.remove('expanded'); }
+  else if (e.key === 'u' && kbIdx >= 0) {
+    const qb = cards[kbIdx].querySelector('.quick-btns');
+    const login = qb?.dataset.login;
+    if (login) switchToUserTab(login);
+  } else return;
+  cards.forEach((c, i) => c.classList.toggle('kb-focus', i === kbIdx));
+  if (kbIdx >= 0) cards[kbIdx].scrollIntoView({ block: 'nearest' });
 }
 
 // --- Audit Log ---
@@ -463,7 +1919,7 @@ async function loadAudit(more) {
     const container = document.getElementById('audit-feed');
     if (auditOffset === 0) container.innerHTML = '';
     if (data.rows.length === 0 && auditOffset === 0) { container.innerHTML = '<div class="activity-meta">No audit entries</div>'; return; }
-    const rowsHtml = data.rows.map(a => `<tr><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : 'FAIL'}</td><td>${a.highRisk ? '<span style="color:#c62828">YES</span>' : '-'}</td></tr>`).join('');
+    const rowsHtml = data.rows.map(a => `<tr><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : '<span style="color:var(--red)">FAIL</span>'}</td><td>${a.highRisk ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--text-muted)">\u2013</span>'}</td></tr>`).join('');
     if (auditOffset === 0) {
       container.innerHTML = `<table><thead><tr><th>Time</th><th>Actor</th><th>Command</th><th>Status</th><th>High Risk</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
     } else {
@@ -475,17 +1931,20 @@ async function loadAudit(more) {
 
 // --- User Lookup ---
 
-const debouncedUser = debounce((login) => {
-  if (login && login.length >= 2) doLoadUser(login);
-}, 400);
-
 async function doLoadUser(login) {
   login = login.trim().toLowerCase().replace(/^@/, '');
   if (!login) return;
   try {
     const r = await fetch(API + '/api/user?login=' + encodeURIComponent(login));
     const data = await r.json();
-    let html = `<div style="margin-top:0.75rem"><strong>@${esc(login)}</strong> &mdash; ${data.isExempt ? '<span style="color:#00c853">Exempt</span>' : 'Not exempt'}</div>`;
+    const el = esc(login);
+    let html = `<div style="margin-top:0.75rem"><strong style="color:var(--cyan)">@${el}</strong> &mdash; ${data.isExempt ? '<span style="color:var(--green)">Exempt</span>' : '<span style="color:var(--text-dim)">Not exempt</span>'}</div>`;
+    html += `<div class="user-actions">${data.isExempt
+      ? `<button class="btn btn-sm btn-ghost" onclick="jsonPost('/api/exemptions/remove',{login:'${el}'}).then(()=>doLoadUser('${el}'))">Un-exempt</button>`
+      : `<button class="btn btn-sm" onclick="jsonPost('/api/exemptions',{login:'${el}'}).then(()=>doLoadUser('${el}'))">Exempt</button>`}
+      <button class="btn btn-sm btn-ghost" onclick="jsonPost('/api/controllers',{login:'${el}',role:'mod'}).then(()=>{doLoadUser('${el}');loadControllers()})">Make Mod</button>
+      <button class="btn btn-sm btn-ghost" onclick="jsonPost('/api/controllers',{login:'${el}',role:'admin'}).then(()=>{doLoadUser('${el}');loadControllers()})">Make Admin</button>
+    </div>`;
     if (data.messages.length > 0) {
       html += `<h2 style="margin-top:1rem">Messages (${data.messages.length})</h2><table><thead><tr><th>Time</th><th>Text</th></tr></thead><tbody>` +
         data.messages.map(m => `<tr><td>${timeAgo(m.receivedAt)}</td><td>${esc(m.text)}</td></tr>`).join('') + `</tbody></table>`;
@@ -523,18 +1982,15 @@ async function loadControllers() {
     let html = '<table class="ctrl-table"><thead><tr><th>Login</th><th>Role</th><th>Source</th><th></th></tr></thead><tbody>';
     for (const c of all) {
       if (c.source === 'config' && c.overridden) continue;
-      const roleBadge = `<span class="badge badge-${esc(c.role)}">${esc(c.role)}</span>`;
       const srcBadge = `<span class="badge badge-${esc(c.source)}">${esc(c.source)}</span>`;
-      const otherRole = c.role === 'admin' ? 'mod' : 'admin';
-      let actions;
-      if (c.source === 'runtime') {
-        actions = `<button class="btn-ghost btn-sm" onclick="changeControllerRole('${esc(c.login)}','${otherRole}')">set ${otherRole}</button> `;
-        actions += `<button class="btn-danger btn-sm" onclick="removeController('${esc(c.login)}')">remove</button>`;
-      } else {
-        actions = `<button class="btn-ghost btn-sm" onclick="overrideController('${esc(c.login)}','${otherRole}')">set ${otherRole}</button> `;
-        actions += `<button class="btn-danger btn-sm" onclick="overrideRemoveController('${esc(c.login)}')">remove</button>`;
-      }
-      html += `<tr><td>${userLink(c.login)}</td><td>${roleBadge}</td><td>${srcBadge}</td><td>${actions}</td></tr>`;
+      const changeFn = c.source === 'runtime' ? 'changeControllerRole' : 'overrideController';
+      const roleSelect = `<select class="role-select" onchange="${changeFn}('${esc(c.login)}', this.value)">
+        <option value="admin"${c.role === 'admin' ? ' selected' : ''}>admin</option>
+        <option value="mod"${c.role === 'mod' ? ' selected' : ''}>mod</option>
+      </select>`;
+      const removeFn = c.source === 'runtime' ? 'removeController' : 'overrideRemoveController';
+      const actions = `<button class="btn btn-danger btn-sm" onclick="${removeFn}('${esc(c.login)}')">remove</button>`;
+      html += `<tr><td>${userLink(c.login)}</td><td>${roleSelect}</td><td>${srcBadge}</td><td>${actions}</td></tr>`;
     }
     html += '</tbody></table>';
     document.getElementById('controller-list').innerHTML = html;
@@ -566,8 +2022,6 @@ async function overrideController(login, role) {
 }
 
 async function overrideRemoveController(login) {
-  // For config controllers, "removing" means adding a runtime entry that the control plane
-  // will check. Since we can't delete YAML entries, we note this is config-managed.
   if (!confirm(`@${login} is defined in YAML config. Remove the runtime override? To fully remove, edit control-plane.yaml.`)) return;
   await jsonPost('/api/controllers/remove', { login });
   loadControllers();
@@ -650,31 +2104,104 @@ async function loadHealth() {
   } catch { document.getElementById('health-info').innerHTML = '<div class="error">Failed to load</div>'; }
 }
 
+// --- Inline User Mini-Panel ---
+
+const userCache = new Map();
+
+async function loadUserMini(login, container) {
+  if (container.dataset.loaded) return;
+  container.dataset.loaded = '1';
+  container.innerHTML = '<span class="activity-meta">Loading...</span>';
+
+  let data = userCache.get(login);
+  if (!data) {
+    try {
+      const r = await fetch(API + '/api/user?login=' + encodeURIComponent(login));
+      data = await r.json();
+      userCache.set(login, data);
+    } catch {
+      container.innerHTML = '<span class="activity-meta">Failed to load user</span>';
+      container.dataset.loaded = '';
+      return;
+    }
+  }
+
+  const exemptBadge = data.isExempt
+    ? '<span class="user-mini-exempt yes">Exempt</span>'
+    : '<span class="user-mini-exempt no">Not exempt</span>';
+
+  const recentMsgs = data.messages.slice(0, 3);
+  const msgsHtml = recentMsgs.length > 0
+    ? `<div class="user-mini-msgs">${recentMsgs.map(m =>
+        `<div class="user-mini-msg"><span class="time">${timeAgo(m.receivedAt)}</span><span class="text">${esc(m.text)}</span></div>`
+      ).join('')}${data.messages.length > 3 ? `<div class="activity-meta" style="margin-top:0.2rem">+${data.messages.length - 3} more</div>` : ''}</div>`
+    : '<div class="activity-meta" style="margin-top:0.3rem">No recent messages</div>';
+
+  const decisionCount = data.decisions.length;
+  const actionCount = data.actions.length;
+  const summaryParts = [];
+  if (decisionCount) summaryParts.push(`${decisionCount} decision${decisionCount !== 1 ? 's' : ''}`);
+  if (actionCount) summaryParts.push(`${actionCount} action${actionCount !== 1 ? 's' : ''}`);
+
+  container.innerHTML = `
+    <div class="user-mini">
+      <div class="user-mini-header">
+        <strong>@${esc(login)}</strong>
+        ${exemptBadge}
+      </div>
+      ${summaryParts.length ? `<div class="activity-meta">${summaryParts.join(' \u00b7 ')}</div>` : ''}
+      ${msgsHtml}
+      <div class="user-mini-actions">
+        ${!data.isExempt ? `<button class="user-mini-btn" onclick="event.stopPropagation();jsonPost('/api/exemptions',{login:'${esc(login)}'}).then(()=>{alert('Exempted: @${esc(login)}');userCache.delete('${esc(login)}')})">Exempt</button>` : ''}
+        <button class="user-mini-btn" onclick="event.stopPropagation();switchToUserTab('${esc(login)}')">Full profile \u2192</button>
+      </div>
+    </div>`;
+}
+
+function toggleUserMini(btn) {
+  const login = btn.dataset.login;
+  const container = btn.nextElementSibling;
+  if (!container) return;
+  const isOpen = container.style.display !== 'none';
+  container.style.display = isOpen ? 'none' : 'block';
+  btn.textContent = isOpen ? 'Show user \u25BE' : 'Hide user \u25B4';
+  if (!isOpen) loadUserMini(login, container);
+}
+
 // --- Init ---
 
-// Autocomplete on activity chatter filter
 setupAutocomplete('act-chatter-wrap', 'act-chatter', () => loadActivity(true));
+setupAutocomplete('global-search-wrap', 'global-search', (login) => {
+  document.getElementById('global-user-result').style.display = 'block';
+  doLoadUser(login);
+});
+setupAutocomplete('ctrl-login-wrap', 'ctrl-login', () => {});
+setupAutocomplete('exempt-login-wrap', 'exempt-login', () => {});
 
-// Autocomplete on user lookup (also triggers search)
-setupAutocomplete('user-login-wrap', 'user-login', (login) => doLoadUser(login));
-
-// Live filtering: dropdowns trigger immediately, chatter input is debounced
 document.getElementById('act-outcome').addEventListener('change', () => loadActivity(true));
 document.getElementById('act-stage').addEventListener('change', () => loadActivity(true));
 document.getElementById('act-range').addEventListener('change', () => loadActivity(true));
 document.getElementById('act-chatter').addEventListener('input', debouncedActivity);
 
-// User lookup: search as you type
-document.getElementById('user-login').addEventListener('input', (e) => debouncedUser(e.target.value));
+document.getElementById('global-search').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const v = e.target.value.trim().replace(/^@/, '');
+    if (v) { document.getElementById('global-user-result').style.display = 'block'; doLoadUser(v); }
+  }
+});
 
-// Enter key on inputs
 document.getElementById('exempt-login').addEventListener('keydown', (e) => { if (e.key === 'Enter') addExemption(); });
 document.getElementById('block-term').addEventListener('keydown', (e) => { if (e.key === 'Enter') addBlockedTerm(); });
 document.getElementById('ctrl-login').addEventListener('keydown', (e) => { if (e.key === 'Enter') addController(); });
-document.getElementById('user-login').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLoadUser(e.target.value); });
 
 refreshDashboard();
 setInterval(() => { if (document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard(); }, 3000);
+// Status strip poll — runs on all tabs so the top bar stays current
+setInterval(async () => {
+  if (document.getElementById('tab-dashboard').classList.contains('active')) return; // dashboard refresh already handles it
+  const data = await fetchStatus();
+  if (data) updateStatusStrip(data);
+}, 5000);
 </script>
 </body>
 </html>
