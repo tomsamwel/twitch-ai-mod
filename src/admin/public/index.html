@@ -151,6 +151,7 @@
     flex-shrink: 0;
   }
   .hud-dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse-dot 2s ease-in-out infinite; }
+  .hud-dot.caution { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: pulse-dot 1.2s ease-in-out infinite; }
   .hud-dot.dead { background: var(--red-dim); }
   @keyframes pulse-dot {
     0%, 100% { opacity: 1; }
@@ -1368,6 +1369,11 @@
       <h2>Provider Health</h2>
       <div id="health-info">Loading...</div>
     </section>
+    <section class="panel">
+      <h2>Danger Zone</h2>
+      <p class="activity-meta">Permanently delete operational data. Cannot be undone.</p>
+      <button class="btn btn-danger" onclick="purgeAll()">Purge All Operational Data</button>
+    </section>
   </div>
 
 </div><!-- .hud-shell -->
@@ -1635,6 +1641,31 @@ async function resetAll() {
   refreshDashboard();
 }
 
+async function purgeUser(login) {
+  if (!confirm(`Purge all history for @${login}? This deletes messages, decisions, and actions. Cannot be undone.`)) return;
+  try {
+    const r = await jsonPost('/api/purge/user', { login });
+    const data = await r.json();
+    if (data.ok) {
+      alert(`Purged @${login}: ${data.messages} messages, ${data.decisions} decisions, ${data.actions} actions.`);
+      doLoadUser(login);
+    } else { alert('Purge failed'); }
+  } catch { alert('Purge failed'); }
+}
+
+async function purgeAll() {
+  if (!confirm('Purge ALL operational data? This deletes all messages, decisions, actions, events, and reviews. Cannot be undone.')) return;
+  if (!confirm('Are you sure? This will wipe the entire operational database.')) return;
+  try {
+    const r = await jsonPost('/api/purge/all', {});
+    const data = await r.json();
+    if (data.ok) {
+      alert(`Purged all: ${data.messages} msgs, ${data.decisions} decisions, ${data.actions} actions, ${data.events} events, ${data.reviews} reviews.`);
+      refreshDashboard();
+    } else { alert('Purge failed'); }
+  } catch { alert('Purge failed'); }
+}
+
 function renderToggle(key, label, desc, value, safety) {
   const cls = safety
     ? (value ? 'toggle-btn safety-on' : 'toggle-btn safety-off')
@@ -1688,8 +1719,8 @@ function updateStatusStrip(data) {
   const q = data.aiQueue;
   const qDot = document.querySelector('#hud-queue-ind .hud-dot');
   const qText = document.querySelector('.hud-queue-text');
-  if (qDot && q) { qDot.className = q.depth > 0 ? 'hud-dot live' : 'hud-dot dead'; }
-  if (qText) { qText.textContent = q ? `Q: ${q.depth}` : 'Q: -'; }
+  if (qDot && q) { qDot.className = q.underPressure ? 'hud-dot caution' : q.depth > 0 ? 'hud-dot live' : 'hud-dot dead'; }
+  if (qText) { qText.textContent = q ? `Q: ${q.highDepth}h/${q.normalDepth}n` : 'Q: -'; }
 
   // Quick toggles
   const dryBtn = document.getElementById('hud-qk-dryrun');
@@ -1749,7 +1780,7 @@ async function renderStats() {
 
     // Queue badge
     const qb = document.getElementById('queue-badge');
-    if (qb) qb.textContent = q ? `${q.depth} queued` : '';
+    if (qb) qb.textContent = q ? `${q.highDepth}h + ${q.normalDepth}n queued` : '';
 
     // Bucket activity into 24 bins (2.5 min each)
     const buckets = buildBuckets(actData ? actData.rows : []);
@@ -1939,11 +1970,13 @@ async function doLoadUser(login) {
     const data = await r.json();
     const el = esc(login);
     let html = `<div style="margin-top:0.75rem"><strong style="color:var(--cyan)">@${el}</strong> &mdash; ${data.isExempt ? '<span style="color:var(--green)">Exempt</span>' : '<span style="color:var(--text-dim)">Not exempt</span>'}</div>`;
+    const hasHistory = data.messages.length + data.decisions.length + data.actions.length > 0;
     html += `<div class="user-actions">${data.isExempt
       ? `<button class="btn btn-sm btn-ghost" onclick="jsonPost('/api/exemptions/remove',{login:'${el}'}).then(()=>doLoadUser('${el}'))">Un-exempt</button>`
       : `<button class="btn btn-sm" onclick="jsonPost('/api/exemptions',{login:'${el}'}).then(()=>doLoadUser('${el}'))">Exempt</button>`}
       <button class="btn btn-sm btn-ghost" onclick="jsonPost('/api/controllers',{login:'${el}',role:'mod'}).then(()=>{doLoadUser('${el}');loadControllers()})">Make Mod</button>
       <button class="btn btn-sm btn-ghost" onclick="jsonPost('/api/controllers',{login:'${el}',role:'admin'}).then(()=>{doLoadUser('${el}');loadControllers()})">Make Admin</button>
+      ${hasHistory ? `<button class="btn btn-sm btn-danger" onclick="purgeUser('${el}')">Purge History</button>` : ''}
     </div>`;
     if (data.messages.length > 0) {
       html += `<h2 style="margin-top:1rem">Messages (${data.messages.length})</h2><table><thead><tr><th>Time</th><th>Text</th></tr></thead><tbody>` +
@@ -2093,7 +2126,7 @@ async function loadHealth() {
     }
     if (data.aiQueue) {
       const q = data.aiQueue;
-      html += `<div class="status-row"><span>Queue depth</span><span class="status-value">${q.depth}</span></div>`;
+      html += `<div class="status-row"><span>Queue depth</span><span class="status-value">${q.highDepth}h / ${q.normalDepth}n</span></div>`;
       html += `<div class="status-row"><span>Processing</span><span class="status-value">${q.processing}</span></div>`;
       html += `<div class="status-row"><span>Total processed</span><span class="status-value">${q.totalProcessed}</span></div>`;
       html += `<div class="status-row"><span>Dropped (capacity)</span><span class="status-value">${q.totalDroppedCapacity}</span></div>`;

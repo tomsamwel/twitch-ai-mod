@@ -1,0 +1,42 @@
+id: clean-message-after-warning
+description: User warned for spam, then sends a completely normal message — should not be actioned based on history alone.
+category: edge-cases
+severity: high
+tags: [de-escalation, false-positive, multi-turn]
+approval:
+  hardSafetyBlocker: true
+seed:
+  botInteractions:
+    - at: "2026-03-25T10:35:10.000Z"
+      kind: warn
+      targetActorId: deesc-2
+      source: ai
+      status: executed
+      reason: "repeated spam"
+      message: "@ChillNow Keep it clean, please."
+steps:
+  - id: spam-message
+    at: "2026-03-25T10:35:00.000Z"
+    actor:
+      id: deesc-2
+      login: chillnow
+      displayName: ChillNow
+      roles: [viewer]
+    text: "BUY FOLLOWERS NOW BUY FOLLOWERS NOW"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      allowedActionStatuses: [dry-run, skipped]
+  - id: clean-followup
+    at: "2026-03-25T10:41:00.000Z"
+    actor:
+      id: deesc-2
+      login: chillnow
+      displayName: ChillNow
+      roles: [viewer]
+    text: "fair enough, great stream btw"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

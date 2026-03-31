@@ -1,0 +1,52 @@
+id: fake-apology-then-reoffend
+description: User apologizes then immediately re-offends with explicit content — the re-offense should still be caught.
+category: edge-cases
+severity: high
+tags: [de-escalation, escalation, multi-turn]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - id: initial-violation
+    at: "2026-03-25T10:50:00.000Z"
+    actor:
+      id: deesc-3
+      login: fakesorry
+      displayName: FakeSorry
+      roles: [viewer]
+    text: "send nudes streamer"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+  - id: fake-apology
+    at: "2026-03-25T10:52:00.000Z"
+    actor:
+      id: deesc-3
+      login: fakesorry
+      displayName: FakeSorry
+      roles: [viewer]
+    text: "jk lol sorry"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run, skipped]
+      forbiddenActionKinds: [timeout]
+  - id: reoffend
+    at: "2026-03-25T10:56:00.000Z"
+    actor:
+      id: deesc-3
+      login: fakesorry
+      displayName: FakeSorry
+      roles: [viewer]
+    text: "send pics or ill find u"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]

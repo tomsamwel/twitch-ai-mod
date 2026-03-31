@@ -4,9 +4,9 @@
 
 ```bash
 npm run check            # TypeScript type check
-npm test                 # 151 unit tests (~1.5s), node:test framework
+npm test                 # 174 unit tests (~1.5s), node:test framework
 npm run build            # Compile to dist/
-npm run eval:scenarios   # 70 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
+npm run eval:scenarios   # 77 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
 npm run eval:candidates  # List production decisions worth promoting to eval scenarios
 npm run eval:compare -- --baseline safer-control --candidate witty-mod
 npm run approve:pilot    # Final gate before live AI moderation
@@ -100,7 +100,7 @@ Three kinds: `say` (social reply), `warn` (public moderation notice), `timeout` 
 
 ## Eval System
 
-70 YAML scenarios across 13 suites: `adversarial`, `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `irl-safety`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
+77 YAML scenarios across 13 suites: `adversarial`, `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `irl-safety`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
 
 Scenarios support `seed` history + `steps[]` with expected outcomes. Legacy single-turn format auto-converted.
 

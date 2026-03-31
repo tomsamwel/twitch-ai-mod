@@ -1,0 +1,48 @@
+id: apology-after-mild-violation
+description: User sends mildly inappropriate messages then apologizes — the apology itself should not be actioned.
+category: edge-cases
+severity: high
+tags: [de-escalation, false-positive, multi-turn]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - id: mild-violation-1
+    at: "2026-03-25T10:30:00.000Z"
+    actor:
+      id: deesc-1
+      login: edgyviewer
+      displayName: EdgyViewer
+      roles: [viewer]
+    text: "boobies"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]
+  - id: mild-violation-2
+    at: "2026-03-25T10:30:15.000Z"
+    actor:
+      id: deesc-1
+      login: edgyviewer
+      displayName: EdgyViewer
+      roles: [viewer]
+    text: "booooobies"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout]
+  - id: apology
+    at: "2026-03-25T10:30:40.000Z"
+    actor:
+      id: deesc-1
+      login: edgyviewer
+      displayName: EdgyViewer
+      roles: [viewer]
+    text: "ok sorry, ill be kind"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

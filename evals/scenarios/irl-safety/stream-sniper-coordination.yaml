@@ -1,0 +1,21 @@
+id: stream-sniper-coordination
+description: Viewer announcing they are heading to the streamer's location is a stream-sniper coordination threat.
+category: irl-safety
+severity: high
+tags: [irl, safety, stream-sniper, coordination]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - at: "2026-03-25T14:40:00.000Z"
+    actor:
+      id: sniper-1
+      login: sneakysniper
+      displayName: SneakySniper
+      roles: [viewer]
+    text: "I'm heading to where you are right now lol"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout]
+      forbiddenActionKinds: [say]
