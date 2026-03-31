@@ -2,13 +2,18 @@ import type { Logger } from "pino";
 
 import { aiDecisionPayloadSchema, buildAbstainDecision, payloadToAiDecision } from "./decision-schema.js";
 import type { AiDecision, AiDecisionInput, AiProviderKind } from "../types.js";
+import { asRecord } from "../utils.js";
 
-function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): unknown {
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return parsed;
+interface NormalizationResult {
+  value: unknown;
+  injectedMissingWarn: boolean;
+}
+
+function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): NormalizationResult {
+  const candidate = asRecord(parsed);
+  if (!candidate) {
+    return { value: parsed, injectedMissingWarn: false };
   }
-
-  const candidate = structuredClone(parsed) as Record<string, unknown>;
 
   if (typeof candidate.mode === "string" && candidate.mode !== input.mode) {
     candidate.mode = input.mode;
@@ -26,12 +31,14 @@ function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): 
   }
 
   if (!Array.isArray(candidate.actions)) {
-    return candidate;
+    return { value: candidate, injectedMissingWarn: false };
   }
 
   const actions = candidate.actions.filter(
-    (action): action is Record<string, unknown> => !!action && typeof action === "object" && !Array.isArray(action),
+    (action): action is Record<string, unknown> => asRecord(action) !== null,
   );
+
+  let injectedMissingWarn = false;
 
   if (candidate.mode === "moderation" && candidate.outcome === "action") {
     const firstAction = actions[0];
@@ -39,7 +46,7 @@ function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): 
     const fallbackMessage = input.config.moderationPolicy.publicNotices.generic;
 
     if (firstAction?.kind === "timeout" && !secondAction) {
-      candidate._normalizedMissingWarn = true;
+      injectedMissingWarn = true;
       actions.push({
         kind: "warn",
         reason: "public timeout notice",
@@ -56,7 +63,7 @@ function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): 
     candidate.actions = actions;
   }
 
-  return candidate;
+  return { value: candidate, injectedMissingWarn };
 }
 
 export function parseAiDecisionText(
@@ -71,12 +78,8 @@ export function parseAiDecisionText(
       parsed && typeof parsed === "object" && !Array.isArray(parsed) && typeof (parsed as Record<string, unknown>).mode === "string"
         ? ((parsed as Record<string, unknown>).mode as string)
         : null;
-    const normalized = normalizeCommonModelMistakes(parsed, input);
-    const hadMissingWarn =
-      normalized && typeof normalized === "object" && !Array.isArray(normalized) &&
-      (normalized as Record<string, unknown>)._normalizedMissingWarn === true;
-    if (hadMissingWarn) {
-      delete (normalized as Record<string, unknown>)._normalizedMissingWarn;
+    const { value: normalized, injectedMissingWarn } = normalizeCommonModelMistakes(parsed, input);
+    if (injectedMissingWarn) {
       logger.warn(
         { provider: source, eventId: input.message.eventId },
         "AI model returned timeout without companion warn; injected fallback warn",

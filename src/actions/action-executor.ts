@@ -7,6 +7,7 @@ import { CooldownManager } from "../moderation/cooldown-manager.js";
 import type { BotDatabase } from "../storage/database.js";
 import type { ActionRequest, ActionResult, ConfigSnapshot, ProcessingMode, ProposedAction } from "../types.js";
 import type { TwurpleTwitchGateway } from "../twitch/twitch-gateway.js";
+import { asRecord } from "../utils.js";
 
 interface OutboundMessageRecorder {
   note(messageId: string): void;
@@ -149,10 +150,7 @@ export class ActionExecutor {
       throw new Error("warn action is missing a message payload");
     }
 
-    const metadata =
-      action.metadata && typeof action.metadata === "object" && !Array.isArray(action.metadata)
-        ? (action.metadata as Record<string, unknown>)
-        : null;
+    const metadata = asRecord(action.metadata);
     const timeoutCompanion = metadata?.timeoutCompanion === true;
     const companionTimeoutStatus =
       metadata?.companionTimeoutStatus &&
@@ -265,13 +263,11 @@ export class ActionExecutor {
   }
 
   private getAiTimeoutPrecisionGateFailure(action: ActionRequest): string | null {
-    const metadata = action.metadata;
+    const candidate = asRecord(action.metadata);
 
-    if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    if (!candidate) {
       return "missing ai timeout precision metadata";
     }
-
-    const candidate = metadata as Record<string, unknown>;
     const confidence = typeof candidate.aiConfidence === "number" ? candidate.aiConfidence : null;
     const moderationCategory =
       typeof candidate.moderationCategory === "string" ? candidate.moderationCategory : null;

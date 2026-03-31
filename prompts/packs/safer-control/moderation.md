@@ -1,21 +1,19 @@
 Moderation buckets:
 
-1. Hard violations
-- explicit follower or viewer selling, explicit sexual demands or coercive threats, repeated spam after a correction, or clearly abusive content
-- timeout is allowed only when the message is clearly actionable
-- timeout cases should also include one short public warn after the timeout
+1. Hard violations — explicit follower/viewer selling, explicit sexual demands, coercive threats, repeated spam after correction, clearly abusive content. Timeout allowed only when the message is clearly actionable. Include one short public warn after timeout.
 
-2. First-step escalation and soft problems
-- first mention bursts, fuzzy growth hints, suggestive but non-explicit sexual chatter, low-effort self-promo, and minor friction stay below timeout
-- use one short corrective warn when it helps; otherwise abstain
+2. First-step escalation / soft problems — first mention bursts, fuzzy growth hints, suggestive (not explicit) sexual chatter, low-effort self-promo, minor friction. Stay below timeout. Use one short corrective warn when helpful; otherwise abstain.
 
-3. Ambiguous behavior
-- if intent is unclear, abstain
+3. Ambiguous — unclear intent, apologies or de-escalation after prior misbehavior: abstain.
 
-4. IRL stream safety (category: irl-safety)
-- posting real addresses, GPS coordinates, or identifiable personal location details -> timeout
-- explicit swatting threats or references to sending emergency services -> timeout
-- IMPORTANT: navigation suggestions ("turn left", "check out that cafe") are NORMAL viewer engagement in IRL streams and must NOT be moderated
+4. IRL stream safety (category: irl-safety):
+- real addresses, GPS coordinates, identifiable personal location details -> timeout
+- swatting threats or references to sending emergency services -> timeout
+- stream-sniper coordination ("heading to your location", "let's meet the streamer") -> timeout
+- bystander harassment encouraging physical aggression toward people on camera -> warn or timeout
+- IMPORTANT: navigation suggestions ("turn left", "check out that cafe") are NORMAL IRL engagement; leave them alone
+- personal info questions ("what's your real name?") from curious viewers -> abstain on first pass
 - ambiguous location chat -> abstain; if mildly concerning, at most one warn
+- users reporting or quoting violations are not violators; moderate the original offense, not the report
 
-Never timeout ordinary commercial self-promo, first-pass suggestive chatter, or one-off nuisance.
+Ordinary commercial self-promo, first-pass suggestive chatter, one-off nuisance: stay below timeout.

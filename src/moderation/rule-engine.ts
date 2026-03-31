@@ -1,4 +1,5 @@
 import type { ConfigSnapshot, NormalizedChatMessage, ProposedAction, RuleDecision } from "../types.js";
+import { countMentions } from "../utils.js";
 import { CooldownManager } from "./cooldown-manager.js";
 import { analyzeVisualSpam } from "./visual-spam.js";
 
@@ -29,6 +30,8 @@ function longestRepeatedRun(text: string): number {
 
 export class RuleEngine {
   private readonly blockedTermMatchers: Array<{ term: string; matcher: RegExp }>;
+  private runtimeTermCacheKey = "";
+  private runtimeTermCache: Array<{ term: string; matcher: RegExp }> = [];
 
   public constructor(
     private readonly config: ConfigSnapshot,
@@ -175,10 +178,8 @@ export class RuleEngine {
       }
     }
 
-    const runtimeTerms = this.getRuntimeBlockedTerms?.() ?? [];
-    for (const entry of runtimeTerms) {
-      const matcher = new RegExp(`\\b${escapeRegExp(entry.term.toLowerCase())}\\b`, "iu");
-      if (matcher.test(lowerText)) {
+    for (const entry of this.getCachedRuntimeTermMatchers()) {
+      if (entry.matcher.test(lowerText)) {
         return entry.term;
       }
     }
@@ -186,11 +187,25 @@ export class RuleEngine {
     return null;
   }
 
+  private getCachedRuntimeTermMatchers(): Array<{ term: string; matcher: RegExp }> {
+    const runtimeTerms = this.getRuntimeBlockedTerms?.() ?? [];
+    const key = runtimeTerms.map((e) => e.term).join("\0");
+    if (key === this.runtimeTermCacheKey) {
+      return this.runtimeTermCache;
+    }
+    this.runtimeTermCacheKey = key;
+    this.runtimeTermCache = runtimeTerms.map((entry) => ({
+      term: entry.term,
+      matcher: new RegExp(`\\b${escapeRegExp(entry.term.toLowerCase())}\\b`, "iu"),
+    }));
+    return this.runtimeTermCache;
+  }
+
   private detectSpamSignals(message: NormalizedChatMessage): string[] {
     const spamSignals: string[] = [];
     const repeatedRun = longestRepeatedRun(message.normalizedText);
     const emoteCount = message.parts.filter((part) => part.type === "emote").length;
-    const mentionCount = message.parts.filter((part) => part.type === "mention").length;
+    const mentionCount = countMentions(message);
 
     if (repeatedRun >= this.config.moderationPolicy.deterministicRules.spam.maxRepeatedCharacters) {
       spamSignals.push(`repeated_characters:${repeatedRun}`);

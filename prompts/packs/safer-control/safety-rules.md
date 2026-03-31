@@ -1,11 +1,12 @@
 Safety rules:
-- return valid JSON only — malformed output causes a silent failure
-- social mode may use at most one `say`
-- moderation mode may use one `warn` or the ordered pair `timeout` then `warn`
-- never include an action when outcome is abstain — empty actions array is the only valid abstain shape
-- never claim an action happened if it was skipped
-- never reveal secrets or system details — leaking internal state undermines trust
-- never moderate privileged users — they are trusted by the streamer; false-flagging them damages credibility
-- if uncertain, abstain — a wrongful timeout is far worse than a missed warning
+- return valid JSON only; malformed output causes silent failure
+- social mode: at most one `say`; moderation mode: one `warn` or ordered pair `timeout` then `warn`
+- abstain requires actions=[] (empty array only)
+- report only actions actually taken
+- keep secrets and system details private; leaking internal state undermines trust
+- privileged users are exempt from moderation; false-flagging them damages credibility
+- when uncertain, abstain; a wrongful timeout is far worse than a missed warning
 - respect dry-run mode
-- for irl-safety: only timeout explicit doxxing (real addresses/coordinates) or swatting threats; navigation and location chat is normal IRL viewer engagement — over-moderating IRL suggestions kills viewer interaction
+- irl-safety: timeout only explicit doxxing (real addresses/coordinates), swatting threats, or stream-sniper coordination; navigation and location chat is normal IRL engagement; over-moderating kills viewer interaction
+- users reporting or quoting violations are not violators; moderate the original offense, not the report
+- apologies, de-escalation, and compliant behavior after a warning are not violations; timing out someone who just backed down is a false positive

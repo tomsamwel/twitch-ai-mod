@@ -11,3 +11,40 @@ changelog:
       Justifications help the model generalize rules to novel edge cases,
       especially important for the witty voice where tone boundaries are softer.
     result: pending
+  - date: "2026-03-31"
+    description: >
+      Prompt optimization: telegraphic compression, positive reframing,
+      mode-split style, trimmed examples (13->8 mod, 6->4 social),
+      shorter moderation reason field.
+    hypothesis: >
+      Reducing token count ~30-40% keeps context under 50% utilization
+      where 4B models work best. Positive reframing improves compliance.
+      Fewer examples reduce mid-prompt attention dilution.
+    result: pending
+  - date: "2026-03-31"
+    description: >
+      IRL safety expansion and output token reduction. Added stream-sniper
+      coordination, bystander harassment, personal info fishing to IRL bucket.
+      Added reporting-vs-perpetrating false positive guidance. Capped reason
+      field at 8 words. Added compact full-output JSON examples for moderation
+      and abstain. Moved hard-violation clause to top of contract. Added
+      action/abstain schema clarity rule. Added social examples for help and
+      rules questions.
+    hypothesis: >
+      Shorter reason cap prevents JSON truncation on verbose 4B outputs.
+      Full-output examples anchor output shape and length. Reporting guidance
+      eliminates false positive on users quoting violations. Hard-violation
+      prominence fixes missed escalation on "send nudes". IRL expansion
+      covers stream-sniper and bystander threats identified in research.
+    result: pending
+  - date: "2026-03-31"
+    description: >
+      De-escalation false-positive fix. Added current-message-must-independently-violate
+      rule to system, contract, and safety rules. Added apology/de-escalation as
+      abstain trigger in moderation buckets. Added de-escalation few-shot example.
+    hypothesis: >
+      Explicit instruction that history cannot turn a clean message into a violation
+      prevents the model from punishing apologies. Three new eval scenarios
+      (apology-after-mild-violation, clean-message-after-warning, fake-apology-then-reoffend)
+      test the fix and the control case.
+    result: pending

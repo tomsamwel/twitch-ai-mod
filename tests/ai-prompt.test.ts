@@ -33,7 +33,7 @@ test("buildAiDecisionInput switches to social mode when the bot is mentioned", (
   assert.equal(input.mode, "social");
   assert.match(input.prompt.system, /<contract>/u);
   assert.match(input.prompt.system, /what do u even do/u);
-  assert.match(input.prompt.system, /help pls/u);
+  assert.match(input.prompt.system, /@bot you suck/u);
   assert.match(input.prompt.system, /moderationCategory/u);
   assert.match(input.prompt.user, /<ctx>/u);
   // Empty context sections are omitted
@@ -53,7 +53,7 @@ test("buildAiDecisionInput defaults to moderation mode for ordinary messages", (
   });
 
   assert.equal(input.mode, "moderation");
-  assert.match(input.prompt.system, /repeated after correction/u);
+  assert.match(input.prompt.system, /prior bot warn/u);
   assert.match(input.prompt.system, /ordered pair \["timeout", "warn"\]/u);
   assert.match(input.prompt.system, /Only propose timeout/u);
   assert.match(input.prompt.system, /confidence >= 0\.90/u);
@@ -116,10 +116,10 @@ test("buildAiDecisionInput includes annotated examples, false-positive examples,
   });
 
   // Annotated moderation examples with reasoning
-  assert.match(input.prompt.system, /maybe help people get followers/u);
+  assert.match(input.prompt.system, /lol ill get you all followers/u);
   assert.match(input.prompt.system, /send pics or ill find u/u);
   assert.match(input.prompt.system, /shut up bot kys/u);
-  assert.match(input.prompt.system, /privileged user, never timeout/u);
+  assert.match(input.prompt.system, /privileged, exempt/u);
   // False-positive examples
   assert.match(input.prompt.system, /gonna headshot that noob/u);
   // Contract comes before examples (schema context aids example interpretation)

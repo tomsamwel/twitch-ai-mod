@@ -12,3 +12,29 @@ changelog:
       Justifications help the model generalize rules to novel edge cases.
       Contract-before-examples lets examples be interpreted in schema context.
     result: pending
+  - date: "2026-03-31"
+    description: >
+      Prompt optimization: telegraphic compression, positive reframing,
+      mode-split style, trimmed examples, shorter moderation reason field.
+    hypothesis: >
+      Reducing token count ~30-40% keeps context under 50% utilization
+      where 4B models work best. Positive reframing improves compliance.
+      Fewer examples reduce mid-prompt attention dilution.
+    result: pending
+  - date: "2026-03-31"
+    description: >
+      IRL safety expansion: stream-sniper coordination, bystander harassment,
+      personal info fishing. Added reporting-vs-perpetrating guidance.
+    hypothesis: >
+      Covers IRL-specific threats identified in moderation research.
+      Reporting guidance eliminates false positive on users quoting violations.
+    result: pending
+  - date: "2026-03-31"
+    description: >
+      De-escalation false-positive fix. Added current-message-must-independently-violate
+      rule to system and safety rules. Added apology/de-escalation as abstain trigger
+      in moderation buckets.
+    hypothesis: >
+      Explicit instruction that history cannot turn a clean message into a violation
+      prevents the model from punishing apologies.
+    result: pending

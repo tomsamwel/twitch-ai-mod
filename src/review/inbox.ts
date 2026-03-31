@@ -1,5 +1,6 @@
 import { getAiFailureMetadata } from "../ai/failure-metadata.js";
 import type { BotDatabase } from "../storage/database.js";
+import { asRecord } from "../utils.js";
 import type {
   PersistedActionRecord,
   PersistedDecisionRecord,
@@ -213,10 +214,7 @@ export function buildReviewInboxReport(options: {
         reasons.add("ai-reply");
       }
 
-      const payloadMetadata =
-        action.payload.metadata && typeof action.payload.metadata === "object" && !Array.isArray(action.payload.metadata)
-          ? (action.payload.metadata as Record<string, unknown>)
-          : null;
+      const payloadMetadata = asRecord(action.payload.metadata);
       const hasVisualSpamSignal =
         payloadMetadata?.timeoutRule === "visual_spam_ascii_art" ||
         action.reason.toLowerCase().includes("visual spam") ||
