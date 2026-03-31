@@ -2,18 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AiReviewQueue } from "../src/runtime/ai-review-queue.js";
+import type { Priority, PressureState } from "../src/runtime/ai-review-queue.js";
 import { createLogger } from "../src/storage/logger.js";
 
 const logger = createLogger("error", "test");
 
-function createQueue(overrides: { capacity?: number; concurrency?: number; stalenessMs?: number } = {}) {
+function createQueue(overrides: {
+  capacity?: number;
+  concurrency?: number;
+  moderationStalenessMs?: number;
+  socialStalenessMs?: number;
+  classify?: (item: number) => Priority;
+  onPressure?: (state: PressureState) => void;
+} = {}) {
   return new AiReviewQueue<number>(
     {
       capacity: overrides.capacity ?? 5,
       concurrency: overrides.concurrency ?? 1,
-      stalenessMs: overrides.stalenessMs ?? 30_000,
+      moderationStalenessMs: overrides.moderationStalenessMs ?? 0,
+      socialStalenessMs: overrides.socialStalenessMs ?? 30_000,
     },
     logger,
+    overrides.classify ?? ((n) => (n > 100 ? "high" : "normal")),
+    overrides.onPressure,
   );
 }
 
@@ -127,7 +138,7 @@ test("AiReviewQueue drops oldest item when at capacity", async () => {
 });
 
 test("AiReviewQueue drops stale items before processing", async () => {
-  const queue = createQueue({ stalenessMs: 1, concurrency: 1 });
+  const queue = createQueue({ socialStalenessMs: 1, concurrency: 1 });
   const processed: number[] = [];
 
   // Block the first item so subsequent items become stale.
@@ -147,7 +158,7 @@ test("AiReviewQueue drops stale items before processing", async () => {
   queue.enqueue(1); // starts processing immediately (blocked)
   queue.enqueue(2); // queued
 
-  // Wait for item 2 to become stale (stalenessMs=1).
+  // Wait for item 2 to become stale (socialStalenessMs=1).
   await new Promise((resolve) => setTimeout(resolve, 20));
 
   // Unblock the first handler.
@@ -175,6 +186,7 @@ test("AiReviewQueue.stop() discards pending items", async () => {
   queue.stop();
 
   assert.equal(queue.getStats().depth, 0);
+  assert.equal(queue.getStats().underPressure, false);
 
   // Wait for the in-flight item to finish.
   await new Promise((resolve) => setTimeout(resolve, 150));
@@ -189,11 +201,14 @@ test("AiReviewQueue.getStats() returns correct snapshot", () => {
 
   const initial = queue.getStats();
   assert.equal(initial.depth, 0);
+  assert.equal(initial.highDepth, 0);
+  assert.equal(initial.normalDepth, 0);
   assert.equal(initial.processing, 0);
   assert.equal(initial.totalEnqueued, 0);
   assert.equal(initial.totalProcessed, 0);
   assert.equal(initial.totalDroppedCapacity, 0);
   assert.equal(initial.totalDroppedStale, 0);
+  assert.equal(initial.underPressure, false);
 });
 
 test("AiReviewQueue handles handler errors without breaking the queue", async () => {
@@ -213,4 +228,236 @@ test("AiReviewQueue handles handler errors without breaking the queue", async ()
 
   assert.deepEqual(processed, [1, 3]);
   assert.equal(queue.getStats().totalProcessed, 3);
+});
+
+// --- Priority queue tests ---
+
+test("AiReviewQueue processes high-priority items before normal-priority", async () => {
+  const queue = createQueue({ concurrency: 1 });
+  const processed: number[] = [];
+
+  // Block first item so we can queue up items of both priorities.
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => {
+        unblock = resolve;
+      });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue(1);   // normal, starts processing immediately (blocked)
+  queue.enqueue(2);   // normal, queued
+  queue.enqueue(3);   // normal, queued
+  queue.enqueue(200); // high, queued
+  queue.enqueue(201); // high, queued
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // High-priority items (200, 201) should process before normal (2, 3).
+  assert.deepEqual(processed, [1, 200, 201, 2, 3]);
+});
+
+test("AiReviewQueue capacity eviction drops normal items before high items", async () => {
+  const queue = createQueue({ capacity: 3, concurrency: 1 });
+  const processed: number[] = [];
+  const pressureEvents: PressureState[] = [];
+
+  const pressureQueue = new AiReviewQueue<number>(
+    { capacity: 3, concurrency: 1, moderationStalenessMs: 0, socialStalenessMs: 30_000 },
+    logger,
+    (n) => (n > 100 ? "high" : "normal"),
+    (state) => pressureEvents.push({ ...state }),
+  );
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  pressureQueue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => {
+        unblock = resolve;
+      });
+    }
+    processed.push(item);
+  });
+
+  pressureQueue.enqueue(200); // high, starts processing (blocked)
+  pressureQueue.enqueue(1);   // normal, queued
+  pressureQueue.enqueue(2);   // normal, queued
+  pressureQueue.enqueue(201); // high, queued — capacity=3, full
+  pressureQueue.enqueue(3);   // over capacity — drops oldest normal (1), not high
+
+  assert.equal(pressureQueue.getStats().totalDroppedCapacity, 1);
+  assert.equal(pressureQueue.getStats().normalDepth, 2); // items 2 and 3 (1 was dropped)
+  assert.equal(pressureQueue.getStats().highDepth, 1);   // 201
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // 200 was processing, then high (201) before normal (2, 3).
+  assert.equal(processed[0], 200);
+  assert.equal(processed[1], 201);
+  assert.ok(pressureEvents.length > 0, "pressure callback should have fired");
+});
+
+test("AiReviewQueue drops oldest high item when no normal items remain", async () => {
+  const queue = createQueue({
+    capacity: 2,
+    concurrency: 1,
+    classify: () => "high", // everything is high priority
+  });
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+  const processed: number[] = [];
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => {
+        unblock = resolve;
+      });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue(1); // processing (blocked)
+  queue.enqueue(2); // queued
+  queue.enqueue(3); // queued — at capacity
+  queue.enqueue(4); // drops oldest high (2)
+
+  assert.equal(queue.getStats().totalDroppedCapacity, 1);
+  assert.equal(queue.getStats().highDepth, 2);
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.deepEqual(processed, [1, 3, 4]);
+});
+
+test("AiReviewQueue never drops high items as stale when moderationStalenessMs is 0", async () => {
+  const queue = createQueue({
+    concurrency: 1,
+    moderationStalenessMs: 0,
+    socialStalenessMs: 1,
+    classify: (n) => (n > 100 ? "high" : "normal"),
+  });
+  const processed: number[] = [];
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => {
+        unblock = resolve;
+      });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue(1);   // normal, processing (blocked)
+  queue.enqueue(200); // high, queued
+  queue.enqueue(2);   // normal, queued
+
+  // Wait for socialStalenessMs to expire.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  // High item (200) should survive, normal item (2) should be stale-dropped.
+  assert.deepEqual(processed, [1, 200]);
+  assert.equal(queue.getStats().totalDroppedStale, 1);
+});
+
+test("AiReviewQueue fires pressure callback when normal items are dropped", () => {
+  const pressureEvents: PressureState[] = [];
+  const queue = createQueue({
+    capacity: 2,
+    onPressure: (state) => pressureEvents.push({ ...state }),
+  });
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => {
+        unblock = resolve;
+      });
+    }
+  });
+
+  queue.enqueue(1); // processing (blocked)
+  queue.enqueue(2); // queued
+  queue.enqueue(3); // queued — at capacity
+
+  assert.equal(pressureEvents.length, 0, "no pressure yet");
+
+  queue.enqueue(4); // drops 2 — pressure!
+
+  assert.equal(pressureEvents.length, 1);
+  assert.equal(pressureEvents[0]!.underPressure, true);
+  assert.equal(pressureEvents[0]!.recentDrops, 1);
+});
+
+test("AiReviewQueue defaults to normal priority when classifier throws", async () => {
+  const queue = createQueue({
+    classify: (n) => {
+      if (n === 2) throw new Error("classifier boom");
+      return n > 100 ? "high" : "normal";
+    },
+  });
+  const processed: number[] = [];
+
+  queue.start(async (item) => {
+    processed.push(item);
+  });
+
+  queue.enqueue(1);
+  queue.enqueue(2); // classifier throws — defaults to normal
+  queue.enqueue(3);
+
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.deepEqual(processed, [1, 2, 3]);
+  assert.equal(queue.getStats().normalDepth, 0);
+});
+
+test("AiReviewQueue.stop() clears both tiers and resets pressure", () => {
+  const queue = createQueue({
+    capacity: 2,
+    classify: (n) => (n > 100 ? "high" : "normal"),
+  });
+
+  let blocked = true;
+  queue.start(async () => {
+    if (blocked) await new Promise<void>(() => {}); // block forever
+  });
+
+  queue.enqueue(1);   // normal, processing (blocked forever)
+  queue.enqueue(200); // high, queued
+  queue.enqueue(2);   // normal, queued — at capacity
+  queue.enqueue(3);   // drops oldest normal (2) — pressure
+
+  assert.equal(queue.getStats().highDepth, 1);
+  assert.equal(queue.getStats().normalDepth, 1);
+  assert.equal(queue.getStats().underPressure, true);
+
+  queue.stop();
+
+  assert.equal(queue.getStats().highDepth, 0);
+  assert.equal(queue.getStats().normalDepth, 0);
+  assert.equal(queue.getStats().depth, 0);
+  assert.equal(queue.getStats().underPressure, false);
 });

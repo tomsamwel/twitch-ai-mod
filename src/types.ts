@@ -275,7 +275,9 @@ export interface ConfigSnapshot {
     queue: {
       capacity: number;
       concurrency: number;
-      stalenessMs: number;
+      moderationStalenessMs: number;
+      socialStalenessMs: number;
+      pressureSignalCooldownMs: number;
     };
   };
   admin?: {
@@ -528,7 +530,8 @@ export type ControlCommand =
   | { kind: "recent"; count: number }
   | { kind: "stats" }
   | { kind: "exempt"; subcommand: "add" | "remove" | "list"; userLogin?: string }
-  | { kind: "block"; subcommand: "add" | "remove" | "list"; term?: string };
+  | { kind: "block"; subcommand: "add" | "remove" | "list"; term?: string }
+  | { kind: "purge"; target: string };
 
 export interface ControlCommandResult {
   accepted: boolean;

@@ -30,7 +30,7 @@ ai:
   provider: llama-cpp
   requestDefaults:
     temperature: 0
-    maxOutputTokens: 200
+    maxOutputTokens: 150
     timeoutMs: 45000
   context:
     recentRoomMessages: 5
@@ -49,12 +49,14 @@ ai:
     baseUrl: http://localhost:8081
     model: qwen3:4b-instruct
     managed: true
-  # Bounded queue for AI review requests in live mode.
-  # Prevents unbounded concurrent AI calls during high-volume chat.
+  # Bounded priority queue for AI review requests in live mode.
+  # Moderation items (high priority) process before social replies (normal priority).
   queue:
-    capacity: 50          # max pending AI reviews before dropping oldest
-    concurrency: 1        # parallel AI calls (1 for local llama-server/ollama, 3-5 for openai)
-    stalenessMs: 30000    # drop items waiting longer than 30s before processing
+    capacity: 50                  # max pending AI reviews before dropping oldest
+    concurrency: 1                # parallel AI calls (1 for local llama-server/ollama, 3-5 for openai)
+    moderationStalenessMs: 0      # 0 = moderation items never go stale
+    socialStalenessMs: 30000      # social replies go stale after 30s
+    pressureSignalCooldownMs: 60000  # min interval between pressure whispers
 
 admin:
   enabled: true
