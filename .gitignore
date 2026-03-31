@@ -10,3 +10,4 @@ data/*.sqlite-wal
 data/reports/
 coverage/
 data/.llama-server.pid
+.claude/
