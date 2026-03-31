@@ -9,9 +9,9 @@ import { WhisperControlPlane } from "./control/control-plane.js";
 import { RuntimeSettingsStore } from "./control/runtime-settings.js";
 import { CooldownManager } from "./moderation/cooldown-manager.js";
 import { RuleEngine } from "./moderation/rule-engine.js";
-import { AiReviewQueue } from "./runtime/ai-review-queue.js";
-import { MessageProcessor } from "./runtime/message-processor.js";
-import type { AiReviewWorkItem } from "./runtime/message-processor.js";
+import { AiReviewQueue, type PressureState } from "./runtime/ai-review-queue.js";
+import { MessageProcessor, type AiReviewWorkItem } from "./runtime/message-processor.js";
+import { createPriorityClassifier } from "./runtime/priority-classifier.js";
 import { OutboundMessageTracker } from "./runtime/outbound-message-tracker.js";
 import { BotDatabase } from "./storage/database.js";
 import { createLogger } from "./storage/logger.js";
@@ -55,7 +55,6 @@ export async function createAppServices(): Promise<AppServices> {
   const ruleEngine = new RuleEngine(config, cooldowns, isUserExempt, getRuntimeBlockedTerms);
   const contextBuilder = new AiContextBuilder(config, database);
   const outboundMessageTracker = new OutboundMessageTracker();
-  const aiReviewQueue = new AiReviewQueue<AiReviewWorkItem>(config.ai.queue, logger);
   const twitchGateway = new TwurpleTwitchGateway(
     config,
     logger,
@@ -65,6 +64,22 @@ export async function createAppServices(): Promise<AppServices> {
       broadcaster: authContext.broadcaster,
       bot: authContext.bot,
     },
+  );
+  const classifyPriority = createPriorityClassifier(database);
+  let lastPressureSignalAt = 0;
+  const onPressure = (state: PressureState) => {
+    if (!state.underPressure) return;
+    const now = Date.now();
+    if (now - lastPressureSignalAt < config.ai.queue.pressureSignalCooldownMs) return;
+    lastPressureSignalAt = now;
+    logger.warn({ ...state }, "AI queue under pressure — notifying broadcaster");
+    twitchGateway.sendWhisper(
+      authContext.broadcaster.id,
+      `AI queue under pressure: ${state.highDepth} moderation + ${state.normalDepth} social queued, ${state.recentDrops} social replies dropped`,
+    ).catch((err) => logger.debug({ err }, "failed to send pressure whisper"));
+  };
+  const aiReviewQueue = new AiReviewQueue<AiReviewWorkItem>(
+    config.ai.queue, logger, classifyPriority, onPressure,
   );
   const actionExecutor = new ActionExecutor(
     config,

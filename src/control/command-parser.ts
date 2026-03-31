@@ -133,6 +133,13 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
       const term = tokens.slice(2).join(" ").toLowerCase();
       return { kind: "block", subcommand: "remove", term };
     }
+    case "purge": {
+      if (tokens.length !== 3 || !value) {
+        throw new Error(`Usage: ${prefix} purge <user> | ${prefix} purge all`);
+      }
+      const target = value.toLowerCase().replace(/^@/, "");
+      return { kind: "purge", target };
+    }
     default:
       throw new Error(`Unknown command "${verb}". Try "${prefix} help".`);
   }

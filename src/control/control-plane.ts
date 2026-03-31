@@ -26,17 +26,15 @@ function formatTimeAgo(isoTimestamp: string): string {
 export class WhisperControlPlane {
   private readonly controllersByUserId: Map<string, TrustedController>;
 
+  private static readonly FULL_ACCESS: Set<ControlCommand["kind"]> = new Set([
+    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-dry-run",
+    "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
+    "recent", "stats", "exempt", "block", "purge",
+  ]);
+
   private static readonly ROLE_PERMISSIONS: Record<ControllerRole, Set<ControlCommand["kind"]>> = {
-    broadcaster: new Set([
-      "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-dry-run",
-      "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
-      "recent", "stats", "exempt", "block",
-    ]),
-    admin: new Set([
-      "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-dry-run",
-      "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
-      "recent", "stats", "exempt", "block",
-    ]),
+    broadcaster: WhisperControlPlane.FULL_ACCESS,
+    admin: WhisperControlPlane.FULL_ACCESS,
     mod: new Set([
       "help", "status", "recent", "stats", "exempt", "block",
     ]),
@@ -67,9 +65,11 @@ export class WhisperControlPlane {
       | "removeRuntimeBlockedTerm"
       | "listRuntimeBlockedTerms"
       | "getRuntimeController"
+      | "purgeUserHistory"
+      | "purgeOperationalData"
     >,
     private readonly twitchGateway: Pick<TwurpleTwitchGateway, "sendWhisper">,
-    private readonly aiReviewQueue?: { getStats(): { depth: number; processing: number } },
+    private readonly aiReviewQueue?: { getStats(): { depth: number; highDepth: number; normalDepth: number; processing: number } },
   ) {
     this.controllersByUserId = new Map(
       trustedControllers.map((controller) => [controller.userId, controller]),
@@ -165,6 +165,7 @@ export class WhisperControlPlane {
             `${this.commandPrefix} pack|model <name>`,
             `${this.commandPrefix} exempt|unexempt <user>`,
             `${this.commandPrefix} block|unblock <term>`,
+            `${this.commandPrefix} purge <user>|all`,
             `${this.commandPrefix} panic|chill|off|reset`,
           ].join(" | "),
           highRisk: false,
@@ -197,14 +198,14 @@ export class WhisperControlPlane {
         };
       }
       case "set-ai":
-        return this.applyBooleanOverride(
+        return this.applyOverride(
           "aiEnabled",
           command.enabled,
           actor,
           `ai ${command.enabled ? "on" : "off"}`,
         );
       case "set-ai-moderation": {
-        const result = this.applyBooleanOverride(
+        const result = this.applyOverride(
           "aiModerationEnabled",
           command.enabled,
           actor,
@@ -223,21 +224,21 @@ export class WhisperControlPlane {
         return result;
       }
       case "set-social":
-        return this.applyBooleanOverride(
+        return this.applyOverride(
           "socialRepliesEnabled",
           command.enabled,
           actor,
           `social ${command.enabled ? "on" : "off"}`,
         );
       case "set-dry-run":
-        return this.applyBooleanOverride(
+        return this.applyOverride(
           "dryRun",
           command.enabled,
           actor,
           `dry-run ${command.enabled ? "on" : "off"}`,
         );
       case "set-live-moderation": {
-        const result = this.applyBooleanOverride(
+        const result = this.applyOverride(
           "liveModerationEnabled",
           command.enabled,
           actor,
@@ -363,6 +364,8 @@ export class WhisperControlPlane {
         return this.executeExempt(command, actor);
       case "block":
         return this.executeBlock(command, actor);
+      case "purge":
+        return this.executePurge(command.target);
       default: {
         const _exhaustive: never = command;
         throw new Error(`Unhandled command kind: ${(command as { kind: string }).kind}`);
@@ -398,7 +401,7 @@ export class WhisperControlPlane {
       `${stats.actions.byKind["say"] ?? 0} say`,
     ];
     if (queueStats) {
-      parts.push(`queue=${queueStats.depth}`);
+      parts.push(`queue=${queueStats.highDepth}h/${queueStats.normalDepth}n`);
     }
     return { accepted: true, success: true, commandSummary: "stats", replyMessage: parts.join(", "), highRisk: false, changes: [] };
   }
@@ -465,6 +468,26 @@ export class WhisperControlPlane {
     }
   }
 
+  private executePurge(target: string): ControlCommandResult {
+    if (target === "all") {
+      const result = this.database.purgeOperationalData();
+      return {
+        accepted: true, success: true, commandSummary: "purge-all",
+        replyMessage: `Purged all: ${result.messages} messages, ${result.decisions} decisions, ${result.actions} actions, ${result.events} events, ${result.reviews} reviews.`,
+        highRisk: true, changes: [],
+      };
+    }
+    const result = this.database.purgeUserHistory(target);
+    const total = result.messages + result.decisions + result.actions;
+    return {
+      accepted: true, success: true, commandSummary: `purge-user:${target}`,
+      replyMessage: total > 0
+        ? `Purged @${target}: ${result.messages} messages, ${result.decisions} decisions, ${result.actions} actions.`
+        : `No history found for @${target}.`,
+      highRisk: true, changes: [],
+    };
+  }
+
   private applyBatch(
     overrides: Array<[RuntimeOverrideKey, boolean]>,
     settings: { [K in RuntimeOverrideKey]?: unknown },
@@ -477,16 +500,6 @@ export class WhisperControlPlane {
       changes.push({ key, previousValue, nextValue: value });
     }
     return changes;
-  }
-
-  private applyBooleanOverride(
-    key: RuntimeOverrideKey,
-    value: boolean,
-    actor: { userId: string; login: string },
-    commandSummary: string,
-    highRisk = false,
-  ): ControlCommandResult {
-    return this.applyOverride(key, value, actor, commandSummary, highRisk);
   }
 
   private applyOverride(

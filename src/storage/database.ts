@@ -1418,6 +1418,58 @@ export class BotDatabase {
    * Interesting = actions taken (timeout/warn), low-confidence decisions, or provider failures.
    * Excludes events already reviewed.
    */
+  // --- Purge operations ---
+
+  public purgeUserHistory(login: string): { messages: number; decisions: number; actions: number } {
+    const lowerLogin = login.toLowerCase();
+    const eventSubquery = `SELECT event_id FROM message_snapshots WHERE chatter_login = ?`;
+    const purge = this.database.transaction(() => {
+      const actionsFromMessages = this.database
+        .prepare(`DELETE FROM actions WHERE source_event_id IN (${eventSubquery})`)
+        .run(lowerLogin);
+      const actionsAsTarget = this.database
+        .prepare(`DELETE FROM actions WHERE target_user_name = ? AND source_event_id NOT IN (${eventSubquery})`)
+        .run(lowerLogin, lowerLogin);
+      this.database
+        .prepare(`DELETE FROM ingested_events WHERE event_id IN (${eventSubquery})`)
+        .run(lowerLogin);
+      this.database
+        .prepare(`DELETE FROM review_decisions WHERE event_id IN (${eventSubquery})`)
+        .run(lowerLogin);
+      const decisions = this.database
+        .prepare(`DELETE FROM decisions WHERE chatter_login = ?`)
+        .run(lowerLogin);
+      const messages = this.database
+        .prepare(`DELETE FROM message_snapshots WHERE chatter_login = ?`)
+        .run(lowerLogin);
+
+      return {
+        messages: messages.changes,
+        decisions: decisions.changes,
+        actions: actionsFromMessages.changes + actionsAsTarget.changes,
+      };
+    });
+    return purge();
+  }
+
+  public purgeOperationalData(): { messages: number; decisions: number; actions: number; events: number; reviews: number } {
+    const purge = this.database.transaction(() => {
+      const messages = this.database.prepare(`DELETE FROM message_snapshots`).run();
+      const decisions = this.database.prepare(`DELETE FROM decisions`).run();
+      const actions = this.database.prepare(`DELETE FROM actions`).run();
+      const events = this.database.prepare(`DELETE FROM ingested_events`).run();
+      const reviews = this.database.prepare(`DELETE FROM review_decisions`).run();
+      return {
+        messages: messages.changes,
+        decisions: decisions.changes,
+        actions: actions.changes,
+        events: events.changes,
+        reviews: reviews.changes,
+      };
+    });
+    return purge();
+  }
+
   public listEvalCandidates(limit: number): Array<{
     eventId: string;
     chatterLogin: string;

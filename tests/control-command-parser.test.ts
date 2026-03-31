@@ -77,3 +77,10 @@ test("parseControlCommand parses block and unblock with multi-word terms", () =>
   assert.deepEqual(parseControlCommand("aimod block list", "aimod"), { kind: "block", subcommand: "list" });
   assert.deepEqual(parseControlCommand("aimod unblock buy followers", "aimod"), { kind: "block", subcommand: "remove", term: "buy followers" });
 });
+
+test("parseControlCommand parses purge user and purge all", () => {
+  assert.deepEqual(parseControlCommand("aimod purge someuser", "aimod"), { kind: "purge", target: "someuser" });
+  assert.deepEqual(parseControlCommand("aimod purge @SomeUser", "aimod"), { kind: "purge", target: "someuser" });
+  assert.deepEqual(parseControlCommand("aimod purge all", "aimod"), { kind: "purge", target: "all" });
+  assert.throws(() => parseControlCommand("aimod purge", "aimod"), /Usage/u);
+});

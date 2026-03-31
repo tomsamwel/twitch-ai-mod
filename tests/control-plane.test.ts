@@ -34,6 +34,8 @@ function createMockDatabase(overrides: Record<string, unknown> = {}) {
     removeRuntimeBlockedTerm() { return true; },
     listRuntimeBlockedTerms() { return []; },
     getRuntimeController() { return null; },
+    purgeUserHistory() { return { messages: 0, decisions: 0, actions: 0 }; },
+    purgeOperationalData() { return { messages: 0, decisions: 0, actions: 0, events: 0, reviews: 0 }; },
     ...overrides,
   };
 }
