@@ -11,7 +11,7 @@ import { CooldownManager } from "./moderation/cooldown-manager.js";
 import { RuleEngine } from "./moderation/rule-engine.js";
 import { AiReviewQueue, type PressureState } from "./runtime/ai-review-queue.js";
 import { MessageProcessor, type AiReviewWorkItem } from "./runtime/message-processor.js";
-import { createPriorityClassifier } from "./runtime/priority-classifier.js";
+import { createPriorityClassifier, workItemCoalesceKey, coalesceWorkItems } from "./runtime/priority-classifier.js";
 import { OutboundMessageTracker } from "./runtime/outbound-message-tracker.js";
 import { BotDatabase } from "./storage/database.js";
 import { createLogger } from "./storage/logger.js";
@@ -80,6 +80,7 @@ export async function createAppServices(): Promise<AppServices> {
   };
   const aiReviewQueue = new AiReviewQueue<AiReviewWorkItem>(
     config.ai.queue, logger, classifyPriority, onPressure,
+    workItemCoalesceKey, coalesceWorkItems,
   );
   const actionExecutor = new ActionExecutor(
     config,

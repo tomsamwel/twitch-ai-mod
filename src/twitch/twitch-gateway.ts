@@ -72,7 +72,7 @@ export class TwurpleTwitchGateway {
     });
 
     this.listener.start();
-    this.listener.onChannelChatMessage(
+    const chatSub = this.listener.onChannelChatMessage(
       this.context.broadcaster.id,
       this.context.bot.id,
       (event) => {
@@ -81,6 +81,10 @@ export class TwurpleTwitchGateway {
         });
       },
     );
+    this.logger.info(
+      { broadcasterId: this.context.broadcaster.id, botId: this.context.bot.id },
+      "subscribing to channel.chat.message",
+    );
 
     if (onWhisperMessage) {
       this.listener.onUserWhisperMessage(this.context.bot.id, (event) => {
@@ -88,6 +92,10 @@ export class TwurpleTwitchGateway {
           this.logger.error({ err: error, whisperId: event.id }, "failed to process whisper message");
         });
       });
+      this.logger.info(
+        { botId: this.context.bot.id },
+        "subscribing to user.whisper.message",
+      );
     }
 
     await this.validateCurrentToken();

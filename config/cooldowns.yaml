@@ -5,7 +5,7 @@ chat:
   minimumSecondsBetweenModerationNoticesPerUser: 15
 
 moderation:
-  minimumSecondsBetweenModerationActionsPerUser: 300
+  minimumSecondsBetweenModerationActionsPerUser: 60
   minimumSecondsBetweenEquivalentActions: 30
 
 ai:

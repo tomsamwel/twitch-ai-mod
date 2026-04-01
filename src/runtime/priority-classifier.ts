@@ -1,4 +1,4 @@
-import type { Priority } from "./ai-review-queue.js";
+import type { CoalesceResult, Priority } from "./ai-review-queue.js";
 import type { AiReviewWorkItem } from "./message-processor.js";
 import type { NormalizedChatMessage } from "../types.js";
 import { detectUrls } from "../moderation/url-detect.js";
@@ -14,21 +14,21 @@ export interface PriorityClassifierDeps {
   countRecentTimeoutsForUser(targetUserId: string, afterTimestamp: string): number;
 }
 
-function hasRiskSignals(message: NormalizedChatMessage): boolean {
-  if (detectUrls(message.text).detected) return true;
-
+function isHighCaps(text: string): boolean {
   let upper = 0;
   let alpha = 0;
-  for (const ch of message.text) {
+  for (const ch of text) {
     if (ch >= "A" && ch <= "Z") { upper++; alpha++; }
     else if (ch >= "a" && ch <= "z") { alpha++; }
   }
-  if (alpha >= CAPS_MIN_ALPHA && upper / alpha > CAPS_RATIO_THRESHOLD) return true;
+  return alpha >= CAPS_MIN_ALPHA && upper / alpha > CAPS_RATIO_THRESHOLD;
+}
 
+function hasRiskSignals(message: NormalizedChatMessage): boolean {
+  if (detectUrls(message.text).detected) return true;
+  if (isHighCaps(message.text)) return true;
   if (countMentions(message) >= MENTION_COUNT_THRESHOLD) return true;
-
   if (message.text.length > LENGTH_THRESHOLD) return true;
-
   return false;
 }
 
@@ -53,4 +53,44 @@ export function createPriorityClassifier(deps: PriorityClassifierDeps): (item: A
 
     return "high";
   };
+}
+
+/**
+ * Coalesce key: group by chatter so rapid messages from the same user merge.
+ * Returns undefined for social mode (no coalescing for social replies).
+ */
+export function workItemCoalesceKey(item: AiReviewWorkItem): string | undefined {
+  if (item.aiMode.mode === "social") return undefined;
+  return item.message.chatterId;
+}
+
+/**
+ * Coalesce strategy: keep the riskier message (by signal score), fall back to latest.
+ * Carries forward the cumulative count.
+ */
+export function coalesceWorkItems(
+  existing: AiReviewWorkItem,
+  incoming: AiReviewWorkItem,
+  currentCount: number,
+): CoalesceResult<AiReviewWorkItem> {
+  const newCount = currentCount + 1;
+  const existingRisk = messageRiskScore(existing.message);
+  const incomingRisk = messageRiskScore(incoming.message);
+
+  // Keep the riskier message; on tie, keep the incoming (latest) one.
+  const winner = incomingRisk >= existingRisk ? incoming : existing;
+
+  return {
+    merged: { ...winner, nowMs: incoming.nowMs, coalescedCount: newCount },
+    count: newCount,
+  };
+}
+
+export function messageRiskScore(message: NormalizedChatMessage): number {
+  let score = 0;
+  if (detectUrls(message.text).detected) score += 4;
+  if (isHighCaps(message.text)) score += 3;
+  if (countMentions(message) >= MENTION_COUNT_THRESHOLD) score += 2;
+  if (message.text.length > LENGTH_THRESHOLD) score += 1;
+  return score;
 }

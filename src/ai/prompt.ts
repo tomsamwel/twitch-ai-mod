@@ -113,6 +113,7 @@ function formatDerivedSignals(
   message: NormalizedChatMessage,
   context: AiContextSnapshot,
   config: ConfigSnapshot,
+  coalescedCount?: number,
 ): string {
   const visualSpam = analyzeVisualSpam(message.text, config.moderationPolicy.deterministicRules.visualSpam);
   const visualSpamLabel = visualSpam.highConfidence
@@ -126,13 +127,19 @@ function formatDerivedSignals(
     ? `detected (${urlResult.urls.length} URL${urlResult.urls.length > 1 ? "s" : ""}${urlResult.obfuscated ? ", obfuscated" : ""})`
     : "none";
 
-  return [
+  const lines = [
     `mention_count: ${countMentions(message)}`,
     `recent_same_user_messages: ${context.recentUserMessages.length}`,
     `recent_bot_correction: ${formatYesNo(hasRecentBotCorrectiveInteraction(context))}`,
     `visual_spam: ${visualSpamLabel}`,
     `url_detected: ${urlLabel}`,
-  ].join("\n");
+  ];
+
+  if (coalescedCount && coalescedCount > 1) {
+    lines.push(`queued_messages_from_user: ${coalescedCount} (rapid-fire flood)`);
+  }
+
+  return lines.join("\n");
 }
 
 function formatDecisionExamples(mode: AiMode): string {
@@ -234,6 +241,7 @@ export function composeAiPrompt(
   signals: AiModeSignals,
   context: AiContextSnapshot,
   nowMs: number = Date.now(),
+  coalescedCount?: number,
 ): AiPromptPayload {
   const modePrompt =
     mode === "social" ? config.prompts.socialPersona.trim() : config.prompts.moderation.trim();
@@ -317,7 +325,7 @@ export function composeAiPrompt(
       ? ["<bot_hist>", formatRecentBotInteractions(context, nowMs), "</bot_hist>"]
       : []),
     "<signals>",
-    formatDerivedSignals(message, context, config),
+    formatDerivedSignals(message, context, config, coalescedCount),
     "</signals>",
     "</ctx>",
     "",
@@ -338,12 +346,16 @@ export function buildAiDecisionInput(
   config: ConfigSnapshot,
   botIdentity: TwitchIdentity,
   selection = selectAiMode(message, botIdentity, config),
+  coalescedCount?: number,
 ): AiDecisionInput {
   return {
     mode: selection.mode,
     message,
     context,
     config,
-    prompt: composeAiPrompt(message, config, selection.mode, botIdentity, selection.signals, context),
+    prompt: composeAiPrompt(
+      message, config, selection.mode, botIdentity, selection.signals, context,
+      Date.now(), coalescedCount,
+    ),
   };
 }

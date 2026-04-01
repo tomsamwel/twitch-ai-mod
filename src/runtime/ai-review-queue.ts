@@ -18,6 +18,7 @@ export interface AiReviewQueueStats {
   totalProcessed: number;
   totalDroppedCapacity: number;
   totalDroppedStale: number;
+  totalCoalesced: number;
   underPressure: boolean;
 }
 
@@ -28,10 +29,19 @@ export interface PressureState {
   recentDrops: number;
 }
 
+export interface CoalesceResult<T> {
+  /** The winning item to keep in the queue slot. */
+  merged: T;
+  /** Number of messages now represented by this entry (including the new one). */
+  count: number;
+}
+
 interface QueueEntry<T> {
   data: T;
   enqueuedAt: number;
   priority: Priority;
+  coalesceKey?: string;
+  coalescedCount: number;
 }
 
 /**
@@ -53,6 +63,7 @@ export class AiReviewQueue<T> {
   private totalProcessed = 0;
   private totalDroppedCapacity = 0;
   private totalDroppedStale = 0;
+  private totalCoalesced = 0;
   private recentDrops = 0;
   private _underPressure = false;
 
@@ -61,11 +72,14 @@ export class AiReviewQueue<T> {
     private readonly logger: Logger,
     private readonly classify: (item: T) => Priority,
     private readonly onPressure?: (state: PressureState) => void,
+    private readonly coalesceKey?: (item: T) => string | undefined,
+    private readonly coalesce?: (existing: T, incoming: T, count: number) => CoalesceResult<T>,
   ) {}
 
   /**
    * Bind the processing handler. Must be called before enqueue().
    * Uses start() pattern to break circular dependency between queue and MessageProcessor.
+   *
    */
   public start(handler: (item: T) => Promise<void>): void {
     this.handler = handler;
@@ -84,6 +98,18 @@ export class AiReviewQueue<T> {
       priority = "normal";
     }
 
+    // Try to coalesce with an existing queued entry for the same key.
+    const key = this.coalesceKey?.(data);
+    if (key && this.coalesce) {
+      const coalesced = this.tryCoalesce(key, data, priority);
+      if (coalesced) {
+        this.totalEnqueued++;
+        this.totalCoalesced++;
+        this.drain();
+        return;
+      }
+    }
+
     const totalDepth = this.highItems.length + this.normalItems.length;
     if (totalDepth >= this.config.capacity) {
       if (this.normalItems.length > 0) {
@@ -95,7 +121,7 @@ export class AiReviewQueue<T> {
       }
     }
 
-    const entry: QueueEntry<T> = { data, enqueuedAt: Date.now(), priority };
+    const entry: QueueEntry<T> = { data, enqueuedAt: Date.now(), priority, ...(key ? { coalesceKey: key } : {}), coalescedCount: 1 };
     if (priority === "high") {
       this.highItems.push(entry);
     } else {
@@ -115,6 +141,7 @@ export class AiReviewQueue<T> {
       totalProcessed: this.totalProcessed,
       totalDroppedCapacity: this.totalDroppedCapacity,
       totalDroppedStale: this.totalDroppedStale,
+      totalCoalesced: this.totalCoalesced,
       underPressure: this._underPressure,
     };
   }
@@ -129,6 +156,45 @@ export class AiReviewQueue<T> {
     if (discarded > 0) {
       this.logger.info({ discarded }, "AI review queue stopped, discarded pending items");
     }
+  }
+
+  /**
+   * Search both tiers for a queued entry with the same coalesce key.
+   * If found, merge the incoming item into it and return true.
+   */
+  private tryCoalesce(key: string, data: T, incomingPriority: Priority): boolean {
+    const entry = this.findByCoalesceKey(key);
+    if (!entry) return false;
+
+    const result = this.coalesce!(entry.data, data, entry.coalescedCount);
+    entry.data = result.merged;
+    entry.coalescedCount = result.count;
+
+    // Promote normal → high if the incoming item is higher priority.
+    if (entry.priority === "normal" && incomingPriority === "high") {
+      const idx = this.normalItems.indexOf(entry);
+      if (idx !== -1) {
+        this.normalItems.splice(idx, 1);
+        entry.priority = "high";
+        this.highItems.push(entry);
+      }
+    }
+
+    this.logger.debug(
+      { coalesceKey: key, coalescedCount: entry.coalescedCount },
+      "coalesced AI review queue item",
+    );
+    return true;
+  }
+
+  private findByCoalesceKey(key: string): QueueEntry<T> | undefined {
+    for (const entry of this.highItems) {
+      if (entry.coalesceKey === key) return entry;
+    }
+    for (const entry of this.normalItems) {
+      if (entry.coalesceKey === key) return entry;
+    }
+    return undefined;
   }
 
   private recordDrop(reason: "capacity" | "stale", tier: Priority): void {

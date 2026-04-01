@@ -44,6 +44,7 @@ export interface AiReviewWorkItem {
   forceDryRun?: boolean;
   nowMs: number;
   aiMode: AiModeSelection;
+  coalescedCount: number;
 }
 
 interface OutboundMessageTrackerLike {
@@ -286,6 +287,7 @@ export class MessageProcessor {
       ...(options.forceDryRun ? { forceDryRun: options.forceDryRun } : {}),
       nowMs,
       aiMode,
+      coalescedCount: 1,
     };
 
     if (this.aiReviewQueue && processingMode === "live") {
@@ -324,7 +326,10 @@ export class MessageProcessor {
     };
 
     const context = this.contextBuilder.build(work.message, work.botIdentity);
-    const aiInput = buildAiDecisionInput(work.message, context, effectiveConfig, work.botIdentity, work.aiMode);
+    const aiInput = buildAiDecisionInput(
+      work.message, context, effectiveConfig, work.botIdentity, work.aiMode,
+      work.coalescedCount > 1 ? work.coalescedCount : undefined,
+    );
     const aiProvider = await this.aiProviders.getProvider(effectiveConfig);
     let aiDecision = await aiProvider.decide(aiInput);
 
@@ -351,6 +356,7 @@ export class MessageProcessor {
         mode: aiDecision.mode,
         reason: aiDecision.reason,
         actionCount: aiDecision.actions.length,
+        ...(work.coalescedCount > 1 ? { coalescedCount: work.coalescedCount } : {}),
       },
       "processed AI decision",
     );
