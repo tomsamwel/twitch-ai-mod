@@ -95,6 +95,7 @@ Expected:
 - one whisper reply per command
 - a `control_audit` record per command
 - runtime changes visible immediately in logs and `aimod status`
+- `aimod reset` clears runtime overrides, exemptions, and runtime blocked terms, but leaves trusted controllers intact
 
 ## Prompt Iteration Loop
 
@@ -122,6 +123,10 @@ npm run replay -- --limit 25
 npm run review:inbox -- --limit 25
 ```
 
+Operational expectation:
+- replay and scenario runs are still written to SQLite for evaluation
+- live moderation heuristics and live-default admin/review views stay scoped to live data
+
 Recommended order:
 1. scenario eval
 2. compare against baseline with the precision-first report
@@ -144,6 +149,7 @@ During prompt tuning, include the active public-warning and visual-spam cases in
 - standalone `warn` scenarios should stay `warn`, not slide back to social `say`
 - obvious large visual spam should stay deterministic `timeout` plus `warn`
 - borderline symbol floods should avoid wrongful timeouts
+- clean apology and de-escalation follow-up scenarios should stay `abstain` even after prior warnings
 
 ## Replay Review Loop
 

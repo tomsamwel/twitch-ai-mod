@@ -48,8 +48,13 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
       setRuntimeOverride(key, value) {
         writes.push({ key, value });
       },
-      clearRuntimeOverrides() {
+      clearRuntimeControlState() {
         cleared = true;
+        return {
+          overrides: persistedOverrides.length,
+          exemptUsers: 0,
+          blockedTerms: 0,
+        };
       },
     },
     new Map([
@@ -76,9 +81,14 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
   });
   assert.deepEqual(writes, [{ key: "modelPreset", value: "local-fast" }]);
 
-  store.reset({
+  const resetSummary = store.reset({
     userId: "user-1",
     login: "streamer",
+  });
+  assert.deepEqual(resetSummary, {
+    overrides: persistedOverrides.length,
+    exemptUsers: 0,
+    blockedTerms: 0,
   });
 
   const resetEffective = store.getEffectiveSettings();

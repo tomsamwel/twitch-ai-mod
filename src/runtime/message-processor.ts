@@ -1,9 +1,11 @@
 import type { Logger } from "pino";
 
 import { AiContextBuilder } from "../ai/context-builder.js";
+import { applyAiDecisionGuardrails } from "../ai/decision-guardrails.js";
 import { AiProviderRegistry } from "../ai/provider-registry.js";
-import { buildAiDecisionInput, selectAiMode } from "../ai/prompt.js";
+import { buildAiDecisionInput, selectAiMode, HARD_VIOLATION_KEYWORDS } from "../ai/prompt.js";
 import type { AiModeSelection } from "../ai/prompt.js";
+import { hasRiskSignals } from "../moderation/risk-signals.js";
 import type { ActionExecutor } from "../actions/action-executor.js";
 import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import { CooldownManager } from "../moderation/cooldown-manager.js";
@@ -78,7 +80,7 @@ function annotateAiActionForExecution(
       hasRepeatedUserEvidence: context.recentUserMessages.length > 0,
       hasRecentBotCorrectiveInteraction: context.recentBotInteractions.some(
         (interaction) =>
-          (interaction.kind === "say" || interaction.kind === "warn") && interaction.status !== "failed",
+          (interaction.kind === "warn" || interaction.kind === "timeout") && interaction.status !== "failed",
       ),
     },
   };
@@ -147,7 +149,9 @@ export class MessageProcessor {
     }
 
     if (options.persistSnapshot ?? false) {
-      this.database.recordMessageSnapshot(message, options.botIdentity);
+      this.database.recordMessageSnapshot(message, options.botIdentity, {
+        processingMode,
+      });
     }
 
     if (message.chatterId === options.botIdentity.id) {
@@ -234,6 +238,27 @@ export class MessageProcessor {
 
     const effectiveConfig = this.aiProviders.createEffectiveConfig(effectiveSettings);
     const aiMode = selectAiMode(message, options.botIdentity, effectiveConfig);
+
+    // Fast path: skip AI for messages that are clearly safe — no risk signals,
+    // not addressing the bot, and no hard-violation keywords. The deterministic
+    // rule engine already ran above, so blocked terms/spam/visual spam are handled.
+    if (
+      aiMode.mode === "moderation" &&
+      !hasRiskSignals(message) &&
+      !HARD_VIOLATION_KEYWORDS.some((kw) => (message.normalizedText ?? message.text).toLowerCase().includes(kw))
+    ) {
+      this.logger.debug(
+        { chatterId: message.chatterId, eventId: message.eventId, processingMode },
+        "skipping AI review — no risk signals detected",
+      );
+
+      return {
+        status: "processed",
+        ruleDecision,
+        aiDecision: null,
+        actionResults,
+      };
+    }
 
     if (aiMode.mode === "social" && !effectiveSettings.socialRepliesEnabled) {
       this.logger.debug(
@@ -325,10 +350,11 @@ export class MessageProcessor {
       ...(work.runId ? { runId: work.runId } : {}),
     };
 
-    const context = this.contextBuilder.build(work.message, work.botIdentity);
+    const context = this.contextBuilder.build(work.message, work.botIdentity, work.processingMode);
     const aiInput = buildAiDecisionInput(
       work.message, context, effectiveConfig, work.botIdentity, work.aiMode,
       work.coalescedCount > 1 ? work.coalescedCount : undefined,
+      work.nowMs,
     );
     const aiProvider = await this.aiProviders.getProvider(effectiveConfig);
     let aiDecision = await aiProvider.decide(aiInput);
@@ -347,6 +373,8 @@ export class MessageProcessor {
         };
       }
     }
+
+    aiDecision = applyAiDecisionGuardrails(aiDecision, work.message, context, this.config);
 
     this.logger.info(
       {

@@ -91,7 +91,7 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
         throw new Error(`Usage: ${prefix} recent [count]`);
       }
       const count = value ? Number.parseInt(value, 10) : 3;
-      if (Number.isNaN(count) || count < 1 || count > 10) {
+      if (Number.isNaN(count) || count < 1 || count > 10 || (value && String(count) !== value)) {
         throw new Error(`Count must be 1-10. Usage: ${prefix} recent [count]`);
       }
       return { kind: "recent", count };
@@ -102,7 +102,7 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
       }
       return { kind: "stats" };
     case "exempt": {
-      if (tokens.length < 3 || !value) {
+      if (tokens.length !== 3 || !value) {
         throw new Error(`Usage: ${prefix} exempt <user> | ${prefix} exempt list`);
       }
       if (value.toLowerCase() === "list") {

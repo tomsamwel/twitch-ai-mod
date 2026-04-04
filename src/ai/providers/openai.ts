@@ -105,7 +105,10 @@ export class OpenAiAiProvider implements AiProvider {
     const apiKey = input.config.secrets.openaiApiKey;
 
     if (!apiKey) {
-      return buildAbstainDecision(this.kind, input.mode, "OpenAI API key is not configured");
+      this.logger.warn({ provider: this.kind }, "OpenAI API key is not configured; AI decisions will be skipped");
+      return buildAbstainDecision(this.kind, input.mode, "OpenAI API key is not configured", {
+        failureKind: "configuration_error",
+      });
     }
 
     try {

@@ -112,7 +112,10 @@ test("MessageProcessor replays AI decisions through the shared action flow in dr
       return [];
     },
   });
-  const replayMessage = normalizeChatMessage(createChatEvent(), new Date("2026-03-24T12:34:56.000Z"));
+  const replayMessage = normalizeChatMessage(
+    createChatEvent({ messageText: "check out https://example.com for free stuff" }),
+    new Date("2026-03-24T12:34:56.000Z"),
+  );
   const createdRequests: ActionRequest[] = [];
   const recordedContexts: Array<{ stage: "rules" | "ai"; processingMode?: string; runId?: string }> = [];
   const runtimeSettings = createTestRuntimeSettings(config, {
@@ -633,6 +636,7 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
           chatterId: "user-1",
           chatterLogin: "viewerone",
           receivedAt: "2026-03-24T12:54:00.000Z",
+          processingMode: "live",
           botIdentity: {
             id: "bot-1",
             login: "testbot",
@@ -646,23 +650,23 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
     listRecentBotInteractions() {
       return [
         {
-          id: "prior-bot-say",
-          kind: "say",
-          status: "dry-run",
+          id: "prior-bot-warn",
+          kind: "warn",
+          status: "executed",
           source: "ai",
           targetUserId: "user-1",
           targetUserName: "viewerone",
           reason: "brief correction",
-          dryRun: true,
+          dryRun: false,
           processingMode: "live",
           payload: {
-            id: "prior-bot-say",
-            kind: "say",
+            id: "prior-bot-warn",
+            kind: "warn",
             source: "ai",
             sourceEventId: "prior-event",
             sourceMessageId: "prior-message",
             processingMode: "live",
-            dryRun: true,
+            dryRun: false,
             initiatedAt: "2026-03-24T12:54:10.000Z",
             reason: "brief correction",
             targetUserId: "user-1",
@@ -670,10 +674,10 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
             message: "Please stop spamming mentions.",
           },
           result: {
-            id: "prior-bot-say",
-            kind: "say",
-            status: "dry-run",
-            dryRun: true,
+            id: "prior-bot-warn",
+            kind: "warn",
+            status: "executed",
+            dryRun: false,
             reason: "brief correction",
           },
           createdAt: "2026-03-24T12:54:10.000Z",
@@ -735,7 +739,7 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
               outcome: "action",
               reason: "repeated mention spam",
               confidence: 0.95,
-              mode: "social",
+              mode: "moderation",
               moderationCategory: "spam-escalation",
               actions: [
                 {
@@ -884,6 +888,181 @@ test("MessageProcessor skips AI moderation for privileged chatters unless the mo
 
   assert.equal(result.status, "processed");
   assert.equal(result.ruleDecision?.outcome, "no_action");
+  assert.equal(result.aiDecision, null);
+  assert.equal(result.actionResults.length, 0);
+});
+
+test("MessageProcessor suppresses AI moderation for clean de-escalation follow-ups", async () => {
+  const config = createTestConfig();
+  const logger = createLogger("info", "test");
+  const cooldowns = new CooldownManager(config.cooldowns);
+  const ruleEngine = new RuleEngine(config, cooldowns);
+  const priorMessage = normalizeChatMessage(
+    createChatEvent({
+      messageId: "prior-user-message",
+      messageText: "BUY FOLLOWERS NOW BUY FOLLOWERS NOW",
+      messageParts: [
+        {
+          type: "text",
+          text: "BUY FOLLOWERS NOW BUY FOLLOWERS NOW",
+        },
+      ],
+    }),
+    new Date("2026-03-24T12:57:00.000Z"),
+  );
+  const contextBuilder = new AiContextBuilder(config, {
+    listRecentRoomMessageSnapshots() {
+      return [];
+    },
+    listRecentUserMessageSnapshots() {
+      return [
+        {
+          eventId: "prior-user-message",
+          sourceMessageId: "prior-user-message",
+          chatterId: "user-1",
+          chatterLogin: "viewerone",
+          receivedAt: "2026-03-24T12:57:00.000Z",
+          processingMode: "live",
+          botIdentity: {
+            id: "bot-1",
+            login: "testbot",
+            displayName: "TestBot",
+          },
+          message: priorMessage,
+          createdAt: "2026-03-24T12:57:00.000Z",
+        },
+      ];
+    },
+    listRecentBotInteractions() {
+      return [
+        {
+          id: "prior-bot-warn",
+          kind: "warn",
+          status: "executed",
+          source: "ai",
+          targetUserId: "user-1",
+          targetUserName: "viewerone",
+          reason: "spam warning",
+          dryRun: false,
+          processingMode: "live",
+          payload: {
+            id: "prior-bot-warn",
+            kind: "warn",
+            source: "ai",
+            sourceEventId: "prior-event",
+            sourceMessageId: "prior-source-message",
+            processingMode: "live",
+            dryRun: false,
+            initiatedAt: "2026-03-24T12:57:10.000Z",
+            reason: "spam warning",
+            targetUserId: "user-1",
+            targetUserName: "viewerone",
+            message: "@viewerone Keep it clean, please.",
+          },
+          result: {
+            id: "prior-bot-warn",
+            kind: "warn",
+            status: "executed",
+            dryRun: false,
+            reason: "spam warning",
+          },
+          createdAt: "2026-03-24T12:57:10.000Z",
+        },
+      ];
+    },
+  });
+  const message = normalizeChatMessage(
+    createChatEvent({
+      messageId: "clean-followup",
+      messageText: "fair enough, great stream btw",
+      messageParts: [
+        {
+          type: "text",
+          text: "fair enough, great stream btw",
+        },
+      ],
+    }),
+    new Date("2026-03-24T13:03:00.000Z"),
+  );
+  const runtimeSettings = createTestRuntimeSettings(config);
+  let recordedDecision: AiDecision | null = null;
+
+  const processor = new MessageProcessor(
+    config,
+    logger,
+    {
+      registerIngestedEvent() {
+        return true;
+      },
+      recordMessageSnapshot() {},
+      recordRuleDecision() {},
+      recordAiDecision(_message, decision: AiDecision) {
+        recordedDecision = decision;
+      },
+    },
+    cooldowns,
+    ruleEngine,
+    contextBuilder,
+    runtimeSettings,
+    {
+      createEffectiveConfig() {
+        return config;
+      },
+      async getProvider() {
+        return {
+          kind: "ollama",
+          async healthCheck() {},
+          async decide(): Promise<AiDecision> {
+            return {
+              source: "ollama",
+              outcome: "action",
+              reason: "repeat offender after prior warning",
+              confidence: 0.97,
+              mode: "moderation",
+              moderationCategory: "spam-escalation",
+              actions: [
+                {
+                  kind: "timeout",
+                  reason: "repeat offender after prior warning",
+                  durationSeconds: 300,
+                },
+                {
+                  kind: "warn",
+                  reason: "public warning",
+                  message: "That crossed the line. Dial it back.",
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    {
+      createActionRequest() {
+        throw new Error("guardrailed de-escalation should not create actions");
+      },
+      async execute() {
+        throw new Error("guardrailed de-escalation should not execute actions");
+      },
+    },
+  );
+
+  const result = await processor.process(message, {
+    botIdentity: {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T13:03:00.000Z"),
+  });
+
+  assert.equal(result.status, "processed");
+  assert.equal(result.ruleDecision?.outcome, "no_action");
+  // Clean de-escalation messages have no risk signals, so the fast path skips AI entirely.
+  // This is correct: no moderation action occurs, and the LLM call is avoided.
   assert.equal(result.aiDecision, null);
   assert.equal(result.actionResults.length, 0);
 });

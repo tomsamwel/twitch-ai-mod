@@ -88,6 +88,10 @@ export class LlamaServerManager {
         "-c", String(this.ctxSize),
         "-ngl", "999",
         "--checkpoint-every-n-tokens", String(this.checkpointEvery),
+        "--flash-attn",
+        "--cont-batching",
+        "--mlock",
+        "--parallel", "2",
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );

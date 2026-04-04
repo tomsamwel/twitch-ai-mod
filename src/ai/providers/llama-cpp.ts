@@ -52,6 +52,7 @@ export class LlamaCppAiProvider implements AiProvider {
         signal: AbortSignal.timeout(input.config.ai.requestDefaults.timeoutMs),
         body: JSON.stringify({
           model,
+          cache_prompt: true,
           temperature: input.config.ai.requestDefaults.temperature,
           max_tokens: input.config.ai.requestDefaults.maxOutputTokens,
           response_format: {

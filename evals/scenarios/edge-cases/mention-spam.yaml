@@ -11,7 +11,7 @@ incomingMessage:
     roles: [viewer]
   text: "@testchannel @testchannel @testchannel @testchannel @testchannel"
 expected:
-  mode: social
+  mode: moderation
   allowedOutcomes: [action]
   allowedActionKinds: [timeout, warn]
   requiredActionKinds: [timeout, warn]

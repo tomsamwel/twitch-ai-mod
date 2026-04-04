@@ -4,7 +4,7 @@
 
 ```bash
 npm run check            # TypeScript type check
-npm test                 # 189 unit tests (~1.5s), node:test framework
+npm test                 # 199 unit tests (~1.5s), node:test framework
 npm run build            # Compile to dist/
 npm run eval:scenarios   # 77 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
 npm run eval:candidates  # List production decisions worth promoting to eval scenarios

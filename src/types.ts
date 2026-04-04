@@ -28,6 +28,7 @@ export type RuntimeOverrideKey =
   | "liveModerationEnabled"
   | "promptPack"
   | "modelPreset";
+export type ControlChangeKey = RuntimeOverrideKey | "runtimeExemptions" | "runtimeBlockedTerms";
 
 export type ActionKind = "say" | "warn" | "timeout";
 export type ReviewVerdict =
@@ -59,6 +60,10 @@ export interface NormalizedChatMessage {
   chatterDisplayName: string;
   text: string;
   normalizedText: string;
+  urlResult: {
+    detected: boolean;
+    urls: string[];
+  };
   color: string | null;
   messageType: string;
   badges: Record<string, string>;
@@ -379,6 +384,10 @@ export interface TwitchIdentity {
   displayName: string;
 }
 
+export interface TwitchUserResolver {
+  resolveUserByLogin(login: string): Promise<TwitchIdentity | null>;
+}
+
 export interface TwitchGatewayContext {
   broadcaster: TwitchIdentity;
   bot: TwitchIdentity;
@@ -402,6 +411,7 @@ export interface PersistedMessageSnapshot {
   chatterId: string;
   chatterLogin: string;
   receivedAt: string;
+  processingMode: ProcessingMode;
   botIdentity: TwitchIdentity;
   message: NormalizedChatMessage;
   createdAt: string;
@@ -509,8 +519,31 @@ export interface TrustedController {
   userId: string;
   login: string;
   displayName: string;
-  source: "config" | "broadcaster";
+  source: "config" | "broadcaster" | "runtime";
   role: ControllerRole;
+}
+
+export interface RuntimeControllerRecord {
+  login: string;
+  userId: string | null;
+  displayName: string | null;
+  role: "admin" | "mod";
+  addedByLogin: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RuntimeControllerUpsert {
+  login: string;
+  userId: string;
+  displayName: string | null;
+  role: "admin" | "mod";
+  addedByLogin: string;
+}
+
+export interface RuntimeControllerIdentifier {
+  userId?: string | null;
+  login?: string | null;
 }
 
 export type ControlCommand =
@@ -540,7 +573,7 @@ export interface ControlCommandResult {
   commandSummary: string;
   highRisk: boolean;
   changes: Array<{
-    key: RuntimeOverrideKey;
+    key: ControlChangeKey;
     previousValue: unknown;
     nextValue: unknown;
   }>;

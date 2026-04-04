@@ -48,6 +48,8 @@ Login overrides apply only when running the live bot (`npm run dev`). Eval, repl
   Dry-run, log level, token validation cadence.
 - `storage`
   SQLite path.
+- `admin`
+  Local admin UI enablement plus port.
 - `promptPacks.defaultPack`
   The default pack loaded at startup.
 - `twitch`
@@ -160,15 +162,28 @@ The old `trustedControllerLogins` format still works — all entries default to 
 
 Rules:
 - controller access is allowlist-only
-- controller logins are managed locally in YAML, not from Twitch chat
+- controllers can come from YAML or the local admin panel, never from Twitch chat
+- runtime-added controllers are resolved to Twitch user IDs before they are trusted
 - `model` only switches between named presets, not arbitrary model strings
 - `reset` clears SQLite overrides, runtime exemptions, and runtime blocked terms
+
+## Runtime Controllers
+
+The admin panel can add and update trusted controllers at runtime.
+
+Runtime controller behavior:
+- entries are persisted in SQLite and survive restart
+- the operator adds them by login for convenience
+- the bot resolves that login to a stable Twitch user ID before storing trust
+- whisper authorization checks the sender user ID, not just the current login string
+- once a runtime controller is trusted, later authorized whispers refresh the stored login/display-name metadata
+- if an old login-only runtime controller row can no longer be resolved, it stays visible in the admin panel but is not trusted until repaired
 
 ## Runtime Exemptions
 
 Exempt users bypass deterministic rules and AI timeout execution. Managed via:
 - `aimod exempt <user>` / `aimod unexempt <user>` (whisper)
-- Admin panel Tuning tab
+- Admin panel Config tab
 
 Stored in SQLite `exempt_users` table. Cleared on `aimod reset`.
 
@@ -176,7 +191,7 @@ Stored in SQLite `exempt_users` table. Cleared on `aimod reset`.
 
 Additional blocked terms added at runtime, merged with config `deterministicRules.blockedTerms`. Managed via:
 - `aimod block <term>` / `aimod unblock <term>` (whisper)
-- Admin panel Tuning tab
+- Admin panel Config tab
 
 Stored in SQLite `runtime_blocked_terms` table.
 
@@ -325,6 +340,8 @@ Replay:
 - runs rules first, then AI
 - forces all resulting actions to dry-run
 - tags replay decisions/actions separately from live runs
+- persists replay-tagged decisions/actions for comparison without feeding live heuristics
+- leaves live/admin default views scoped to live data unless a tool explicitly asks for replay data
 
 Optional overrides:
 - `--provider llama-cpp|ollama|openai`
@@ -345,6 +362,7 @@ Scenario eval:
 - runs the shared message pipeline
 - forces actions to dry-run
 - prints a readable CLI report with prompt-size hints
+- tags scenario snapshots/decisions/actions separately so scenario history does not contaminate live context or live moderation heuristics
 
 Optional overrides:
 - `--suite <name>`

@@ -227,7 +227,7 @@ test("AiReviewQueue handles handler errors without breaking the queue", async ()
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   assert.deepEqual(processed, [1, 3]);
-  assert.equal(queue.getStats().totalProcessed, 3);
+  assert.equal(queue.getStats().totalProcessed, 2); // failed item not counted
 });
 
 // --- Priority queue tests ---

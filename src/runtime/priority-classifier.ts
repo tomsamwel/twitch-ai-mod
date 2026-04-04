@@ -1,35 +1,12 @@
 import type { CoalesceResult, Priority } from "./ai-review-queue.js";
 import type { AiReviewWorkItem } from "./message-processor.js";
 import type { NormalizedChatMessage } from "../types.js";
-import { detectUrls } from "../moderation/url-detect.js";
-import { countMentions } from "../utils.js";
+import { hasRiskSignals, messageRiskScore } from "../moderation/risk-signals.js";
 
-export const CAPS_RATIO_THRESHOLD = 0.7;
-export const CAPS_MIN_ALPHA = 8;
-export const MENTION_COUNT_THRESHOLD = 3;
-export const LENGTH_THRESHOLD = 400;
-export const REPEAT_OFFENDER_WINDOW_MS = 3_600_000;
+const REPEAT_OFFENDER_WINDOW_MS = 3_600_000;
 
 export interface PriorityClassifierDeps {
   countRecentTimeoutsForUser(targetUserId: string, afterTimestamp: string): number;
-}
-
-function isHighCaps(text: string): boolean {
-  let upper = 0;
-  let alpha = 0;
-  for (const ch of text) {
-    if (ch >= "A" && ch <= "Z") { upper++; alpha++; }
-    else if (ch >= "a" && ch <= "z") { alpha++; }
-  }
-  return alpha >= CAPS_MIN_ALPHA && upper / alpha > CAPS_RATIO_THRESHOLD;
-}
-
-function hasRiskSignals(message: NormalizedChatMessage): boolean {
-  if (detectUrls(message.text).detected) return true;
-  if (isHighCaps(message.text)) return true;
-  if (countMentions(message) >= MENTION_COUNT_THRESHOLD) return true;
-  if (message.text.length > LENGTH_THRESHOLD) return true;
-  return false;
 }
 
 function hasTrustSignals(message: NormalizedChatMessage): boolean {
@@ -51,7 +28,7 @@ export function createPriorityClassifier(deps: PriorityClassifierDeps): (item: A
     if (hasRiskSignals(item.message)) return "high";
     if (hasTrustSignals(item.message)) return "normal";
 
-    return "high";
+    return "normal";
   };
 }
 
@@ -86,11 +63,4 @@ export function coalesceWorkItems(
   };
 }
 
-export function messageRiskScore(message: NormalizedChatMessage): number {
-  let score = 0;
-  if (detectUrls(message.text).detected) score += 4;
-  if (isHighCaps(message.text)) score += 3;
-  if (countMentions(message) >= MENTION_COUNT_THRESHOLD) score += 2;
-  if (message.text.length > LENGTH_THRESHOLD) score += 1;
-  return score;
-}
+export { messageRiskScore } from "../moderation/risk-signals.js";

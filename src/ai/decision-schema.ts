@@ -134,8 +134,6 @@ export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((
   }
 });
 
-export type AiDecisionPayload = z.infer<typeof aiDecisionPayloadSchema>;
-
 export const aiDecisionJsonSchema = (function stripSchemaMeta(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(stripSchemaMeta);
@@ -171,7 +169,7 @@ export function buildAbstainDecision(
 }
 
 export function payloadToAiDecision(
-  payload: AiDecisionPayload,
+  payload: z.infer<typeof aiDecisionPayloadSchema>,
   source: AiProviderKind,
   input: AiDecisionInput,
 ): AiDecision {
@@ -181,17 +179,17 @@ export function payloadToAiDecision(
         kind: action.kind,
         reason: action.reason,
         message: action.message!,
-        targetUserId: action.targetUserId ?? input.message.chatterId,
-        targetUserName: action.targetUserName ?? input.message.chatterLogin,
-        replyParentMessageId: action.replyParentMessageId ?? input.message.sourceMessageId,
+        targetUserId: input.message.chatterId,
+        targetUserName: input.message.chatterLogin,
+        replyParentMessageId: input.message.sourceMessageId,
       };
     }
 
     return {
       kind: "timeout",
       reason: action.reason,
-      targetUserId: action.targetUserId ?? input.message.chatterId,
-      targetUserName: action.targetUserName ?? input.message.chatterLogin,
+      targetUserId: input.message.chatterId,
+      targetUserName: input.message.chatterLogin,
       durationSeconds:
         action.durationSeconds ?? input.config.moderationPolicy.deterministicRules.timeoutSeconds,
     };

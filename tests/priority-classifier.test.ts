@@ -10,6 +10,7 @@ import {
 import type { PriorityClassifierDeps } from "../src/runtime/priority-classifier.js";
 import type { AiReviewWorkItem } from "../src/runtime/message-processor.js";
 import type { NormalizedChatMessage, NormalizedMessagePart, TwitchIdentity } from "../src/types.js";
+import { DEFAULT_URL_RESULT } from "./helpers.js";
 
 const botIdentity: TwitchIdentity = { id: "bot-1", login: "testbot", displayName: "TestBot" };
 
@@ -29,6 +30,7 @@ function makeMessage(overrides: Partial<NormalizedChatMessage> = {}): Normalized
     chatterDisplayName: "ViewerOne",
     text: "hello world",
     normalizedText: "hello world",
+    urlResult: { ...DEFAULT_URL_RESULT },
     color: "#00FF00",
     messageType: "text",
     badges: {},
@@ -109,7 +111,7 @@ test("moderation + repeat offender is high priority", () => {
 test("moderation + URL detected is high priority", () => {
   const classify = createPriorityClassifier(stubDeps(0));
   const item = makeWorkItem({
-    message: { text: "check this out https://free-skins.com", normalizedText: "check this out https://free-skins.com" },
+    message: { text: "check this out https://free-skins.com", normalizedText: "check this out https://free-skins.com", urlResult: { detected: true, urls: ["https://free-skins.com"] } },
   });
   assert.equal(classify(item), "high");
 });
@@ -168,6 +170,7 @@ test("moderation + subscriber WITH URL risk signal stays high", () => {
       roles: ["subscriber"],
       text: "check https://sketchy-link.com",
       normalizedText: "check https://sketchy-link.com",
+      urlResult: { detected: true, urls: ["https://sketchy-link.com"] },
     },
   });
   assert.equal(classify(item), "high");
@@ -181,12 +184,12 @@ test("moderation + repeat offender WITH trust signals stays high", () => {
   assert.equal(classify(item), "high");
 });
 
-test("moderation + plain viewer with no signals is high (default)", () => {
+test("moderation + plain viewer with no signals is normal (default)", () => {
   const classify = createPriorityClassifier(stubDeps(0));
   const item = makeWorkItem({
     message: { text: "hello chat", normalizedText: "hello chat" },
   });
-  assert.equal(classify(item), "high");
+  assert.equal(classify(item), "normal");
 });
 
 test("short caps text is not flagged as risk (below alpha threshold)", () => {
@@ -215,7 +218,7 @@ test("workItemCoalesceKey returns undefined for social mode", () => {
 test("coalesceWorkItems keeps riskier message", () => {
   const clean = makeWorkItem({ message: { text: "hello", normalizedText: "hello" } });
   const risky = makeWorkItem({
-    message: { text: "CHECK THIS OUT https://scam.com BUY NOW", normalizedText: "check this out https://scam.com buy now" },
+    message: { text: "CHECK THIS OUT https://scam.com BUY NOW", normalizedText: "check this out https://scam.com buy now", urlResult: { detected: true, urls: ["https://scam.com"] } },
   });
 
   const result = coalesceWorkItems(clean, risky, 1);
@@ -225,7 +228,7 @@ test("coalesceWorkItems keeps riskier message", () => {
 
 test("coalesceWorkItems keeps existing when it is riskier", () => {
   const risky = makeWorkItem({
-    message: { text: "CHECK THIS OUT https://scam.com BUY NOW", normalizedText: "check this out https://scam.com buy now" },
+    message: { text: "CHECK THIS OUT https://scam.com BUY NOW", normalizedText: "check this out https://scam.com buy now", urlResult: { detected: true, urls: ["https://scam.com"] } },
   });
   const clean = makeWorkItem({ message: { text: "hello", normalizedText: "hello" } });
 
@@ -260,7 +263,7 @@ test("messageRiskScore is 0 for plain text", () => {
 });
 
 test("messageRiskScore scores URLs highest", () => {
-  const msg = makeMessage({ text: "check https://scam.com", normalizedText: "check https://scam.com" });
+  const msg = makeMessage({ text: "check https://scam.com", normalizedText: "check https://scam.com", urlResult: { detected: true, urls: ["https://scam.com"] } });
   assert.ok(messageRiskScore(msg) >= 4);
 });
 

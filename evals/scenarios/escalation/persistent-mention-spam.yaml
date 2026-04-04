@@ -15,7 +15,7 @@ steps:
       roles: [viewer]
     text: "@testchannel @testchannel @testchannel"
     expected:
-      mode: social
+      mode: moderation
       allowedOutcomes: [abstain, action]
       allowedActionKinds: [say]
       allowedActionStatuses: [dry-run]
@@ -29,7 +29,7 @@ steps:
       roles: [viewer]
     text: "@testchannel @testchannel @testchannel @testchannel @testchannel"
     expected:
-      mode: social
+      mode: moderation
       allowedOutcomes: [action]
       allowedActionKinds: [timeout, warn]
       requiredActionKinds: [timeout, warn]

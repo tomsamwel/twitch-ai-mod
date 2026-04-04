@@ -11,6 +11,7 @@ import type {
   ControlCommandResult,
   ControllerRole,
   RuntimeOverrideKey,
+  RuntimeOverrideSnapshot,
   TrustedController,
   WhisperMessage,
 } from "../types.js";
@@ -64,7 +65,8 @@ export class WhisperControlPlane {
       | "addRuntimeBlockedTerm"
       | "removeRuntimeBlockedTerm"
       | "listRuntimeBlockedTerms"
-      | "getRuntimeController"
+      | "getRuntimeControllerByUserId"
+      | "touchRuntimeControllerIdentity"
       | "purgeUserHistory"
       | "purgeOperationalData"
     >,
@@ -82,19 +84,7 @@ export class WhisperControlPlane {
       return;
     }
 
-    let controller = this.controllersByUserId.get(message.senderUserId);
-    if (!controller) {
-      const runtimeEntry = this.database.getRuntimeController(message.senderUserLogin);
-      if (runtimeEntry) {
-        controller = {
-          userId: message.senderUserId,
-          login: message.senderUserLogin,
-          displayName: message.senderUserDisplayName,
-          source: "config",
-          role: runtimeEntry.role as ControllerRole,
-        };
-      }
-    }
+    const controller = this.resolveController(message);
     if (!controller) {
       await this.finalize(message, null, {
         accepted: false,
@@ -136,7 +126,21 @@ export class WhisperControlPlane {
       return;
     }
 
-    const result = this.executeCommand(command, message);
+    let result: ControlCommandResult;
+    try {
+      result = this.executeCommand(command, message);
+    } catch (error) {
+      this.logger.error({ err: error, command: command.kind }, "control command execution failed");
+      result = {
+        accepted: true,
+        success: false,
+        commandSummary: command.kind,
+        replyMessage: `Command failed: ${error instanceof Error ? error.message : "unknown error"}`,
+        highRisk: false,
+        changes: [],
+      };
+    }
+
     await this.finalize(message, command, result);
   }
 
@@ -286,20 +290,17 @@ export class WhisperControlPlane {
       }
       case "reset": {
         const previous = this.runtimeSettings.getOverrides();
-        this.runtimeSettings.reset(actor);
+        const previousExemptUsers = this.database.listExemptUsers();
+        const previousBlockedTerms = this.database.listRuntimeBlockedTerms();
+        const summary = this.runtimeSettings.reset(actor);
+
         return {
           accepted: true,
           success: true,
           commandSummary: "reset",
-          replyMessage: "Runtime overrides cleared. Defaults are active again.",
+          replyMessage: `Reset runtime controls: ${summary.overrides} override(s), ${summary.exemptUsers} exemption(s), ${summary.blockedTerms} blocked term(s) cleared.`,
           highRisk: false,
-          changes: Object.entries(previous)
-            .filter(([key, value]) => !["updatedAt", "updatedByUserId", "updatedByLogin"].includes(key) && value !== undefined)
-            .map(([key, value]) => ({
-              key: key as RuntimeOverrideKey,
-              previousValue: value,
-              nextValue: null,
-            })),
+          changes: this.buildResetChanges(previous, previousExemptUsers, previousBlockedTerms),
         };
       }
       case "panic": {
@@ -371,6 +372,64 @@ export class WhisperControlPlane {
         throw new Error(`Unhandled command kind: ${(command as { kind: string }).kind}`);
       }
     }
+  }
+
+  private resolveController(message: WhisperMessage): TrustedController | null {
+    const configController = this.controllersByUserId.get(message.senderUserId);
+    if (configController) {
+      return configController;
+    }
+
+    const runtimeEntry = this.database.getRuntimeControllerByUserId(message.senderUserId);
+    if (!runtimeEntry?.userId) {
+      return null;
+    }
+
+    this.database.touchRuntimeControllerIdentity(
+      runtimeEntry.userId,
+      message.senderUserLogin,
+      message.senderUserDisplayName,
+    );
+
+    return {
+      userId: runtimeEntry.userId,
+      login: message.senderUserLogin,
+      displayName: message.senderUserDisplayName,
+      source: "runtime",
+      role: runtimeEntry.role,
+    };
+  }
+
+  private buildResetChanges(
+    previousOverrides: RuntimeOverrideSnapshot,
+    previousExemptUsers: Array<{ userLogin: string }>,
+    previousBlockedTerms: Array<{ term: string }>,
+  ): ControlCommandResult["changes"] {
+    const changes: ControlCommandResult["changes"] = Object.entries(previousOverrides)
+      .filter(([key, value]) => !["updatedAt", "updatedByUserId", "updatedByLogin"].includes(key) && value !== undefined)
+      .map(([key, value]) => ({
+        key: key as RuntimeOverrideKey,
+        previousValue: value,
+        nextValue: null,
+      }));
+
+    if (previousExemptUsers.length > 0) {
+      changes.push({
+        key: "runtimeExemptions",
+        previousValue: previousExemptUsers.map((user) => user.userLogin),
+        nextValue: [],
+      });
+    }
+
+    if (previousBlockedTerms.length > 0) {
+      changes.push({
+        key: "runtimeBlockedTerms",
+        previousValue: previousBlockedTerms.map((term) => term.term),
+        nextValue: [],
+      });
+    }
+
+    return changes;
   }
 
   private executeRecent(count: number): ControlCommandResult {

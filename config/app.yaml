@@ -53,7 +53,7 @@ ai:
   # Moderation items (high priority) process before social replies (normal priority).
   queue:
     capacity: 50                  # max pending AI reviews before dropping oldest
-    concurrency: 1                # parallel AI calls (1 for local llama-server/ollama, 3-5 for openai)
+    concurrency: 2                # parallel AI calls (1 for local llama-server/ollama, 3-5 for openai)
     moderationStalenessMs: 0      # 0 = moderation items never go stale
     socialStalenessMs: 30000      # social replies go stale after 30s
     pressureSignalCooldownMs: 60000  # min interval between pressure whispers

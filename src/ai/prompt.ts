@@ -8,7 +8,7 @@ import type {
   TwitchIdentity,
 } from "../types.js";
 import { moderationCategorySchema } from "../types.js";
-import { detectUrls } from "../moderation/url-detect.js";
+import { hasRiskSignals } from "../moderation/risk-signals.js";
 import { analyzeVisualSpam } from "../moderation/visual-spam.js";
 import { countMentions } from "../utils.js";
 
@@ -31,6 +31,7 @@ export const HARD_VIOLATION_KEYWORDS = [
 
 const MODERATION_CATEGORY_LIST = moderationCategorySchema.options.map((v) => `"${v}"`).join(", ");
 const HARD_VIOLATION_LIST = HARD_VIOLATION_KEYWORDS.map((k) => `"${k}"`).join(", ");
+const systemPromptCache = new Map<string, string>();
 
 interface AiModeSignals {
   mode: AiMode;
@@ -58,7 +59,7 @@ function formatQuoted(value: string | null | undefined): string {
 
 function hasRecentBotCorrectiveInteraction(context: AiContextSnapshot): boolean {
   return context.recentBotInteractions.some(
-    (interaction) => (interaction.kind === "say" || interaction.kind === "warn") && interaction.status !== "failed",
+    (interaction) => (interaction.kind === "warn" || interaction.kind === "timeout") && interaction.status !== "failed",
   );
 }
 
@@ -122,9 +123,8 @@ function formatDerivedSignals(
       ? "detected (borderline)"
       : "none";
 
-  const urlResult = detectUrls(message.normalizedText);
-  const urlLabel = urlResult.detected
-    ? `detected (${urlResult.urls.length} URL${urlResult.urls.length > 1 ? "s" : ""}${urlResult.obfuscated ? ", obfuscated" : ""})`
+  const urlLabel = message.urlResult.detected
+    ? `detected (${message.urlResult.urls.length} URL${message.urlResult.urls.length > 1 ? "s" : ""})`
     : "none";
 
   const lines = [
@@ -207,11 +207,18 @@ function detectAiModeSignals(
         part.mentionUserLogin?.toLowerCase() === config.twitch.broadcasterLogin.toLowerCase(),
     ) || lowerText.includes(`@${config.twitch.broadcasterLogin.toLowerCase()}`);
 
+  const wouldBeSocial =
+    mentionedBot || textualMention || repliedToBot || threadedWithBot || rewardTriggered || broadcasterAddressed;
+
+  // Override social mode when the message carries risk signals — harmful messages
+  // addressing the bot or broadcaster must still be eligible for moderation actions.
+  const hasRisk =
+    wouldBeSocial &&
+    (hasRiskSignals(message) ||
+      HARD_VIOLATION_KEYWORDS.some((kw) => (message.normalizedText ?? message.text).toLowerCase().includes(kw)));
+
   return {
-    mode:
-      mentionedBot || textualMention || repliedToBot || threadedWithBot || rewardTriggered || broadcasterAddressed
-        ? "social"
-        : "moderation",
+    mode: wouldBeSocial && !hasRisk ? "social" : "moderation",
     mentionedBot,
     textualMention,
     repliedToBot,
@@ -233,7 +240,7 @@ export function selectAiMode(
   };
 }
 
-export function composeAiPrompt(
+function composeAiPrompt(
   message: NormalizedChatMessage,
   config: ConfigSnapshot,
   mode: AiMode,
@@ -243,50 +250,58 @@ export function composeAiPrompt(
   nowMs: number = Date.now(),
   coalescedCount?: number,
 ): AiPromptPayload {
-  const modePrompt =
-    mode === "social" ? config.prompts.socialPersona.trim() : config.prompts.moderation.trim();
-  const system = [
-    "<role>",
-    config.prompts.system.trim(),
-    "</role>",
-    "",
-    `<mode mode="${mode}">`,
-    modePrompt,
-    "</mode>",
-    "",
-    ...(mode === "social"
-      ? ["<style>", config.prompts.responseStyle.trim(), "</style>"]
-      : ["<style>", "Warn messages: terse, firm, non-argumentative.", "</style>"]),
-    "",
-    "<safety>",
-    config.prompts.safetyRules.trim(),
-    "</safety>",
-    "",
-    "<contract>",
-    "Return one JSON object. No markdown.",
-    `mode="${mode}" exactly.`,
-    `Hard violations ALWAYS require [timeout, warn]: ${HARD_VIOLATION_LIST}. No exceptions.`,
-    mode === "social"
-      ? 'Social: outcome "action" requires exactly one "say". moderationCategory="none".'
-      : 'Moderation: outcome "action" requires one "warn" or the ordered pair ["timeout", "warn"].',
-    'outcome="action" MUST have non-empty actions. No violation = outcome="abstain".',
-    "abstain: actions=[].",
-    `moderationCategory values: ${MODERATION_CATEGORY_LIST}.`,
-    `Only propose timeout for: ${config.moderationPolicy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}.`,
-    `Timeouts require confidence >= ${config.moderationPolicy.aiPolicy.liveTimeouts.minimumConfidence.toFixed(2)}. Below that, use warn.`,
-    "spam-escalation timeout requires prior evidence (repeated user messages or prior bot correction in history). Without evidence, use warn.",
-    "The current message must independently contain a violation to act. Bad history alone is not grounds for action; apologies and de-escalation = abstain.",
-    "If unsure, abstain.",
-    mode === "social"
-      ? 'reason: max 8 words. e.g. "direct question about bot".'
-      : 'reason: max 8 words. e.g. "coercive sexual + repeated", "scam link".',
-    'abstain reason: "none" or max 4 words.',
-    "</contract>",
-    "",
-    "<examples>",
-    formatDecisionExamples(mode),
-    "</examples>",
-  ].join("\n");
+  const cacheKey = `${config.prompts.system.length}|${config.prompts.moderation.length}|${mode}`;
+  let system = systemPromptCache.get(cacheKey);
+
+  if (!system) {
+    const modePrompt =
+      mode === "social" ? config.prompts.socialPersona.trim() : config.prompts.moderation.trim();
+
+    system = [
+      "<role>",
+      config.prompts.system.trim(),
+      "</role>",
+      "",
+      `<mode mode="${mode}">`,
+      modePrompt,
+      "</mode>",
+      "",
+      ...(mode === "social"
+        ? ["<style>", config.prompts.responseStyle.trim(), "</style>"]
+        : ["<style>", "Warn messages: terse, firm, non-argumentative.", "</style>"]),
+      "",
+      "<safety>",
+      config.prompts.safetyRules.trim(),
+      "</safety>",
+      "",
+      "<contract>",
+      "Return one JSON object. No markdown.",
+      `mode="${mode}" exactly.`,
+      `Hard violations ALWAYS require [timeout, warn]: ${HARD_VIOLATION_LIST}. No exceptions.`,
+      mode === "social"
+        ? 'Social: outcome "action" requires exactly one "say". moderationCategory="none".'
+        : 'Moderation: outcome "action" requires one "warn" or the ordered pair ["timeout", "warn"].',
+      'outcome="action" MUST have non-empty actions. No violation = outcome="abstain".',
+      "abstain: actions=[].",
+      `moderationCategory values: ${MODERATION_CATEGORY_LIST}.`,
+      `Only propose timeout for: ${config.moderationPolicy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}.`,
+      `Timeouts require confidence >= ${config.moderationPolicy.aiPolicy.liveTimeouts.minimumConfidence.toFixed(2)}. Below that, use warn.`,
+      "spam-escalation timeout requires prior evidence (repeated user messages or prior bot correction in history). Without evidence, use warn.",
+      "The current message must independently contain a violation to act. Bad history alone is not grounds for action; apologies and de-escalation = abstain.",
+      "If unsure, abstain.",
+      mode === "social"
+        ? 'reason: max 8 words. e.g. "direct question about bot".'
+        : 'reason: max 8 words. e.g. "coercive sexual + repeated", "scam link".',
+      'abstain reason: "none" or max 4 words.',
+      "</contract>",
+      "",
+      "<examples>",
+      formatDecisionExamples(mode),
+      "</examples>",
+    ].join("\n");
+
+    systemPromptCache.set(cacheKey, system);
+  }
 
   const user = [
     "<ctx>",
@@ -347,6 +362,7 @@ export function buildAiDecisionInput(
   botIdentity: TwitchIdentity,
   selection = selectAiMode(message, botIdentity, config),
   coalescedCount?: number,
+  nowMs: number = Date.now(),
 ): AiDecisionInput {
   return {
     mode: selection.mode,
@@ -355,7 +371,7 @@ export function buildAiDecisionInput(
     config,
     prompt: composeAiPrompt(
       message, config, selection.mode, botIdentity, selection.signals, context,
-      Date.now(), coalescedCount,
+      nowMs, coalescedCount,
     ),
   };
 }

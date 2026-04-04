@@ -17,6 +17,9 @@ import type {
   PersistedMessageSnapshot,
   ProcessingMode,
   ReviewDecisionRecord,
+  RuntimeControllerIdentifier,
+  RuntimeControllerRecord,
+  RuntimeControllerUpsert,
   RuntimeOverrideKey,
   RuntimeOverrideRecord,
   RuleDecision,
@@ -26,6 +29,39 @@ import type {
 function stringifyJson(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
+
+function buildInClause(values: readonly unknown[]): string {
+  return values.map(() => "?").join(", ");
+}
+
+function normalizeLogin(login: string): string {
+  return login.toLowerCase().trim();
+}
+
+const LIVE_PROCESSING_MODES = ["live"] as const satisfies readonly ProcessingMode[];
+
+type MessageSnapshotRow = {
+  event_id: string;
+  source_message_id: string;
+  chatter_id: string;
+  chatter_login: string;
+  received_at: string;
+  processing_mode: ProcessingMode;
+  bot_identity_json: string;
+  message_json: string;
+  created_at: string;
+};
+
+type RuntimeControllerRow = {
+  login: string;
+  user_id: string | null;
+  display_name: string | null;
+  role: "admin" | "mod";
+  added_by_login: string;
+  created_at: string;
+  updated_at: string;
+};
+
 
 export class BotDatabase {
   private readonly database: Database.Database;
@@ -68,6 +104,8 @@ export class BotDatabase {
         outcome TEXT NOT NULL,
         reason TEXT NOT NULL,
         matched_rule TEXT,
+        processing_mode TEXT NOT NULL DEFAULT 'live',
+        run_id TEXT,
         payload_json TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
@@ -83,6 +121,8 @@ export class BotDatabase {
         target_user_name TEXT,
         reason TEXT NOT NULL,
         dry_run INTEGER NOT NULL,
+        processing_mode TEXT NOT NULL DEFAULT 'live',
+        run_id TEXT,
         payload_json TEXT NOT NULL,
         result_json TEXT NOT NULL,
         created_at TEXT NOT NULL
@@ -94,6 +134,7 @@ export class BotDatabase {
         chatter_id TEXT NOT NULL,
         chatter_login TEXT NOT NULL,
         received_at TEXT NOT NULL,
+        processing_mode TEXT NOT NULL DEFAULT 'live',
         bot_identity_json TEXT NOT NULL,
         message_json TEXT NOT NULL,
         created_at TEXT NOT NULL
@@ -139,18 +180,6 @@ export class BotDatabase {
         updated_at TEXT NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_review_decisions_updated_at
-      ON review_decisions(updated_at DESC);
-
-      CREATE INDEX IF NOT EXISTS idx_decisions_event_created_at
-      ON decisions(event_id, created_at ASC);
-
-      CREATE INDEX IF NOT EXISTS idx_actions_source_event_created_at
-      ON actions(source_event_id, created_at ASC);
-
-      CREATE INDEX IF NOT EXISTS idx_actions_target_user_created_at
-      ON actions(target_user_id, created_at ASC);
-
       CREATE TABLE IF NOT EXISTS exempt_users (
         user_login TEXT PRIMARY KEY,
         added_by_login TEXT NOT NULL,
@@ -165,16 +194,54 @@ export class BotDatabase {
 
       CREATE TABLE IF NOT EXISTS runtime_controllers (
         login TEXT PRIMARY KEY,
+        user_id TEXT,
+        display_name TEXT,
         role TEXT NOT NULL,
         added_by_login TEXT NOT NULL,
-        created_at TEXT NOT NULL
+        created_at TEXT NOT NULL,
+        updated_at TEXT
       );
+
     `);
 
     this.ensureColumn("decisions", "processing_mode", "TEXT NOT NULL DEFAULT 'live'");
     this.ensureColumn("decisions", "run_id", "TEXT");
     this.ensureColumn("actions", "processing_mode", "TEXT NOT NULL DEFAULT 'live'");
     this.ensureColumn("actions", "run_id", "TEXT");
+    this.ensureColumn("message_snapshots", "processing_mode", "TEXT NOT NULL DEFAULT 'live'");
+    this.ensureColumn("runtime_controllers", "user_id", "TEXT");
+    this.ensureColumn("runtime_controllers", "display_name", "TEXT");
+    this.ensureColumn("runtime_controllers", "updated_at", "TEXT");
+    this.database.exec(`UPDATE runtime_controllers SET updated_at = created_at WHERE updated_at IS NULL`);
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_review_decisions_updated_at
+      ON review_decisions(updated_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_decisions_event_created_at
+      ON decisions(event_id, created_at ASC);
+
+      CREATE INDEX IF NOT EXISTS idx_actions_source_event_created_at
+      ON actions(source_event_id, created_at ASC);
+
+      CREATE INDEX IF NOT EXISTS idx_actions_target_user_created_at
+      ON actions(target_user_id, created_at ASC);
+
+      CREATE INDEX IF NOT EXISTS idx_actions_processing_target_user_created_at
+      ON actions(processing_mode, target_user_id, created_at ASC);
+
+      CREATE INDEX IF NOT EXISTS idx_decisions_processing_created_at
+      ON decisions(processing_mode, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_message_snapshots_processing_received_at
+      ON message_snapshots(processing_mode, received_at DESC);
+
+      CREATE INDEX IF NOT EXISTS idx_message_snapshots_processing_chatter_received_at
+      ON message_snapshots(processing_mode, chatter_id, received_at DESC);
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_controllers_user_id
+      ON runtime_controllers(user_id);
+
+    `);
   }
 
   // Table/column names are hardcoded constants from initialize() — no injection risk.
@@ -188,6 +255,16 @@ export class BotDatabase {
     }
 
     this.database.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+
+  private buildProcessingModeCondition(
+    columnName: string,
+    processingModes: readonly ProcessingMode[],
+  ): { clause: string; params: ProcessingMode[] } {
+    return {
+      clause: `${columnName} IN (${buildInClause(processingModes)})`,
+      params: [...processingModes],
+    };
   }
 
   public close(): void {
@@ -337,8 +414,23 @@ export class BotDatabase {
       );
   }
 
-  public clearRuntimeOverrides(): void {
-    this.database.prepare(`DELETE FROM runtime_overrides`).run();
+  public clearRuntimeOverrides(): number {
+    const result = this.database.prepare(`DELETE FROM runtime_overrides`).run();
+    return result.changes;
+  }
+
+  public clearRuntimeControlState(): {
+    overrides: number;
+    exemptUsers: number;
+    blockedTerms: number;
+  } {
+    const clear = this.database.transaction(() => ({
+      overrides: this.clearRuntimeOverrides(),
+      exemptUsers: this.clearExemptUsers(),
+      blockedTerms: this.clearRuntimeBlockedTerms(),
+    }));
+
+    return clear();
   }
 
   public recordControlAudit(entry: ControlAuditRecord): void {
@@ -399,13 +491,14 @@ export class BotDatabase {
       return [];
     }
 
+    const eventClause = eventIds ? buildInClause(eventIds) : "";
     const rows = (eventIds
       ? this.database
           .prepare(
             `
               SELECT event_id, verdict, notes, updated_at
               FROM review_decisions
-              WHERE event_id IN (${eventIds.map(() => "?").join(", ")})
+              WHERE event_id IN (${eventClause})
               ORDER BY updated_at DESC
             `,
           )
@@ -446,7 +539,11 @@ export class BotDatabase {
     return result.changes > 0;
   }
 
-  public recordMessageSnapshot(message: NormalizedChatMessage, botIdentity: TwitchIdentity): void {
+  public recordMessageSnapshot(
+    message: NormalizedChatMessage,
+    botIdentity: TwitchIdentity,
+    context: { processingMode?: ProcessingMode } = {},
+  ): void {
     this.database
       .prepare(
         `
@@ -456,10 +553,11 @@ export class BotDatabase {
             chatter_id,
             chatter_login,
             received_at,
+            processing_mode,
             bot_identity_json,
             message_json,
             created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
@@ -468,13 +566,18 @@ export class BotDatabase {
         message.chatterId,
         message.chatterLogin,
         message.receivedAt,
+        context.processingMode ?? "live",
         stringifyJson(botIdentity),
         stringifyJson(message),
         new Date().toISOString(),
       );
   }
 
-  public listMessageSnapshots(limit?: number): PersistedMessageSnapshot[] {
+  public listMessageSnapshots(
+    limit?: number,
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
+  ): PersistedMessageSnapshot[] {
+    const { clause, params } = this.buildProcessingModeCondition("processing_mode", processingModes);
     const rows = (limit && limit > 0
       ? this.database
           .prepare(
@@ -487,17 +590,19 @@ export class BotDatabase {
                   chatter_id,
                   chatter_login,
                   received_at,
+                  processing_mode,
                   bot_identity_json,
                   message_json,
                   created_at
                 FROM message_snapshots
+                WHERE ${clause}
                 ORDER BY received_at DESC
                 LIMIT ?
               )
               ORDER BY received_at ASC
             `,
           )
-          .all(limit)
+          .all(...params, limit)
       : this.database
           .prepare(
             `
@@ -507,34 +612,18 @@ export class BotDatabase {
                 chatter_id,
                 chatter_login,
                 received_at,
+                processing_mode,
                 bot_identity_json,
                 message_json,
                 created_at
               FROM message_snapshots
+              WHERE ${clause}
               ORDER BY received_at ASC
             `,
           )
-          .all()) as Array<{
-      event_id: string;
-      source_message_id: string;
-      chatter_id: string;
-      chatter_login: string;
-      received_at: string;
-      bot_identity_json: string;
-      message_json: string;
-      created_at: string;
-    }>;
+          .all(...params)) as MessageSnapshotRow[];
 
-    return rows.map((row) => ({
-      eventId: row.event_id,
-      sourceMessageId: row.source_message_id,
-      chatterId: row.chatter_id,
-      chatterLogin: row.chatter_login,
-      receivedAt: row.received_at,
-      botIdentity: JSON.parse(row.bot_identity_json) as TwitchIdentity,
-      message: JSON.parse(row.message_json) as NormalizedChatMessage,
-      createdAt: row.created_at,
-    }));
+    return this.mapSnapshotRows(rows);
   }
 
   public getMessageSnapshotByEventId(eventId: string): PersistedMessageSnapshot | null {
@@ -547,6 +636,7 @@ export class BotDatabase {
             chatter_id,
             chatter_login,
             received_at,
+            processing_mode,
             bot_identity_json,
             message_json,
             created_at
@@ -555,44 +645,22 @@ export class BotDatabase {
           LIMIT 1
         `,
       )
-      .get(eventId) as
-      | {
-          event_id: string;
-          source_message_id: string;
-          chatter_id: string;
-          chatter_login: string;
-          received_at: string;
-          bot_identity_json: string;
-          message_json: string;
-          created_at: string;
-        }
-      | undefined;
+      .get(eventId) as MessageSnapshotRow | undefined;
 
-    if (!row) {
-      return null;
-    }
-
-    return {
-      eventId: row.event_id,
-      sourceMessageId: row.source_message_id,
-      chatterId: row.chatter_id,
-      chatterLogin: row.chatter_login,
-      receivedAt: row.received_at,
-      botIdentity: JSON.parse(row.bot_identity_json) as TwitchIdentity,
-      message: JSON.parse(row.message_json) as NormalizedChatMessage,
-      createdAt: row.created_at,
-    };
+    return row ? this.mapSnapshotRows([row])[0] ?? null : null;
   }
 
   public listRecentRoomMessageSnapshots(
     beforeReceivedAt: string,
     excludeEventId: string,
     limit: number,
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
   ): PersistedMessageSnapshot[] {
     if (limit <= 0) {
       return [];
     }
 
+    const { clause, params } = this.buildProcessingModeCondition("processing_mode", processingModes);
     const rows = this.database
       .prepare(
         `
@@ -604,11 +672,13 @@ export class BotDatabase {
               chatter_id,
               chatter_login,
               received_at,
+              processing_mode,
               bot_identity_json,
               message_json,
               created_at
             FROM message_snapshots
-            WHERE received_at <= ?
+            WHERE ${clause}
+              AND received_at <= ?
               AND event_id != ?
             ORDER BY received_at DESC
             LIMIT ?
@@ -616,16 +686,7 @@ export class BotDatabase {
           ORDER BY received_at ASC
         `,
       )
-      .all(beforeReceivedAt, excludeEventId, limit) as Array<{
-      event_id: string;
-      source_message_id: string;
-      chatter_id: string;
-      chatter_login: string;
-      received_at: string;
-      bot_identity_json: string;
-      message_json: string;
-      created_at: string;
-    }>;
+      .all(...params, beforeReceivedAt, excludeEventId, limit) as MessageSnapshotRow[];
 
     return this.mapSnapshotRows(rows);
   }
@@ -635,11 +696,13 @@ export class BotDatabase {
     beforeReceivedAt: string,
     excludeEventId: string,
     limit: number,
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
   ): PersistedMessageSnapshot[] {
     if (limit <= 0) {
       return [];
     }
 
+    const { clause, params } = this.buildProcessingModeCondition("processing_mode", processingModes);
     const rows = this.database
       .prepare(
         `
@@ -651,11 +714,13 @@ export class BotDatabase {
               chatter_id,
               chatter_login,
               received_at,
+              processing_mode,
               bot_identity_json,
               message_json,
               created_at
             FROM message_snapshots
-            WHERE chatter_id = ?
+            WHERE ${clause}
+              AND chatter_id = ?
               AND received_at <= ?
               AND event_id != ?
             ORDER BY received_at DESC
@@ -664,16 +729,7 @@ export class BotDatabase {
           ORDER BY received_at ASC
         `,
       )
-      .all(chatterId, beforeReceivedAt, excludeEventId, limit) as Array<{
-      event_id: string;
-      source_message_id: string;
-      chatter_id: string;
-      chatter_login: string;
-      received_at: string;
-      bot_identity_json: string;
-      message_json: string;
-      created_at: string;
-    }>;
+      .all(...params, chatterId, beforeReceivedAt, excludeEventId, limit) as MessageSnapshotRow[];
 
     return this.mapSnapshotRows(rows);
   }
@@ -682,11 +738,13 @@ export class BotDatabase {
     targetUserId: string,
     beforeCreatedAt: string,
     limit: number,
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
   ): PersistedActionRecord[] {
     if (limit <= 0) {
       return [];
     }
 
+    const { clause, params } = this.buildProcessingModeCondition("processing_mode", processingModes);
     const rows = this.database
       .prepare(
         `
@@ -718,7 +776,8 @@ export class BotDatabase {
               result_json,
               created_at
             FROM actions
-            WHERE target_user_id = ?
+            WHERE ${clause}
+              AND target_user_id = ?
               AND created_at <= ?
               AND action_kind IN ('say', 'warn', 'timeout')
             ORDER BY created_at DESC
@@ -727,7 +786,7 @@ export class BotDatabase {
           ORDER BY created_at ASC
         `,
       )
-      .all(targetUserId, beforeCreatedAt, limit) as Array<{
+      .all(...params, targetUserId, beforeCreatedAt, limit) as Array<{
       id: string;
       action_kind: "say" | "warn" | "timeout";
       status: ActionResult["status"];
@@ -758,11 +817,17 @@ export class BotDatabase {
     }));
   }
 
-  public listDecisionsForEventIds(eventIds: string[]): PersistedDecisionRecord[] {
+  public listDecisionsForEventIds(
+    eventIds: string[],
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
+  ): PersistedDecisionRecord[] {
     if (eventIds.length === 0) {
       return [];
     }
 
+    const processingModeFilter = this.buildProcessingModeCondition("processing_mode", processingModes);
+    const modeClause = ` AND ${processingModeFilter.clause}`;
+    const eventClause = buildInClause(eventIds);
     const rows = this.database
       .prepare(
         `
@@ -778,14 +843,17 @@ export class BotDatabase {
             matched_rule,
             processing_mode,
             run_id,
-            payload_json,
-            created_at
+          payload_json,
+          created_at
           FROM decisions
-          WHERE event_id IN (${eventIds.map(() => "?").join(", ")})
+          WHERE event_id IN (${eventClause})${modeClause}
           ORDER BY created_at ASC
         `,
       )
-      .all(...eventIds) as Array<{
+      .all(
+        ...eventIds,
+        ...processingModeFilter.params,
+      ) as Array<{
       id: string;
       stage: "rules" | "ai";
       event_id: string;
@@ -818,11 +886,17 @@ export class BotDatabase {
     }));
   }
 
-  public listActionsForEventIds(eventIds: string[]): PersistedActionRecord[] {
+  public listActionsForEventIds(
+    eventIds: string[],
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
+  ): PersistedActionRecord[] {
     if (eventIds.length === 0) {
       return [];
     }
 
+    const processingModeFilter = this.buildProcessingModeCondition("processing_mode", processingModes);
+    const modeClause = ` AND ${processingModeFilter.clause}`;
+    const eventClause = buildInClause(eventIds);
     const rows = this.database
       .prepare(
         `
@@ -838,14 +912,17 @@ export class BotDatabase {
             dry_run,
             processing_mode,
             payload_json,
-            result_json,
-            created_at
+          result_json,
+          created_at
           FROM actions
-          WHERE source_event_id IN (${eventIds.map(() => "?").join(", ")})
+          WHERE source_event_id IN (${eventClause})${modeClause}
           ORDER BY created_at ASC
         `,
       )
-      .all(...eventIds) as Array<{
+      .all(
+        ...eventIds,
+        ...processingModeFilter.params,
+      ) as Array<{
       id: string;
       action_kind: "say" | "warn" | "timeout";
       status: ActionResult["status"];
@@ -893,19 +970,25 @@ export class BotDatabase {
     this.recordDecision("ai", message, decision.outcome, decision.reason, undefined, decision, context);
   }
 
-  public countRecentTimeoutsForUser(targetUserId: string, afterTimestamp: string): number {
+  public countRecentTimeoutsForUser(
+    targetUserId: string,
+    afterTimestamp: string,
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
+  ): number {
+    const { clause, params } = this.buildProcessingModeCondition("processing_mode", processingModes);
     const row = this.database
       .prepare(
         `
           SELECT COUNT(*) AS count
           FROM actions
-          WHERE target_user_id = ?
+          WHERE ${clause}
+            AND target_user_id = ?
             AND action_kind = 'timeout'
-            AND status IN ('executed', 'dry-run')
+            AND status = 'executed'
             AND created_at > ?
         `,
       )
-      .get(targetUserId, afterTimestamp) as { count: number };
+      .get(...params, targetUserId, afterTimestamp) as { count: number };
 
     return row.count;
   }
@@ -999,16 +1082,7 @@ export class BotDatabase {
   }
 
   private mapSnapshotRows(
-    rows: Array<{
-      event_id: string;
-      source_message_id: string;
-      chatter_id: string;
-      chatter_login: string;
-      received_at: string;
-      bot_identity_json: string;
-      message_json: string;
-      created_at: string;
-    }>,
+    rows: MessageSnapshotRow[],
   ): PersistedMessageSnapshot[] {
     return rows.map((row) => ({
       eventId: row.event_id,
@@ -1016,10 +1090,43 @@ export class BotDatabase {
       chatterId: row.chatter_id,
       chatterLogin: row.chatter_login,
       receivedAt: row.received_at,
+      processingMode: row.processing_mode,
       botIdentity: JSON.parse(row.bot_identity_json) as TwitchIdentity,
       message: JSON.parse(row.message_json) as NormalizedChatMessage,
       createdAt: row.created_at,
     }));
+  }
+
+  private mapRuntimeControllerRow(row: RuntimeControllerRow): RuntimeControllerRecord {
+    return {
+      login: row.login,
+      userId: row.user_id,
+      displayName: row.display_name,
+      role: row.role,
+      addedByLogin: row.added_by_login,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private resolveRuntimeControllerLookup(
+    identifier: RuntimeControllerIdentifier,
+  ): { column: "user_id" | "login"; value: string } | null {
+    if (identifier.userId) {
+      return {
+        column: "user_id",
+        value: identifier.userId,
+      };
+    }
+
+    if (identifier.login) {
+      return {
+        column: "login",
+        value: normalizeLogin(identifier.login),
+      };
+    }
+
+    return null;
   }
 
   // --- Exempt users ---
@@ -1027,14 +1134,14 @@ export class BotDatabase {
   public addExemptUser(login: string, actorLogin: string): boolean {
     const result = this.database
       .prepare(`INSERT OR IGNORE INTO exempt_users (user_login, added_by_login, created_at) VALUES (?, ?, ?)`)
-      .run(login.toLowerCase(), actorLogin, new Date().toISOString());
+      .run(normalizeLogin(login), actorLogin, new Date().toISOString());
     return result.changes > 0;
   }
 
   public removeExemptUser(login: string): boolean {
     const result = this.database
       .prepare(`DELETE FROM exempt_users WHERE user_login = ?`)
-      .run(login.toLowerCase());
+      .run(normalizeLogin(login));
     return result.changes > 0;
   }
 
@@ -1052,8 +1159,13 @@ export class BotDatabase {
   public isUserExempt(login: string): boolean {
     const row = this.database
       .prepare(`SELECT 1 FROM exempt_users WHERE user_login = ? LIMIT 1`)
-      .get(login.toLowerCase()) as { 1: number } | undefined;
+      .get(normalizeLogin(login)) as { 1: number } | undefined;
     return row !== undefined;
+  }
+
+  public clearExemptUsers(): number {
+    const result = this.database.prepare(`DELETE FROM exempt_users`).run();
+    return result.changes;
   }
 
   // --- Runtime blocked terms ---
@@ -1061,14 +1173,14 @@ export class BotDatabase {
   public addRuntimeBlockedTerm(term: string, actorLogin: string): boolean {
     const result = this.database
       .prepare(`INSERT OR IGNORE INTO runtime_blocked_terms (term, added_by_login, created_at) VALUES (?, ?, ?)`)
-      .run(term.toLowerCase().trim(), actorLogin, new Date().toISOString());
+      .run(normalizeLogin(term), actorLogin, new Date().toISOString());
     return result.changes > 0;
   }
 
   public removeRuntimeBlockedTerm(term: string): boolean {
     const result = this.database
       .prepare(`DELETE FROM runtime_blocked_terms WHERE term = ?`)
-      .run(term.toLowerCase().trim());
+      .run(normalizeLogin(term));
     return result.changes > 0;
   }
 
@@ -1083,58 +1195,183 @@ export class BotDatabase {
     }));
   }
 
+  public clearRuntimeBlockedTerms(): number {
+    const result = this.database.prepare(`DELETE FROM runtime_blocked_terms`).run();
+    return result.changes;
+  }
+
   // --- Runtime controllers ---
 
-  public addRuntimeController(login: string, role: "admin" | "mod", actorLogin: string): void {
-    this.database
+  public upsertRuntimeController(controller: RuntimeControllerUpsert): RuntimeControllerRecord {
+    const normalizedLogin = normalizeLogin(controller.login);
+    const now = new Date().toISOString();
+    const upsert = this.database.transaction(() => {
+      const updateByUserId = this.database
+        .prepare(
+          `
+            UPDATE runtime_controllers
+            SET login = ?,
+                display_name = ?,
+                role = ?,
+                added_by_login = ?,
+                updated_at = ?
+            WHERE user_id = ?
+          `,
+        )
+        .run(
+          normalizedLogin,
+          controller.displayName,
+          controller.role,
+          controller.addedByLogin,
+          now,
+          controller.userId,
+        );
+
+      if (updateByUserId.changes > 0) {
+        return;
+      }
+
+      const updateByLogin = this.database
+        .prepare(
+          `
+            UPDATE runtime_controllers
+            SET user_id = ?,
+                display_name = ?,
+                role = ?,
+                added_by_login = ?,
+                updated_at = ?
+            WHERE login = ?
+          `,
+        )
+        .run(
+          controller.userId,
+          controller.displayName,
+          controller.role,
+          controller.addedByLogin,
+          now,
+          normalizedLogin,
+        );
+
+      if (updateByLogin.changes > 0) {
+        return;
+      }
+
+      this.database
+        .prepare(
+          `
+            INSERT INTO runtime_controllers (
+              login,
+              user_id,
+              display_name,
+              role,
+              added_by_login,
+              created_at,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+        )
+        .run(
+          normalizedLogin,
+          controller.userId,
+          controller.displayName,
+          controller.role,
+          controller.addedByLogin,
+          now,
+          now,
+        );
+    });
+
+    upsert();
+
+    const stored = this.getRuntimeControllerByUserId(controller.userId);
+    if (!stored) {
+      throw new Error(`Failed to persist runtime controller @${normalizedLogin}.`);
+    }
+
+    return stored;
+  }
+
+  public removeRuntimeController(identifier: RuntimeControllerIdentifier): boolean {
+    const lookup = this.resolveRuntimeControllerLookup(identifier);
+    if (!lookup) {
+      return false;
+    }
+
+    const result = this.database
+      .prepare(`DELETE FROM runtime_controllers WHERE ${lookup.column} = ?`)
+      .run(lookup.value);
+    return result.changes > 0;
+  }
+
+  public updateRuntimeControllerRole(
+    identifier: RuntimeControllerIdentifier,
+    role: "admin" | "mod",
+  ): boolean {
+    const lookup = this.resolveRuntimeControllerLookup(identifier);
+    if (!lookup) {
+      return false;
+    }
+
+    const now = new Date().toISOString();
+    const result = this.database
+      .prepare(`UPDATE runtime_controllers SET role = ?, updated_at = ? WHERE ${lookup.column} = ?`)
+      .run(role, now, lookup.value);
+    return result.changes > 0;
+  }
+
+  public touchRuntimeControllerIdentity(userId: string, login: string, displayName: string): boolean {
+    const result = this.database
       .prepare(
-        `INSERT INTO runtime_controllers (login, role, added_by_login, created_at) VALUES (?, ?, ?, ?)
-         ON CONFLICT(login) DO UPDATE SET role = excluded.role, added_by_login = excluded.added_by_login`,
+        `
+          UPDATE runtime_controllers
+          SET login = ?,
+              display_name = ?,
+              updated_at = ?
+          WHERE user_id = ?
+        `,
       )
-      .run(login.toLowerCase(), role, actorLogin, new Date().toISOString());
-  }
-
-  public removeRuntimeController(login: string): boolean {
-    const result = this.database
-      .prepare(`DELETE FROM runtime_controllers WHERE login = ?`)
-      .run(login.toLowerCase());
+      .run(normalizeLogin(login), displayName, new Date().toISOString(), userId);
     return result.changes > 0;
   }
 
-  public updateRuntimeControllerRole(login: string, role: "admin" | "mod"): boolean {
-    const result = this.database
-      .prepare(`UPDATE runtime_controllers SET role = ? WHERE login = ?`)
-      .run(role, login.toLowerCase());
-    return result.changes > 0;
-  }
-
-  public listRuntimeControllers(): Array<{ login: string; role: string; addedByLogin: string; createdAt: string }> {
+  public listRuntimeControllers(): RuntimeControllerRecord[] {
     const rows = this.database
-      .prepare(`SELECT login, role, added_by_login, created_at FROM runtime_controllers ORDER BY created_at ASC`)
-      .all() as Array<{ login: string; role: string; added_by_login: string; created_at: string }>;
-    return rows.map((row) => ({
-      login: row.login,
-      role: row.role,
-      addedByLogin: row.added_by_login,
-      createdAt: row.created_at,
-    }));
+      .prepare(
+        `
+          SELECT login, user_id, display_name, role, added_by_login, created_at, updated_at
+          FROM runtime_controllers
+          ORDER BY created_at ASC
+        `,
+      )
+      .all() as RuntimeControllerRow[];
+
+    return rows.map((row) => this.mapRuntimeControllerRow(row));
   }
 
-  public getRuntimeController(login: string): { login: string; role: string } | null {
+  public getRuntimeControllerByUserId(userId: string): RuntimeControllerRecord | null {
     const row = this.database
-      .prepare(`SELECT login, role FROM runtime_controllers WHERE login = ? LIMIT 1`)
-      .get(login.toLowerCase()) as { login: string; role: string } | undefined;
-    return row ?? null;
+      .prepare(
+        `
+          SELECT login, user_id, display_name, role, added_by_login, created_at, updated_at
+          FROM runtime_controllers
+          WHERE user_id = ?
+          LIMIT 1
+        `,
+      )
+      .get(userId) as RuntimeControllerRow | undefined;
+
+    return row ? this.mapRuntimeControllerRow(row) : null;
   }
 
   // --- Chatter autocomplete ---
 
   public getKnownChatterLogins(prefix: string, limit = 20): string[] {
-    const escaped = prefix.toLowerCase().replace(/[%_]/g, "\\$&");
+    const escaped = normalizeLogin(prefix).replace(/[%_]/g, "\\$&");
     const rows = this.database
       .prepare(
         `SELECT DISTINCT chatter_login FROM message_snapshots
-         WHERE chatter_login LIKE ? || '%' ESCAPE '\\'
+         WHERE processing_mode = 'live'
+           AND chatter_login LIKE ? || '%' ESCAPE '\\'
          ORDER BY chatter_login ASC
          LIMIT ?`,
       )
@@ -1148,13 +1385,15 @@ export class BotDatabase {
     limit: number,
     offset: number,
     filters?: { chatter?: string; outcome?: string; stage?: string; after?: string },
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
   ): { rows: Array<Record<string, unknown>>; total: number } {
-    const conditions: string[] = ["d.stage IN ('ai', 'rules')"];
-    const params: unknown[] = [];
+    const modeFilter = this.buildProcessingModeCondition("d.processing_mode", processingModes);
+    const conditions: string[] = ["d.stage IN ('ai', 'rules')", modeFilter.clause];
+    const params: unknown[] = [...modeFilter.params];
 
     if (filters?.chatter) {
       conditions.push("d.chatter_login = ?");
-      params.push(filters.chatter.toLowerCase());
+      params.push(normalizeLogin(filters.chatter));
     }
     if (filters?.outcome) {
       conditions.push("d.outcome = ?");
@@ -1183,9 +1422,13 @@ export class BotDatabase {
                 json_extract(d.payload_json, '$.moderationCategory') as category,
                 substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet,
                 (SELECT GROUP_CONCAT(action_kind || ':' || status, ', ')
-                 FROM actions WHERE source_event_id = d.event_id) as actions_summary
+                 FROM actions
+                 WHERE source_event_id = d.event_id
+                   AND actions.processing_mode = d.processing_mode) as actions_summary
          FROM decisions d
-         LEFT JOIN message_snapshots m ON m.event_id = d.event_id
+         LEFT JOIN message_snapshots m
+           ON m.event_id = d.event_id
+          AND m.processing_mode = d.processing_mode
          WHERE ${where}
          ORDER BY d.created_at DESC
          LIMIT ? OFFSET ?`,
@@ -1254,14 +1497,15 @@ export class BotDatabase {
     actions: Array<Record<string, unknown>>;
     isExempt: boolean;
   } {
-    const lowerLogin = login.toLowerCase();
+    const lowerLogin = normalizeLogin(login);
 
     const messages = this.database
       .prepare(
         `SELECT event_id, received_at,
                 substr(json_extract(message_json, '$.text'), 1, 120) as text_snippet
          FROM message_snapshots
-         WHERE chatter_login = ?
+         WHERE processing_mode = 'live'
+           AND chatter_login = ?
          ORDER BY received_at DESC
          LIMIT ?`,
       )
@@ -1273,7 +1517,8 @@ export class BotDatabase {
                 json_extract(d.payload_json, '$.confidence') as confidence,
                 json_extract(d.payload_json, '$.moderationCategory') as category
          FROM decisions d
-         WHERE d.chatter_login = ?
+         WHERE d.processing_mode = 'live'
+           AND d.chatter_login = ?
          ORDER BY d.created_at DESC
          LIMIT ?`,
       )
@@ -1283,7 +1528,8 @@ export class BotDatabase {
       .prepare(
         `SELECT id, action_kind, status, source, reason, dry_run, created_at
          FROM actions
-         WHERE target_user_name = ?
+         WHERE processing_mode = 'live'
+           AND target_user_name = ?
          ORDER BY created_at DESC
          LIMIT ?`,
       )
@@ -1327,7 +1573,9 @@ export class BotDatabase {
       .prepare(
         `SELECT outcome, COUNT(*) as cnt
          FROM decisions
-         WHERE created_at >= ? AND stage IN ('ai', 'rules')
+         WHERE processing_mode = 'live'
+           AND created_at >= ?
+           AND stage IN ('ai', 'rules')
          GROUP BY outcome`,
       )
       .all(sinceIso) as Array<{ outcome: string; cnt: number }>;
@@ -1343,7 +1591,8 @@ export class BotDatabase {
       .prepare(
         `SELECT action_kind, status, COUNT(*) as cnt
          FROM actions
-         WHERE created_at >= ?
+         WHERE processing_mode = 'live'
+           AND created_at >= ?
          GROUP BY action_kind, status`,
       )
       .all(sinceIso) as Array<{ action_kind: string; status: string; cnt: number }>;
@@ -1361,7 +1610,10 @@ export class BotDatabase {
       .prepare(
         `SELECT source, COUNT(*) as cnt
          FROM actions
-         WHERE created_at >= ? AND action_kind = 'timeout' AND status IN ('executed', 'dry-run')
+         WHERE processing_mode = 'live'
+           AND created_at >= ?
+           AND action_kind = 'timeout'
+           AND status = 'executed'
          GROUP BY source`,
       )
       .all(sinceIso) as Array<{ source: string; cnt: number }>;
@@ -1380,37 +1632,11 @@ export class BotDatabase {
     };
   }
 
-  public getRecentDecisionsForAdmin(limit: number): Array<Record<string, unknown>> {
-    const rows = this.database
-      .prepare(
-        `SELECT d.event_id, d.chatter_login, d.outcome, d.reason, d.stage, d.created_at,
-                json_extract(d.payload_json, '$.mode') as mode,
-                json_extract(d.payload_json, '$.confidence') as confidence,
-                json_extract(d.payload_json, '$.moderationCategory') as category,
-                substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet,
-                (SELECT GROUP_CONCAT(action_kind || ':' || status, ', ')
-                 FROM actions WHERE source_event_id = d.event_id) as actions_summary
-         FROM decisions d
-         LEFT JOIN message_snapshots m ON m.event_id = d.event_id
-         WHERE d.stage IN ('ai', 'rules')
-         ORDER BY d.created_at DESC
-         LIMIT ?`,
-      )
-      .all(limit) as Array<Record<string, unknown>>;
-
-    return rows.map((row) => ({
-      eventId: row.event_id,
-      chatter: row.chatter_login,
-      text: row.text_snippet ?? null,
-      outcome: row.outcome,
-      mode: row.mode ?? null,
-      reason: row.reason,
-      confidence: row.confidence ?? null,
-      category: row.category ?? null,
-      stage: row.stage,
-      actions: row.actions_summary ?? null,
-      createdAt: row.created_at,
-    }));
+  public getRecentDecisionsForAdmin(
+    limit: number,
+    processingModes: readonly ProcessingMode[] = LIVE_PROCESSING_MODES,
+  ): Array<Record<string, unknown>> {
+    return this.getRecentDecisionsPaginated(limit, 0, undefined, processingModes).rows;
   }
 
   /**
@@ -1495,8 +1721,8 @@ export class BotDatabase {
            json_extract(d.payload_json, '$.confidence') as confidence,
            json_extract(d.payload_json, '$.moderationCategory') as category,
            substr(json_extract(m.message_json, '$.text'), 1, 120) as text_snippet,
-           EXISTS(SELECT 1 FROM actions a WHERE a.source_event_id = d.event_id AND a.action_kind = 'timeout' AND a.status IN ('executed', 'dry-run')) as has_timeout,
-           EXISTS(SELECT 1 FROM actions a WHERE a.source_event_id = d.event_id AND a.action_kind = 'warn' AND a.status IN ('executed', 'dry-run')) as has_warn
+           EXISTS(SELECT 1 FROM actions a WHERE a.source_event_id = d.event_id AND a.action_kind = 'timeout' AND a.status = 'executed') as has_timeout,
+           EXISTS(SELECT 1 FROM actions a WHERE a.source_event_id = d.event_id AND a.action_kind = 'warn' AND a.status = 'executed') as has_warn
          FROM decisions d
          LEFT JOIN message_snapshots m ON m.event_id = d.event_id
          LEFT JOIN review_decisions r ON r.event_id = d.event_id

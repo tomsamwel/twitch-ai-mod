@@ -33,7 +33,8 @@ function createMockDatabase(overrides: Record<string, unknown> = {}) {
     addRuntimeBlockedTerm() { return true; },
     removeRuntimeBlockedTerm() { return true; },
     listRuntimeBlockedTerms() { return []; },
-    getRuntimeController() { return null; },
+    getRuntimeControllerByUserId() { return null; },
+    touchRuntimeControllerIdentity() { return false; },
     purgeUserHistory() { return { messages: 0, decisions: 0, actions: 0 }; },
     purgeOperationalData() { return { messages: 0, decisions: 0, actions: 0, events: 0, reviews: 0 }; },
     ...overrides,
@@ -127,6 +128,80 @@ test("WhisperControlPlane denies unauthorized senders without mutating runtime s
   assert.deepEqual(audits, ["unauthorized"]);
 });
 
+test("WhisperControlPlane authorizes runtime controllers by stable user ID", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  let touchedIdentity: { userId: string; login: string; displayName: string } | null = null;
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [],
+    logger,
+    {
+      getEffectiveSettings() {
+        return state.effective;
+      },
+      getOverrides() {
+        return state.overrides;
+      },
+      setOverride() {
+        throw new Error("status should not mutate overrides");
+      },
+      reset() {
+        throw new Error("status should not reset");
+      },
+      listAvailablePromptPacks() {
+        return ["witty-mod", "safer-control"];
+      },
+      listAvailableModelPresets() {
+        return ["local-default", "local-fast"];
+      },
+    },
+    createMockDatabase({
+      getRuntimeControllerByUserId(userId: string) {
+        if (userId !== "runtime-1") {
+          return null;
+        }
+        return {
+          login: "oldlogin",
+          userId,
+          displayName: "Old Login",
+          role: "admin" as const,
+          addedByLogin: "local-admin",
+          createdAt: "2026-03-24T10:00:00.000Z",
+          updatedAt: "2026-03-24T10:00:00.000Z",
+        };
+      },
+      touchRuntimeControllerIdentity(userId: string, login: string, displayName: string) {
+        touchedIdentity = { userId, login, displayName };
+        return true;
+      },
+    }),
+    {
+      async sendWhisper(_targetUserId, message) {
+        sentReplies.push(message);
+      },
+    },
+  );
+
+  await controlPlane.processWhisper(
+    createWhisper({
+      senderUserId: "runtime-1",
+      senderUserLogin: "renamedmod",
+      senderUserDisplayName: "RenamedMod",
+      text: "aimod status",
+    }),
+  );
+
+  assert.match(sentReplies[0] ?? "", /ai=/u);
+  assert.deepEqual(touchedIdentity, {
+    userId: "runtime-1",
+    login: "renamedmod",
+    displayName: "RenamedMod",
+  });
+});
+
 test("WhisperControlPlane applies trusted commands and replies with status", async () => {
   const config = createTestConfig();
   const logger = createLogger("info", "test");
@@ -177,6 +252,11 @@ test("WhisperControlPlane applies trusted commands and replies with status", asy
           updatedAt: null,
           updatedByUserId: null,
           updatedByLogin: null,
+        };
+        return {
+          overrides: 0,
+          exemptUsers: 0,
+          blockedTerms: 0,
         };
       },
       listAvailablePromptPacks() {
@@ -234,7 +314,9 @@ test("WhisperControlPlane ignores duplicate whisper IDs", async () => {
         return state.overrides;
       },
       setOverride() {},
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod", "safer-control"];
       },
@@ -285,7 +367,9 @@ test("WhisperControlPlane panic command enables AI + moderation + live-mod and d
       setOverride(key, value) {
         appliedOverrides.push({ key, value });
       },
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod"];
       },
@@ -332,7 +416,9 @@ test("WhisperControlPlane chill command enables AI + social, disables moderation
       setOverride(key, value) {
         appliedOverrides.push({ key, value });
       },
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod"];
       },
@@ -378,7 +464,9 @@ test("WhisperControlPlane off command disables AI", async () => {
       setOverride(key, value) {
         appliedOverrides.push({ key, value });
       },
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod"];
       },

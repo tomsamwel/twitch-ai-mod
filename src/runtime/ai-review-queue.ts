@@ -58,6 +58,7 @@ export class AiReviewQueue<T> {
   private readonly normalItems: QueueEntry<T>[] = [];
   private processing = 0;
   private handler: ((item: T) => Promise<void>) | null = null;
+  private stopped = false;
 
   private totalEnqueued = 0;
   private totalProcessed = 0;
@@ -86,6 +87,7 @@ export class AiReviewQueue<T> {
   }
 
   public enqueue(data: T): void {
+    if (this.stopped) return;
     if (!this.handler) {
       throw new Error("AiReviewQueue.start() must be called before enqueue()");
     }
@@ -148,6 +150,7 @@ export class AiReviewQueue<T> {
 
   /** In-flight items are not cancelled. */
   public stop(): void {
+    this.stopped = true;
     const discarded = this.highItems.length + this.normalItems.length;
     this.highItems.length = 0;
     this.normalItems.length = 0;
@@ -246,10 +249,10 @@ export class AiReviewQueue<T> {
 
       this.processing++;
       this.handler!(entry.data)
+        .then(() => { this.totalProcessed++; })
         .catch((err) => this.logger.error({ err }, "AI review handler failed"))
         .finally(() => {
           this.processing--;
-          this.totalProcessed++;
           if (this._underPressure && this.highItems.length === 0 && this.normalItems.length === 0) {
             this._underPressure = false;
             this.recentDrops = 0;

@@ -22,7 +22,7 @@
    Scripted YAML scenario suites, replay promotion helpers, and evaluation reporting.
 10. `src/review/`
    Replay inbox ranking and local review report generation.
-11. `src/config/`
+12. `src/config/`
    Env/YAML/prompt-pack loading and validation into one `ConfigSnapshot`.
 
 ## Source Of Truth
@@ -79,7 +79,8 @@ This keeps live, replay, and eval behavior aligned instead of hand-rolling mode-
 Important invariants:
 - dedicated bot account recommended
 - verified phone number required for outgoing whisper replies
-- controller allowlist is file-managed, never mutated from Twitch
+- controller allowlist is local-only: YAML plus local admin-panel runtime additions, never mutated from Twitch chat
+- runtime-added controllers are stored with stable Twitch user IDs and authorized by sender user ID
 - three permission tiers: broadcaster (everything), admin (all toggles + management), mod (status + exempt + block)
 - runtime exemptions and blocked terms stored in SQLite, checked before rule engine and action execution
 
@@ -89,6 +90,7 @@ Important invariants:
 2. Re-run the shared rule/AI/action pipeline.
 3. Force all resulting actions to dry-run.
 4. Persist replay-tagged decisions/actions for comparison.
+5. Keep replay-tagged rows out of live heuristics and live-default operator views.
 
 Replay is for real captured chat history.
 
@@ -102,6 +104,8 @@ Replay is for real captured chat history.
 6. Aggregate per-step blocking/advisory issues plus pass/fail into one scenario result.
 7. Print a human-readable pass/fail report.
 
+Scenario snapshots, decisions, and actions are partitioned from live data by `processing_mode` so seeded history stays useful for evaluation without leaking into live context retrieval, repeat-offender heuristics, or live-default dashboards.
+
 Scenario eval is for curated prompt/policy iteration, not Twitch integration testing.
 
 ## Review Inbox Flow
@@ -112,6 +116,8 @@ Scenario eval is for curated prompt/policy iteration, not Twitch integration tes
    Review reports also surface `warn-issued`, `timeout-notice-skipped`, and `visual-spam-candidate` reasons for moderation tuning.
 4. Write Markdown plus JSON review reports under `data/reports/`.
 5. Optionally mark incidents locally or scaffold them into new scripted scenarios.
+
+Review/inbox and admin activity views default to live-mode rows. Replay and scenario data remain stored for intentional evaluation workflows, but they are not mixed into live operations by default.
 
 ## AI Design Notes
 
@@ -126,6 +132,7 @@ Scenario eval is for curated prompt/policy iteration, not Twitch integration tes
 - The moderation action contract is intentionally narrow:
   moderation can abstain, emit a public `warn`, or emit ordered `[timeout, warn]`; social mode only emits `say`.
 - Context enrichment is deterministic and local-first; there is no separate summarizer or long-term memory model.
+- A small post-model guardrail can convert known-clean de-escalation follow-ups into abstains so prior history alone does not trigger moderation.
 
 ## Operational Notes
 

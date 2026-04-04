@@ -1,5 +1,10 @@
 import { createFixedRuntimeSettings } from "../src/control/runtime-settings.js";
-import type { AiContextSnapshot, ChatMessageEventLike, ConfigSnapshot } from "../src/types.js";
+import type { AiContextSnapshot, ChatMessageEventLike, ConfigSnapshot, NormalizedChatMessage } from "../src/types.js";
+
+export const DEFAULT_URL_RESULT: NormalizedChatMessage["urlResult"] = {
+  detected: false,
+  urls: [],
+};
 
 export function createTestConfig(): ConfigSnapshot {
   return {

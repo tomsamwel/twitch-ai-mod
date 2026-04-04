@@ -18,6 +18,7 @@ The bot runs on your machine, reads live chat through official Twitch EventSub, 
 - scripted scenario-lab CLI against curated YAML cases
 - review inbox and replay-to-scenario promotion workflow
 - side-by-side prompt-pack comparison reports
+- local Prompt Lab in the admin panel for draft editing, dataset building, experiments, annotations, and pack export
 - whisper control plane for trusted controllers
 
 ## Quick Start
@@ -97,6 +98,17 @@ npm run approve:pilot
 - Promotion scaffolds reviewed replay incidents into curated YAML scenarios.
 - Scenario compare runs candidate vs baseline packs side by side.
 - Runtime overrides from whisper commands persist in SQLite until `aimod reset`.
+- Prompt Lab drafts, datasets, runs, and annotations live in SQLite and stay local to your machine.
+- Prompt Lab drafts do not affect production behavior until you explicitly export them into `prompts/packs/<pack>/`.
+- Exported packs are registered immediately, so they show up in runtime pack selection without restarting the bot.
+- Replay and scenario artifacts stay stored for evaluation, but live heuristics and live-default operator views stay scoped to live data.
+
+When `admin.enabled: true`, open `http://127.0.0.1:3001` and use the `Prompt Lab` tab as:
+- `Iterate`: create a draft, build one active dataset, and run focused experiments
+- `Ship`: export the draft, run full compare and approval, then optionally set the runtime pack
+- `Discovery`: review recent live cases, label them, add them to datasets, and promote edited scaffolds into curated scenarios
+
+Prompt Lab is local-first on purpose: the SQLite workspace is for fast iteration, while on-disk prompt packs remain the only source of truth for anything that can become live. Full compare and approval in the UI still run against exported packs only, so the terminal and the admin panel share the same reproducible pack boundary.
 
 Example comparisons:
 
@@ -134,9 +146,11 @@ aimod reset
 Operational notes:
 - `aimod status` shows effective live state, not just file defaults
 - overrides survive restart because they are stored in SQLite
-- `aimod reset` clears overrides and returns to file defaults
+- `aimod reset` clears runtime overrides, exemptions, and runtime blocked terms, then returns to file defaults
 - `aimod ai-moderation on` is a separate gate for AI-generated live moderation actions
 - whisper replies require the bot account to have a verified phone number on Twitch
+- runtime-added controllers from the local admin panel persist in SQLite and are authorized by stable Twitch user ID
+- authorized whispers refresh the stored login/display-name metadata for runtime-added controllers
 
 ## Safety Defaults
 
@@ -144,6 +158,7 @@ Operational notes:
 - live moderation remains disabled unless you explicitly turn it on
 - AI live moderation has its own separate runtime gate and stays off by default
 - live AI timeouts are hard-gated by confidence, moderation category, privileged/self protection, and repeat-evidence checks
+- clean apologies and de-escalation follow-ups are guarded against history-only AI moderation
 - `warn` is a moderation-only public notice; `say` remains the social/helpful reply path
 - timeout flows can pair `timeout` with a public `warn`, and skipped notices are still audited
 - chat send and moderation have separate gates

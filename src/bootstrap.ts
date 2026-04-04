@@ -17,7 +17,14 @@ import { BotDatabase } from "./storage/database.js";
 import { createLogger } from "./storage/logger.js";
 import { ensureLlamaServer } from "./scripts/script-support.js";
 import type { LlamaServerManager } from "./admin/llama-server-manager.js";
-import type { ConfigSnapshot, PromptSnapshot, TrustedController } from "./types.js";
+import type {
+  ConfigSnapshot,
+  PromptSnapshot,
+  RuntimeControllerUpsert,
+  TrustedController,
+  TwitchIdentity,
+  TwitchUserResolver,
+} from "./types.js";
 import { createTwitchAuthContext } from "./twitch/auth.js";
 import { TwurpleTwitchGateway } from "./twitch/twitch-gateway.js";
 
@@ -38,11 +45,15 @@ export interface AppServices {
   close(): Promise<void>;
 }
 
+const EXEMPT_USER_CACHE_TTL_MS = 5_000;
+
 export async function createAppServices(): Promise<AppServices> {
   const config = await loadConfig(process.cwd(), { applyLoginEnvOverrides: true });
   const logger = createLogger(config.runtime.logLevel, config.app.name);
   const database = new BotDatabase(config.storage.sqlitePath);
   const authContext = await createTwitchAuthContext(config, database, logger);
+  const userResolver = createTwitchUserResolver(authContext);
+  await syncRuntimeControllerIdentities(database, userResolver, logger);
   const promptPacks = await loadPromptPacks(config);
   const llamaServerManager = await ensureLlamaServer(config, logger);
 
@@ -50,7 +61,18 @@ export async function createAppServices(): Promise<AppServices> {
   const aiProviders = new AiProviderRegistry(config, logger);
   await aiProviders.getProvider(aiProviders.createEffectiveConfig(runtimeSettings.getEffectiveSettings()));
   const cooldowns = new CooldownManager(config.cooldowns);
-  const isUserExempt = (login: string) => database.isUserExempt(login);
+  let exemptUsersCache = new Set<string>();
+  let exemptUsersCacheExpiresAt = 0;
+  const getExemptUsers = (now = Date.now()): Set<string> => {
+    if (now < exemptUsersCacheExpiresAt) {
+      return exemptUsersCache;
+    }
+
+    exemptUsersCache = new Set(database.listExemptUsers().map((entry) => entry.userLogin.toLowerCase()));
+    exemptUsersCacheExpiresAt = now + EXEMPT_USER_CACHE_TTL_MS;
+    return exemptUsersCache;
+  };
+  const isUserExempt = (login: string) => getExemptUsers().has(login.toLowerCase());
   const getRuntimeBlockedTerms = () => database.listRuntimeBlockedTerms();
   const ruleEngine = new RuleEngine(config, cooldowns, isUserExempt, getRuntimeBlockedTerms);
   const contextBuilder = new AiContextBuilder(config, database);
@@ -108,11 +130,14 @@ export async function createAppServices(): Promise<AppServices> {
   aiReviewQueue.start(async (work) => {
     await messageProcessor.processAiReview(work);
   });
+  const trustedControllers = config.controlPlane.enabled
+    ? await resolveTrustedControllers(config, authContext, userResolver)
+    : [];
   const controlPlane =
     config.controlPlane.enabled
       ? new WhisperControlPlane(
           config.controlPlane.commandPrefix,
-          await resolveTrustedControllers(config, authContext),
+          trustedControllers,
           logger,
           runtimeSettings,
           database,
@@ -121,10 +146,14 @@ export async function createAppServices(): Promise<AppServices> {
         )
       : null;
 
-  const configControllers = (config.controlPlane.trustedControllers ?? []).map((c) => ({
-    login: c.login,
-    role: c.role,
-  }));
+  const configControllers = trustedControllers
+    .filter((controller) => controller.source === "config")
+    .map(({ login, role, userId, displayName }) => ({
+      login,
+      role,
+      userId,
+      displayName,
+    }));
   const adminServer =
     config.admin?.enabled
       ? new AdminServer({
@@ -135,6 +164,7 @@ export async function createAppServices(): Promise<AppServices> {
           llamaServerManager: llamaServerManager ?? undefined,
           aiReviewQueue,
           configControllers,
+          userResolver,
         })
       : null;
 
@@ -177,21 +207,84 @@ export async function createAppServices(): Promise<AppServices> {
 }
 
 async function loadPromptPacks(config: ConfigSnapshot): Promise<Map<string, PromptSnapshot>> {
-  const packNames = new Set([
+  const requiredPackNames = new Set([
     config.promptPacks.defaultPack,
     config.ai.promptPack,
     ...config.controlPlane.allowedPromptPacks,
   ]);
-  const entries = await Promise.all(
-    [...packNames].map(async (packName) => [packName, await readPromptPack(config.paths.promptsDir, packName)] as const),
+  const loadedEntries = await Promise.all(
+    [...requiredPackNames].map(async (packName) => [packName, await readPromptPack(config.paths.promptsDir, packName)] as const),
   );
 
-  return new Map(entries);
+  return new Map(loadedEntries);
+}
+
+function createTwitchUserResolver(
+  authContext: Awaited<ReturnType<typeof createTwitchAuthContext>>,
+): TwitchUserResolver {
+  return {
+    async resolveUserByLogin(login: string) {
+      const user = await authContext.apiClient.users.getUserByName(login.toLowerCase());
+      if (!user) {
+        return null;
+      }
+
+      return {
+        id: user.id,
+        login: user.name,
+        displayName: user.displayName,
+      };
+    },
+  };
+}
+
+function toRuntimeControllerUpsert(
+  identity: TwitchIdentity,
+  controller: { role: "admin" | "mod"; addedByLogin: string },
+): RuntimeControllerUpsert {
+  return {
+    login: identity.login,
+    userId: identity.id,
+    displayName: identity.displayName,
+    role: controller.role,
+    addedByLogin: controller.addedByLogin,
+  };
+}
+
+async function syncRuntimeControllerIdentities(
+  database: Pick<BotDatabase, "listRuntimeControllers" | "upsertRuntimeController">,
+  userResolver: TwitchUserResolver,
+  logger: Logger,
+): Promise<void> {
+  const unresolvedControllers = database.listRuntimeControllers().filter((controller) => controller.userId === null);
+
+  for (const controller of unresolvedControllers) {
+    const identity = await userResolver.resolveUserByLogin(controller.login);
+    if (!identity) {
+      logger.warn(
+        { login: controller.login, role: controller.role },
+        "runtime controller could not be resolved to a Twitch user ID; leaving it disabled until repaired",
+      );
+      continue;
+    }
+
+    database.upsertRuntimeController(
+      toRuntimeControllerUpsert(identity, {
+        role: controller.role,
+        addedByLogin: controller.addedByLogin,
+      }),
+    );
+    logger.info(
+      { login: identity.login, userId: identity.id, role: controller.role },
+      "migrated runtime controller to stable Twitch user ID",
+    );
+  }
 }
 
 async function resolveTrustedControllers(
   config: ConfigSnapshot,
   authContext: Awaited<ReturnType<typeof createTwitchAuthContext>>,
+  userResolver: TwitchUserResolver,
 ): Promise<TrustedController[]> {
   const requestedLogins = new Set(config.controlPlane.trustedControllerLogins.map((login) => login.toLowerCase()));
   const resolved: TrustedController[] = [];
@@ -206,25 +299,10 @@ async function resolveTrustedControllers(
   for (const login of requestedLogins) {
     const role = roleMap.get(login) ?? "admin";
 
-    if (login === authContext.broadcaster.login.toLowerCase()) {
-      resolved.push({
-        userId: authContext.broadcaster.id,
-        login: authContext.broadcaster.login,
-        displayName: authContext.broadcaster.displayName,
-        source: "config",
-        role,
-      });
-      continue;
-    }
-
-    const user = await authContext.apiClient.users.getUserByName(login);
-    if (!user) {
-      throw new Error(`Unable to resolve trusted controller login @${login}.`);
-    }
-
+    const user = await resolveConfiguredControllerIdentity(login, authContext.broadcaster, userResolver);
     resolved.push({
       userId: user.id,
-      login: user.name,
+      login: user.login,
       displayName: user.displayName,
       source: "config",
       role,
@@ -245,4 +323,21 @@ async function resolveTrustedControllers(
   }
 
   return resolved;
+}
+
+async function resolveConfiguredControllerIdentity(
+  requestedLogin: string,
+  broadcasterIdentity: TwitchIdentity,
+  userResolver: TwitchUserResolver,
+): Promise<TwitchIdentity> {
+  if (requestedLogin === broadcasterIdentity.login.toLowerCase()) {
+    return broadcasterIdentity;
+  }
+
+  const user = await userResolver.resolveUserByLogin(requestedLogin);
+  if (!user) {
+    throw new Error(`Unable to resolve trusted controller login @${requestedLogin}.`);
+  }
+
+  return user;
 }

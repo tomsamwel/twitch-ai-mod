@@ -204,3 +204,60 @@ test("buildReviewInboxReport surfaces warn-issued, timeout-notice-skipped, and v
     database.close();
   }
 });
+
+test("buildReviewInboxReport ignores scenario activity by default", () => {
+  const database = new BotDatabase(":memory:");
+  const bot: TwitchIdentity = {
+    id: "bot-1",
+    login: "testbot",
+    displayName: "testbot",
+  };
+
+  try {
+    const snapshot = normalizeChatMessage(
+      createChatEvent({
+        messageId: "event-scenario",
+        messageText: "obviously bad scenario input",
+        chatterId: "viewer-scenario",
+        chatterName: "scenario_user",
+        chatterDisplayName: "ScenarioUser",
+      }),
+      new Date("2026-03-25T10:15:00.000Z"),
+    );
+
+    database.recordMessageSnapshot(snapshot, bot, { processingMode: "scenario" });
+    database.recordAction(
+      {
+        id: "action-scenario-timeout",
+        kind: "timeout",
+        source: "ai",
+        sourceEventId: snapshot.eventId,
+        sourceMessageId: snapshot.sourceMessageId,
+        processingMode: "scenario",
+        dryRun: true,
+        initiatedAt: snapshot.receivedAt,
+        reason: "scenario timeout",
+        targetUserId: snapshot.chatterId,
+        targetUserName: snapshot.chatterLogin,
+        durationSeconds: 300,
+      } satisfies ActionRequest,
+      {
+        id: "action-scenario-timeout",
+        kind: "timeout",
+        status: "dry-run",
+        dryRun: true,
+        reason: "scenario timeout",
+      } satisfies ActionResult,
+    );
+
+    const report = buildReviewInboxReport({
+      database,
+      limit: 10,
+      windowHours: 24 * 365,
+    });
+
+    assert.equal(report.candidateCount, 0);
+  } finally {
+    database.close();
+  }
+});

@@ -36,14 +36,22 @@ export interface RuntimeSettingsAccessor {
   getEffectiveSettings(): EffectiveRuntimeSettings;
 }
 
+export interface RuntimeResetSummary {
+  overrides: number;
+  exemptUsers: number;
+  blockedTerms: number;
+}
+
 export function buildEffectiveRuntimeSettings(
   baseConfig: ConfigSnapshot,
   promptPacks: Map<string, PromptSnapshot>,
   overrides: RuntimeOverrideSnapshot,
 ): EffectiveRuntimeSettings {
-  const promptPackName = overrides.promptPack ?? baseConfig.ai.promptPack;
+  const rawPromptPack = overrides.promptPack ?? baseConfig.ai.promptPack;
+  const promptPackName = promptPacks.has(rawPromptPack) ? rawPromptPack : baseConfig.ai.promptPack;
   const prompts = promptPacks.get(promptPackName) ?? baseConfig.prompts;
-  const selectedPreset = resolveModelPresetName(baseConfig, overrides.modelPreset);
+  const rawPreset = resolveModelPresetName(baseConfig, overrides.modelPreset);
+  const selectedPreset = rawPreset && rawPreset in baseConfig.controlPlane.modelPresets ? rawPreset : null;
   const preset = selectedPreset ? baseConfig.controlPlane.modelPresets[selectedPreset] : null;
   const provider = preset?.provider ?? baseConfig.ai.provider;
   const defaultProviderConfig = getProviderConfig(baseConfig, provider);
@@ -163,7 +171,10 @@ export class RuntimeSettingsStore {
   public constructor(
     private readonly baseConfig: ConfigSnapshot,
     private readonly logger: Logger,
-    private readonly database: Pick<BotDatabase, "listRuntimeOverrides" | "setRuntimeOverride" | "clearRuntimeOverrides">,
+    private readonly database: Pick<
+      BotDatabase,
+      "listRuntimeOverrides" | "setRuntimeOverride" | "clearRuntimeControlState"
+    >,
     private readonly promptPacks: Map<string, PromptSnapshot>,
   ) {
     this.overrides = this.loadOverridesFromDatabase();
@@ -196,10 +207,11 @@ export class RuntimeSettingsStore {
     this.logger.info({ key, value, actorLogin: actor.login }, "updated runtime override");
   }
 
-  public reset(actor: { userId: string; login: string }): void {
-    this.database.clearRuntimeOverrides();
+  public reset(actor: { userId: string; login: string }): RuntimeResetSummary {
+    const summary = this.database.clearRuntimeControlState();
     this.overrides = this.loadOverridesFromDatabase();
-    this.logger.warn({ actorLogin: actor.login }, "cleared runtime overrides");
+    this.logger.warn({ actorLogin: actor.login, ...summary }, "cleared runtime control state");
+    return summary;
   }
 
   private validateOverride(key: RuntimeOverrideKey, value: boolean | string): void {

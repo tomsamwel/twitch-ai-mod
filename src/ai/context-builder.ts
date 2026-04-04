@@ -7,6 +7,7 @@ import type {
   NormalizedChatMessage,
   PersistedActionRecord,
   PersistedMessageSnapshot,
+  ProcessingMode,
   TwitchIdentity,
 } from "../types.js";
 
@@ -96,11 +97,16 @@ export class AiContextBuilder {
     >,
   ) {}
 
-  public build(message: NormalizedChatMessage, botIdentity: TwitchIdentity): AiContextSnapshot {
+  public build(
+    message: NormalizedChatMessage,
+    botIdentity: TwitchIdentity,
+    processingMode: ProcessingMode = "live",
+  ): AiContextSnapshot {
     const roomSnapshots = this.database.listRecentRoomMessageSnapshots(
       message.receivedAt,
       message.eventId,
       this.config.ai.context.recentRoomMessages,
+      [processingMode],
     );
     const roomEventIds = new Set(roomSnapshots.map((snapshot) => snapshot.eventId));
     // Over-fetch user messages to account for overlap with room messages, then
@@ -111,6 +117,7 @@ export class AiContextBuilder {
         message.receivedAt,
         message.eventId,
         this.config.ai.context.recentUserMessages + this.config.ai.context.recentRoomMessages,
+        [processingMode],
       )
       .filter((snapshot) => !roomEventIds.has(snapshot.eventId))
       .slice(-this.config.ai.context.recentUserMessages);
@@ -119,6 +126,7 @@ export class AiContextBuilder {
         message.chatterId,
         message.receivedAt,
         this.config.ai.context.recentBotInteractions,
+        [processingMode],
       )
       .map(summarizeInteraction);
 

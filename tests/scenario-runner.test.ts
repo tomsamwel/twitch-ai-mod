@@ -139,7 +139,7 @@ test("runScenarioEvaluation evaluates scripted multi-turn scenarios step by step
             mode: "social",
             allowedOutcomes: ["action"],
             allowedActionKinds: ["say"],
-            allowedActionStatuses: ["skipped"],
+            allowedActionStatuses: ["dry-run", "skipped"],
             forbiddenActionKinds: ["timeout"],
           },
         },
@@ -177,7 +177,9 @@ test("runScenarioEvaluation evaluates scripted multi-turn scenarios step by step
   assert.equal(result.passed, true);
   assert.equal(result.stepCount, 2);
   assert.equal(result.passedSteps, 2);
-  assert.deepEqual(result.steps.map((step) => step.actualActionStatuses), [["dry-run"], ["skipped"]]);
+  assert.deepEqual(result.actualActionKinds, ["say"]);
+  assert.deepEqual(result.actualActionStatuses, ["dry-run"]);
+  assert.deepEqual(result.steps.map((step) => step.actualActionStatuses), [["dry-run"], ["dry-run"]]);
 });
 
 test("runScenarioEvaluation classifies wrongful timeouts as blocking issues", async () => {
@@ -210,7 +212,7 @@ test("runScenarioEvaluation classifies wrongful timeouts as blocking issues", as
             displayName: "ViewerTwo",
             roles: ["viewer"],
           },
-          text: "this stream sucks",
+          text: "this stream sucks check https://hate-site.com",
           expected: {
             mode: "moderation",
             allowedOutcomes: ["abstain", "action"],
@@ -492,7 +494,7 @@ test("runScenarioEvaluation can require a warn action for moderation-only public
             displayName: "WarnViewer",
             roles: ["viewer"],
           },
-          text: "yo my shop link is in bio",
+          text: "yo check my shop https://myshop.com link is in bio",
           expected: {
             mode: "moderation",
             allowedOutcomes: ["action"],

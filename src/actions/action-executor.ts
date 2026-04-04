@@ -100,7 +100,7 @@ export class ActionExecutor {
       });
     }
 
-    if (result.status === "executed" || result.status === "dry-run") {
+    if (result.status === "executed") {
       this.cooldowns.recordAction(action, resolveActionTimestamp(action));
     }
 
@@ -245,7 +245,8 @@ export class ActionExecutor {
       return action.durationSeconds!;
     }
 
-    const windowStart = new Date(Date.now() - progressive.windowSeconds * 1000).toISOString();
+    const actionTime = resolveActionTimestamp(action);
+    const windowStart = new Date(actionTime - progressive.windowSeconds * 1000).toISOString();
     const priorCount = this.database.countRecentTimeoutsForUser(action.targetUserId, windowStart);
 
     // Find the highest tier where maxPriorTimeouts <= priorCount.

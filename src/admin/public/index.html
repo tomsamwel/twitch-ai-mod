@@ -251,7 +251,7 @@
   }
 
   /* ── Forms & inputs ── */
-  select, input[type=text], input[type=number] {
+  select, input[type=text], input[type=number], textarea {
     font-family: var(--font-mono);
     font-size: 0.78rem;
     background: var(--bg-surface);
@@ -267,6 +267,12 @@
     box-shadow: 0 0 0 2px rgba(0,240,255,0.08);
   }
   input[type=text] { width: 200px; }
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    line-height: 1.4;
+  }
   input[type=text]::placeholder { color: var(--text-muted); }
   select { cursor: pointer; }
 
@@ -289,6 +295,14 @@
     background: rgba(0, 240, 255, 0.15);
     border-color: rgba(0, 240, 255, 0.5);
     box-shadow: 0 0 12px rgba(0,240,255,0.1);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+    border-color: var(--border);
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.03);
   }
   .btn-danger {
     background: rgba(229, 57, 53, 0.08);
@@ -453,6 +467,11 @@
     background: rgba(0, 240, 255, 0.08);
     border-color: rgba(0, 240, 255, 0.3);
     color: var(--cyan);
+  }
+  .badge-none {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-dim);
   }
   .badge-say {
     background: rgba(66, 165, 245, 0.08);
@@ -1248,9 +1267,9 @@
   </div>
 
   <nav id="tabs">
-    <button class="active" data-tab="dashboard">Dashboard</button>
-    <button data-tab="activity">Activity</button>
-    <button data-tab="config">Config</button>
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="activity">Activity</button>
+  <button data-tab="config">Config</button>
   </nav>
 
   <!-- Dashboard Tab -->
@@ -1636,8 +1655,12 @@ async function setSetting(key, value) {
 }
 
 async function resetAll() {
-  if (!confirm('Reset all overrides to defaults?')) return;
-  await fetch(API + '/api/reset', { method: 'POST' });
+  if (!confirm('Reset runtime controls to defaults? This clears overrides, exemptions, and runtime blocked terms.')) return;
+  const response = await fetch(API + '/api/reset', { method: 'POST' });
+  const data = await response.json().catch(() => null);
+  if (data && data.ok) {
+    alert(`Reset complete: ${data.overrides} override(s), ${data.exemptUsers} exemption(s), ${data.blockedTerms} blocked term(s) cleared.`);
+  }
   refreshDashboard();
 }
 
@@ -2016,14 +2039,19 @@ async function loadControllers() {
     for (const c of all) {
       if (c.source === 'config' && c.overridden) continue;
       const srcBadge = `<span class="badge badge-${esc(c.source)}">${esc(c.source)}</span>`;
+      const resolvedBadge = c.resolved ? '' : ' <span class="badge badge-ignored">unresolved</span>';
+      const identityArgs = `${JSON.stringify(c.userId || '')}, ${JSON.stringify(c.login)}`;
       const changeFn = c.source === 'runtime' ? 'changeControllerRole' : 'overrideController';
-      const roleSelect = `<select class="role-select" onchange="${changeFn}('${esc(c.login)}', this.value)">
+      const roleSelect = `<select class="role-select" onchange="${changeFn}(${identityArgs}, this.value)">
         <option value="admin"${c.role === 'admin' ? ' selected' : ''}>admin</option>
         <option value="mod"${c.role === 'mod' ? ' selected' : ''}>mod</option>
       </select>`;
       const removeFn = c.source === 'runtime' ? 'removeController' : 'overrideRemoveController';
-      const actions = `<button class="btn btn-danger btn-sm" onclick="${removeFn}('${esc(c.login)}')">remove</button>`;
-      html += `<tr><td>${userLink(c.login)}</td><td>${roleSelect}</td><td>${srcBadge}</td><td>${actions}</td></tr>`;
+      const actions = `<button class="btn btn-danger btn-sm" onclick="${removeFn}(${identityArgs})">remove</button>`;
+      const label = c.displayName && c.displayName.toLowerCase() !== c.login
+        ? `${esc(c.displayName)} ${userLink(c.login)}`
+        : userLink(c.login);
+      html += `<tr><td>${label}</td><td>${roleSelect}</td><td>${srcBadge}${resolvedBadge}</td><td>${actions}</td></tr>`;
     }
     html += '</tbody></table>';
     document.getElementById('controller-list').innerHTML = html;
@@ -2034,29 +2062,34 @@ async function addController() {
   const login = document.getElementById('ctrl-login').value.trim().toLowerCase();
   const role = document.getElementById('ctrl-role').value;
   if (!login) return;
-  await jsonPost('/api/controllers', { login, role });
+  const response = await jsonPost('/api/controllers', { login, role });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    alert(data?.error || 'Failed to add controller');
+    return;
+  }
   document.getElementById('ctrl-login').value = '';
   loadControllers();
 }
 
-async function removeController(login) {
-  await jsonPost('/api/controllers/remove', { login });
+async function removeController(userId, login) {
+  await jsonPost('/api/controllers/remove', { userId: userId || undefined, login });
   loadControllers();
 }
 
-async function changeControllerRole(login, role) {
-  await jsonPost('/api/controllers/role', { login, role });
+async function changeControllerRole(userId, login, role) {
+  await jsonPost('/api/controllers/role', { userId: userId || undefined, login, role });
   loadControllers();
 }
 
-async function overrideController(login, role) {
+async function overrideController(_userId, login, role) {
   await jsonPost('/api/controllers', { login, role });
   loadControllers();
 }
 
-async function overrideRemoveController(login) {
+async function overrideRemoveController(userId, login) {
   if (!confirm(`@${login} is defined in YAML config. Remove the runtime override? To fully remove, edit control-plane.yaml.`)) return;
-  await jsonPost('/api/controllers/remove', { login });
+  await jsonPost('/api/controllers/remove', { userId: userId || undefined, login });
   loadControllers();
 }
 
