@@ -16,6 +16,7 @@ function getProviderConfig(
   if (provider === "ollama") return config.ai.ollama;
   if (provider === "llama-cpp") return config.ai.llamaCpp;
   if (provider === "openai") return config.ai.openai;
+  if (provider === "azure") return config.ai.azure;
   return undefined;
 }
 
@@ -107,6 +108,14 @@ export function createEffectiveConfig(
               model: settings.model,
             }
           : baseConfig.ai.llamaCpp,
+      azure:
+        settings.provider === "azure" && baseConfig.ai.azure
+          ? {
+              ...baseConfig.ai.azure,
+              baseUrl: settings.providerBaseUrl,
+              model: settings.model,
+            }
+          : baseConfig.ai.azure,
     },
     actions: {
       ...baseConfig.actions,

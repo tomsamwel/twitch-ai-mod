@@ -81,6 +81,10 @@ export async function loadConfig(
     throw new Error("OPENAI_API_KEY is required when ai.provider is openai and ai.enabled is true.");
   }
 
+  if (appConfig.ai.enabled && appConfig.ai.provider === "azure" && !env.AZURE_API_KEY) {
+    throw new Error("AZURE_API_KEY is required when ai.provider is azure and ai.enabled is true.");
+  }
+
   return {
     paths: {
       rootDir,
@@ -111,6 +115,7 @@ export async function loadConfig(
     },
     secrets: {
       ...(env.OPENAI_API_KEY ? { openaiApiKey: env.OPENAI_API_KEY } : {}),
+      ...(env.AZURE_API_KEY ? { azureApiKey: env.AZURE_API_KEY } : {}),
     },
     twitch: {
       ...appConfig.twitch,

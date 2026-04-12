@@ -3,7 +3,7 @@ import { z } from "zod";
 export const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
 export type LogLevel = z.infer<typeof logLevelSchema>;
 
-export const AI_PROVIDER_KINDS = ["ollama", "openai", "llama-cpp"] as const;
+export const AI_PROVIDER_KINDS = ["ollama", "openai", "llama-cpp", "azure"] as const;
 export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
 export type AiMode = "social" | "moderation";
 export const moderationCategorySchema = z.enum([
@@ -212,6 +212,7 @@ export interface ConfigSnapshot {
   };
   secrets: {
     openaiApiKey?: string;
+    azureApiKey?: string;
   };
   twitch: {
     broadcasterLogin: string;
@@ -271,6 +272,12 @@ export interface ConfigSnapshot {
       baseUrl: string;
       model: string;
       managed?: boolean | undefined;
+    } | undefined;
+    azure?: {
+      baseUrl: string;
+      model: string;
+      deploymentName: string;
+      apiVersion?: string | undefined;
     } | undefined;
     queue: {
       capacity: number;

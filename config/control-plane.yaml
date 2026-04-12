@@ -28,3 +28,7 @@ modelPresets:
   #   provider: ollama
   #   baseUrl: http://localhost:11434
   #   model: qwen3:8b
+  # azure-gpt4o:
+  #   provider: azure
+  #   baseUrl: https://your-resource.openai.azure.com
+  #   model: gpt-4o

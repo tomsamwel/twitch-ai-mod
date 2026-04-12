@@ -219,6 +219,14 @@ Typical override targets:
 - requires `OPENAI_API_KEY`
 - configured through `ai.openai.baseUrl` and `ai.openai.model`
 
+`ai.provider: azure`
+- Azure AI Foundry endpoints (Azure OpenAI Service or serverless model inference)
+- requires `AZURE_API_KEY`
+- configured through `ai.azure.baseUrl`, `ai.azure.model`, `ai.azure.deploymentName`, and optionally `ai.azure.apiVersion`
+- uses OpenAI Chat Completions format with Azure-specific auth (`api-key` header)
+- for Azure OpenAI Service: set `apiVersion` (e.g., `2024-12-01-preview`); URL includes deployment name
+- for serverless inference: omit `apiVersion`; URL is `{baseUrl}/chat/completions`
+
 The app keeps one shared decision schema across providers, so the rest of the pipeline stays the same when switching.
 
 The current action contract is:
@@ -327,7 +335,7 @@ Replay:
 - tags replay decisions/actions separately from live runs
 
 Optional overrides:
-- `--provider llama-cpp|ollama|openai`
+- `--provider llama-cpp|ollama|openai|azure`
 - `--model <model-name>`
 - `--prompt-pack <pack-name>`
 
@@ -349,7 +357,7 @@ Scenario eval:
 Optional overrides:
 - `--suite <name>`
 - `--scenario <id>`
-- `--provider llama-cpp|ollama|openai`
+- `--provider llama-cpp|ollama|openai|azure`
 - `--model <model-name>`
 - `--prompt-pack <pack-name>`
 

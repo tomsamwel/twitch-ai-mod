@@ -28,6 +28,8 @@ export function applyNonLiveScriptOverrides(
       nextConfig.ai.ollama.model = options.model;
     } else if (provider === "llama-cpp" && nextConfig.ai.llamaCpp) {
       nextConfig.ai.llamaCpp.model = options.model;
+    } else if (provider === "azure" && nextConfig.ai.azure) {
+      nextConfig.ai.azure.model = options.model;
     } else {
       nextConfig.ai.openai.model = options.model;
     }

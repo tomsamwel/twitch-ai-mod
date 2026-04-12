@@ -21,7 +21,7 @@ interface ApprovePilotCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run approve:pilot -- [--provider ollama|openai|llama-cpp] [--prompt-pack <name>] [--model <name>]",
+    "Usage: npm run approve:pilot -- [--provider ollama|openai|llama-cpp|azure] [--prompt-pack <name>] [--model <name>]",
   );
 }
 
@@ -48,8 +48,8 @@ function parseArgs(argv: string[]): ApprovePilotCliOptions {
       }
       case "--provider": {
         const value = argv[index + 1];
-        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
-          throw new Error("--provider must be ollama, openai, or llama-cpp");
+        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp" && value !== "azure") {
+          throw new Error("--provider must be ollama, openai, llama-cpp, or azure");
         }
         options.provider = value;
         index += 1;

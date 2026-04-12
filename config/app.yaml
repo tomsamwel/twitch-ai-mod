@@ -49,6 +49,11 @@ ai:
     baseUrl: http://localhost:8081
     model: qwen3:4b-instruct
     managed: true
+  # azure:
+  #   baseUrl: https://your-resource.openai.azure.com
+  #   deploymentName: gpt-4o
+  #   model: gpt-4o
+  #   apiVersion: "2024-12-01-preview"
   # Bounded priority queue for AI review requests in live mode.
   # Moderation items (high priority) process before social replies (normal priority).
   queue:

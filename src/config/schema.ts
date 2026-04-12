@@ -11,6 +11,7 @@ export const envSchema = z.object({
   TWITCH_BROADCASTER_LOGIN: z.string().min(1).optional(),
   TWITCH_BOT_LOGIN: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
+  AZURE_API_KEY: z.string().min(1).optional(),
   APP_LOG_LEVEL: logLevelSchema.optional(),
 });
 
@@ -63,6 +64,12 @@ export const appConfigSchema = z.object({
       baseUrl: z.url(),
       model: z.string().min(1),
       managed: z.boolean().optional(),
+    }).optional(),
+    azure: z.object({
+      baseUrl: z.url(),
+      model: z.string().min(1),
+      deploymentName: z.string().min(1),
+      apiVersion: z.string().min(1).optional(),
     }).optional(),
     queue: z.object({
       capacity: z.number().int().positive(),

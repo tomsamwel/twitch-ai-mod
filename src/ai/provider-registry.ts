@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 
 import { getConfiguredProviderInfo } from "./provider-config.js";
+import { AzureAiProvider } from "./providers/azure.js";
 import { LlamaCppAiProvider } from "./providers/llama-cpp.js";
 import { OllamaAiProvider } from "./providers/ollama.js";
 import { OpenAiAiProvider } from "./providers/openai.js";
@@ -13,6 +14,7 @@ export function instantiateAiProvider(config: ConfigSnapshot, logger: Logger): A
     ollama: () => new OllamaAiProvider(config, logger),
     openai: () => new OpenAiAiProvider(config, logger),
     "llama-cpp": () => new LlamaCppAiProvider(config, logger),
+    azure: () => new AzureAiProvider(config, logger),
   } as const;
 
   return registry[config.ai.provider]();

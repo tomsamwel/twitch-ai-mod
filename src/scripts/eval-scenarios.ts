@@ -15,7 +15,7 @@ interface ScenarioEvalCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run eval:scenarios -- [--suite <name>] [--scenario <id>] [--provider ollama|openai|llama-cpp] [--model <name>] [--prompt-pack <name>]",
+    "Usage: npm run eval:scenarios -- [--suite <name>] [--scenario <id>] [--provider ollama|openai|llama-cpp|azure] [--model <name>] [--prompt-pack <name>]",
   );
 }
 
@@ -56,8 +56,8 @@ function parseArgs(argv: string[]): ScenarioEvalCliOptions {
       case "--provider": {
         const value = argv[index + 1];
 
-        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
-          throw new Error("--provider must be ollama, openai, or llama-cpp");
+        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp" && value !== "azure") {
+          throw new Error("--provider must be ollama, openai, llama-cpp, or azure");
         }
 
         options.provider = value;

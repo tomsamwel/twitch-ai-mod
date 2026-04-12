@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AiProviderRegistry, createAiProvider } from "../src/ai/provider-registry.js";
+import { AzureAiProvider } from "../src/ai/providers/azure.js";
 import { OllamaAiProvider } from "../src/ai/providers/ollama.js";
 import { OpenAiAiProvider } from "../src/ai/providers/openai.js";
 import { createLogger } from "../src/storage/logger.js";
@@ -226,6 +227,158 @@ test("AiProviderRegistry reuses the same provider instance for the same effectiv
 
       assert.equal(first, second);
       assert.ok(first instanceof OllamaAiProvider);
+    },
+  );
+});
+
+function withAzureConfig(config: ReturnType<typeof createTestConfig>) {
+  config.ai.provider = "azure";
+  config.ai.azure = {
+    baseUrl: "https://test-resource.openai.azure.com",
+    model: "gpt-4o-mini",
+    deploymentName: "test-deployment",
+    apiVersion: "2024-10-21",
+  };
+  return config;
+}
+
+test("createAiProvider selects Azure and invokes startup health check", async () => {
+  const config = withAzureConfig(createTestConfig());
+  const logger = createLogger("info", "test");
+  let healthChecked = false;
+
+  await withMockFetch(
+    (async (input) => {
+      const url = String(input);
+
+      if (url.includes("/chat/completions")) {
+        healthChecked = true;
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "hi" } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      throw new Error(`Unexpected fetch to ${url}`);
+    }) as typeof fetch,
+    async () => {
+      const provider = await createAiProvider(config, logger);
+
+      assert.ok(provider instanceof AzureAiProvider);
+      assert.equal(healthChecked, true);
+    },
+  );
+});
+
+test("Azure provider maps a structured response into an action decision", async () => {
+  const config = withAzureConfig(createTestConfig());
+  const logger = createLogger("info", "test");
+  const provider = new AzureAiProvider(config, logger);
+  const input = buildAiDecisionInput(
+    normalizeChatMessage(
+      createChatEvent({
+        messageText: "@testbot hello there",
+        messageParts: [
+          {
+            type: "mention",
+            text: "@testbot",
+            mention: {
+              user_id: "bot-1",
+              user_login: "testbot",
+              user_name: "TestBot",
+            },
+          },
+        ],
+      }),
+    ),
+    createEmptyContext(),
+    config,
+    {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+  );
+
+  await withMockFetch(
+    (async (resource, init) => {
+      const url = String(resource);
+
+      if (url.includes("/chat/completions")) {
+        // Verify Azure-style auth header
+        const headers = init?.headers as Record<string, string> | undefined;
+        assert.equal(headers?.["api-key"], "azure-test-key");
+
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    outcome: "action",
+                    reason: "reply helps",
+                    confidence: 0.9,
+                    mode: "social",
+                    moderationCategory: "none",
+                    actions: [
+                      {
+                        kind: "say",
+                        reason: "brief reply",
+                        message: "hello!",
+                      },
+                    ],
+                  }),
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      throw new Error(`Unexpected fetch to ${url}`);
+    }) as typeof fetch,
+    async () => {
+      const decision = await provider.decide(input);
+
+      assert.equal(decision.outcome, "action");
+      assert.equal(decision.actions[0]?.kind, "say");
+      assert.equal(decision.source, "azure");
+    },
+  );
+});
+
+test("Azure provider abstains cleanly on auth failure", async () => {
+  const config = withAzureConfig(createTestConfig());
+  const logger = createLogger("info", "test");
+  const provider = new AzureAiProvider(config, logger);
+  const input = buildAiDecisionInput(normalizeChatMessage(createChatEvent()), createEmptyContext(), config, {
+    id: "bot-1",
+    login: "testbot",
+    displayName: "TestBot",
+  });
+
+  await withMockFetch(
+    (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            message: "Access denied due to invalid subscription key.",
+          },
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch,
+    async () => {
+      const decision = await provider.decide(input);
+
+      assert.equal(decision.outcome, "abstain");
+      assert.equal(decision.source, "azure");
+      assert.deepEqual(decision.metadata, {
+        failureKind: "request_failed",
+        errorType: "Error",
+      });
     },
   );
 });

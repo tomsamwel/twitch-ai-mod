@@ -43,7 +43,7 @@ In live mode, AI reviews go through a bounded queue (`AiReviewQueue` in `src/run
 
 ## Provider System
 
-Three providers: `llama-cpp` (default), `ollama`, `openai` — all behind `AiProvider` interface.
+Four providers: `llama-cpp` (default), `ollama`, `openai`, `azure` — all behind `AiProvider` interface.
 
 **Adding a new provider touches ~10 files:**
 1. `src/types.ts` — `AiProviderKind` union

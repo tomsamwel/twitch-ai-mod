@@ -24,6 +24,17 @@ export function getConfiguredProviderInfo(config: Pick<ConfigSnapshot, "ai">): {
     };
   }
 
+  if (config.ai.provider === "azure") {
+    if (!config.ai.azure) {
+      throw new Error("ai.azure configuration is required when provider is azure");
+    }
+    return {
+      provider: "azure",
+      baseUrl: config.ai.azure.baseUrl,
+      model: config.ai.azure.model,
+    };
+  }
+
   return {
     provider: "openai",
     baseUrl: config.ai.openai.baseUrl,

@@ -46,6 +46,7 @@ export function createTestConfig(): ConfigSnapshot {
     },
     secrets: {
       openaiApiKey: "openai-test-key",
+      azureApiKey: "azure-test-key",
     },
     twitch: {
       broadcasterLogin: "testchannel",
