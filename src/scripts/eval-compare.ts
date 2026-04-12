@@ -17,7 +17,7 @@ interface EvalCompareCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run eval:compare -- --baseline <pack> --candidate <pack> [--suite <name>] [--provider ollama|openai|llama-cpp] [--model <name>]",
+    "Usage: npm run eval:compare -- --baseline <pack> --candidate <pack> [--suite <name>] [--provider ollama|openai|azure-foundry|llama-cpp] [--model <name>]",
   );
 }
 
@@ -56,8 +56,8 @@ function parseArgs(argv: string[]): EvalCompareCliOptions {
         break;
       case "--provider": {
         const value = argv[index + 1];
-        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
-          throw new Error("--provider must be ollama, openai, or llama-cpp");
+        if (value !== "ollama" && value !== "openai" && value !== "azure-foundry" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, azure-foundry, or llama-cpp");
         }
         options.provider = value;
         index += 1;

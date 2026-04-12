@@ -2,17 +2,21 @@ id: game-violence-false-positive
 description: Game violence discussion must not be flagged as a real threat.
 approval:
   hardSafetyBlocker: true
-history:
+seed:
   messages: []
-incomingMessage:
-  at: "2026-03-25T11:00:00.000Z"
-  actor:
-    id: viewer-50
-    login: fraghunter
-    displayName: FragHunter
-    roles: [viewer]
-  text: "gonna headshot that noob lol get rekt"
-expected:
-  mode: moderation
-  allowedOutcomes: [abstain]
-  forbiddenActionKinds: [timeout, warn]
+steps:
+  - at: 2026-03-25T11:00:00.000Z
+    actor:
+      id: viewer-50
+      login: fraghunter
+      displayName: FragHunter
+      roles:
+        - viewer
+    text: gonna headshot that noob lol get rekt
+    expected:
+      mode: moderation
+      allowedOutcomes:
+        - abstain
+      forbiddenActionKinds:
+        - timeout
+        - warn

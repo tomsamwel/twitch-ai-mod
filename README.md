@@ -12,7 +12,8 @@ The bot runs on your machine, reads live chat through official Twitch EventSub, 
 - moderation-only public warning notices that stay separate from social replies
 - SQLite persistence for tokens, ingested events, message snapshots, decisions, actions, runtime overrides, and control audits
 - prompt-pack based AI behavior
-- local `llama-cpp` (via llama-server with KV cache checkpointing), `ollama`, and remote `openai` adapters behind one `AiProvider` interface
+- EventSub reconnect watchdog with admin health visibility and optional fail-fast restart behavior
+- local `llama-cpp` (via llama-server with KV cache checkpointing), `ollama`, and remote `openai` / `azure-foundry` adapters behind one `AiProvider` interface
 - deterministic large visual-spam / ASCII-art timeout detection
 - replay CLI against captured chat snapshots
 - scripted scenario-lab CLI against curated YAML cases
@@ -31,35 +32,43 @@ The bot runs on your machine, reads live chat through official Twitch EventSub, 
    - [config/control-plane.yaml](config/control-plane.yaml)
    - [config/cooldowns.yaml](config/cooldowns.yaml)
    - [config/moderation-policy.yaml](config/moderation-policy.yaml)
-5. Install llama-server and pull the model:
+5. Choose your AI backend:
+
+For local `llama-cpp`:
 
 ```bash
 brew install llama.cpp
 ollama pull qwen3:4b-instruct
 ```
 
-6. Start llama-server (keep this terminal open):
+For Azure AI Foundry:
+- set `ai.provider: azure-foundry` in [config/app.yaml](config/app.yaml)
+- fill `ai.azureFoundry.baseUrl` with your OpenAI v1 endpoint, for example `https://<resource>.openai.azure.com/openai/v1/`
+- set `ai.azureFoundry.deployment` to your deployed model name
+- set `AZURE_FOUNDRY_API_KEY` in `.env`
 
-```bash
-./scripts/start-llama-server.sh
-```
-
-7. Use a dedicated bot account for whisper control. That account must:
+6. Use a dedicated bot account for whisper control. That account must:
    - be separate from the broadcaster account
    - be moderator in the channel
    - have verified email
    - have a verified phone number if it needs to send whisper replies
-8. Run OAuth for the bot account:
+7. Run OAuth for the bot account:
 
 ```bash
 npm run auth:login
 ```
 
-9. Start the bot (in a second terminal):
+8. Start the bot:
 
 ```bash
 npm run dev
 ```
+
+With `ai.provider: llama-cpp` and `ai.llamaCpp.managed: true`, the app auto-starts `llama-server` at the configured port. If you disable managed startup, run your own compatible server at `ai.llamaCpp.baseUrl`.
+
+With `ai.provider: azure-foundry`, the app uses the Azure OpenAI-compatible v1 endpoint configured under `ai.azureFoundry`.
+
+For unattended runs, prefer `npm run build && npm start` under a supervisor such as `systemd`, `launchd`, `pm2`, or a Docker restart policy. `npm run dev` is still useful for active development, but it is not the strongest long-running mode.
 
 ## Why llama-server Instead of Ollama?
 

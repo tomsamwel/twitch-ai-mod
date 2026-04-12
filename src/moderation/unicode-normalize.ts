@@ -127,3 +127,12 @@ export function normalizeUnicode(text: string): string {
 
   return result.normalize("NFC");
 }
+
+/**
+ * Collapse runs of 3+ identical letters (evasion padding like "buuuy" → "buy").
+ * Only collapses letters, not digits or punctuation, so numbers stay intact.
+ * Used for blocked-term matching only.
+ */
+export function compressRepeatedChars(text: string): string {
+  return text.replace(/([a-zA-Z])\1{2,}/gu, "$1");
+}

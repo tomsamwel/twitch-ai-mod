@@ -8,6 +8,23 @@ async function main(): Promise<void> {
   const services = await createAppServices();
   const { logger, twitchGateway, runtimeSettings, messageProcessor, controlPlane } = services;
   const settings = runtimeSettings.getEffectiveSettings();
+  let shuttingDown = false;
+
+  const shutdown = async (signal: string, exitCode = 0): Promise<void> => {
+    if (shuttingDown) {
+      return;
+    }
+
+    shuttingDown = true;
+    logger.info({ signal, exitCode }, "shutting down Twitch AI moderator bot");
+    const forceExit = setTimeout(() => {
+      logger.fatal("graceful shutdown timed out after 10s, forcing exit");
+      process.exit(1);
+    }, 10_000);
+    forceExit.unref();
+    await services.close();
+    process.exit(exitCode);
+  };
 
   logger.info(
     {
@@ -20,6 +37,18 @@ async function main(): Promise<void> {
     },
     "starting Twitch AI moderator bot",
   );
+
+  twitchGateway.setFatalFailureHandler(async (failure) => {
+    logger.fatal(
+      {
+        failureKind: failure.kind,
+        err: failure.error,
+        connectionStatus: failure.connectionStatus,
+      },
+      "Twitch gateway entered unrecoverable state",
+    );
+    await shutdown(`gateway:${failure.kind}`, 1);
+  });
 
   await twitchGateway.start(
     async (event: EventSubChannelChatMessageEvent) => {
@@ -38,18 +67,12 @@ async function main(): Promise<void> {
       : undefined,
   );
 
-  const shutdown = async (signal: string): Promise<void> => {
-    logger.info({ signal }, "shutting down Twitch AI moderator bot");
-    await services.close();
-    process.exit(0);
-  };
-
   process.once("SIGINT", () => {
-    void shutdown("SIGINT");
+    void shutdown("SIGINT", 0);
   });
 
   process.once("SIGTERM", () => {
-    void shutdown("SIGTERM");
+    void shutdown("SIGTERM", 0);
   });
 }
 

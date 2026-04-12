@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 
 import { getConfiguredProviderInfo } from "./provider-config.js";
+import { AzureFoundryAiProvider } from "./providers/azure-foundry.js";
 import { LlamaCppAiProvider } from "./providers/llama-cpp.js";
 import { OllamaAiProvider } from "./providers/ollama.js";
 import { OpenAiAiProvider } from "./providers/openai.js";
@@ -12,6 +13,7 @@ function instantiateAiProvider(config: ConfigSnapshot, logger: Logger): AiProvid
   const registry = {
     ollama: () => new OllamaAiProvider(config, logger),
     openai: () => new OpenAiAiProvider(config, logger),
+    "azure-foundry": () => new AzureFoundryAiProvider(config, logger),
     "llama-cpp": () => new LlamaCppAiProvider(config, logger),
   } as const;
 

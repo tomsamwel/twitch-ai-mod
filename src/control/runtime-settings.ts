@@ -15,6 +15,14 @@ function getProviderConfig(
 ): { baseUrl: string; model: string } | undefined {
   if (provider === "ollama") return config.ai.ollama;
   if (provider === "llama-cpp") return config.ai.llamaCpp;
+  if (provider === "azure-foundry") {
+    return config.ai.azureFoundry
+      ? {
+          baseUrl: config.ai.azureFoundry.baseUrl,
+          model: config.ai.azureFoundry.deployment,
+        }
+      : undefined;
+  }
   if (provider === "openai") return config.ai.openai;
   return undefined;
 }
@@ -62,6 +70,7 @@ export function buildEffectiveRuntimeSettings(
     aiEnabled: overrides.aiEnabled ?? baseConfig.ai.enabled,
     aiModerationEnabled: overrides.aiModerationEnabled ?? false,
     socialRepliesEnabled: overrides.socialRepliesEnabled ?? true,
+    greetingsEnabled: overrides.greetingsEnabled ?? (baseConfig.social?.greetings?.enabled ?? false),
     dryRun: overrides.dryRun ?? baseConfig.runtime.dryRun,
     liveModerationEnabled: overrides.liveModerationEnabled ?? baseConfig.actions.allowLiveModeration,
     promptPack: promptPackName,
@@ -107,6 +116,14 @@ export function createEffectiveConfig(
               model: settings.model,
             }
           : baseConfig.ai.openai,
+      azureFoundry:
+        settings.provider === "azure-foundry"
+          ? {
+              baseUrl: settings.providerBaseUrl,
+              deployment: settings.model,
+              apiStyle: baseConfig.ai.azureFoundry?.apiStyle ?? "chat-completions",
+            }
+          : baseConfig.ai.azureFoundry,
       llamaCpp:
         settings.provider === "llama-cpp" && baseConfig.ai.llamaCpp
           ? {
@@ -258,6 +275,9 @@ export class RuntimeSettingsStore {
           break;
         case "socialRepliesEnabled":
           snapshot.socialRepliesEnabled = row.value as boolean;
+          break;
+        case "greetingsEnabled":
+          snapshot.greetingsEnabled = row.value as boolean;
           break;
         case "dryRun":
           snapshot.dryRun = row.value as boolean;

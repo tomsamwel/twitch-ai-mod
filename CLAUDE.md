@@ -72,7 +72,7 @@ When bot=broadcaster, whisper control doesn't work — use admin panel at `local
 
 **Whisper command aliases**: `aim`=ai-moderation, `live`=live-moderation, `dry`=dry-run, `soc`=social. New commands: `recent [N]`, `stats`, `exempt`/`unexempt`, `block`/`unblock`.
 
-**Permission tiers** (in `control-plane.yaml`): `broadcaster` (everything), `admin` (all toggles + management), `mod` (status + exempt + block only). Config uses `trustedControllers: [{login, role}]` format; old `trustedControllerLogins` still works (all default to admin).
+**Permission tiers** (in `control-plane.yaml`): `broadcaster` (everything), `admin` (all toggles + management), `mod` (status + exempt + block only). Config uses `trustedControllers: [{login, role}]`.
 
 ## Prompt System
 
@@ -104,7 +104,7 @@ Three kinds: `say` (social reply), `warn` (public moderation notice), `timeout` 
 
 77 YAML scenarios across 13 suites: `adversarial`, `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `irl-safety`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
 
-Scenarios support `seed` history + `steps[]` with expected outcomes. Legacy single-turn format auto-converted.
+Scenarios use `seed` history + `steps[]` with expected outcomes.
 
 Approval is precision-first: wrongful timeouts and blocking missed timeouts fail approval. Abstains and social-quality misses are advisory.
 

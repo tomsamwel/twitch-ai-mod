@@ -1,6 +1,6 @@
 import type { Logger } from "pino";
 
-import { aiDecisionPayloadSchema, buildAbstainDecision, payloadToAiDecision } from "./decision-schema.js";
+import { aiDecisionPayloadSchema, createAiDecisionPayloadSchema, buildAbstainDecision, payloadToAiDecision } from "./decision-schema.js";
 import type { AiDecision, AiDecisionInput, AiProviderKind } from "../types.js";
 import { asRecord } from "../utils.js";
 
@@ -63,6 +63,19 @@ function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): 
     candidate.actions = actions;
   }
 
+  // First-time chatter greeting: if the model returned multiple say actions,
+  // merge them into one (the model sometimes splits a greeting into two messages).
+  if (input.isFirstTimeChatter && actions.length > 1 && actions.every((a) => a.kind === "say")) {
+    const merged = actions[0]!;
+    for (let i = 1; i < actions.length; i++) {
+      const extra = actions[i];
+      if (typeof extra?.message === "string" && typeof merged.message === "string") {
+        merged.message = `${merged.message} ${extra.message}`;
+      }
+    }
+    candidate.actions = [merged];
+  }
+
   return { value: candidate, injectedMissingWarn };
 }
 
@@ -85,7 +98,10 @@ export function parseAiDecisionText(
         "AI model returned timeout without companion warn; injected fallback warn",
       );
     }
-    const payload = aiDecisionPayloadSchema.parse(normalized);
+    const schema = input.isFirstTimeChatter
+      ? createAiDecisionPayloadSchema({ isFirstTimeChatter: true })
+      : aiDecisionPayloadSchema;
+    const payload = schema.parse(normalized);
     const decision = payloadToAiDecision(payload, source, input);
 
     if (providerMode && providerMode !== input.mode) {

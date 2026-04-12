@@ -81,6 +81,12 @@ export async function loadConfig(
     throw new Error("OPENAI_API_KEY is required when ai.provider is openai and ai.enabled is true.");
   }
 
+  if (appConfig.ai.enabled && appConfig.ai.provider === "azure-foundry" && !env.AZURE_FOUNDRY_API_KEY) {
+    throw new Error(
+      "AZURE_FOUNDRY_API_KEY is required when ai.provider is azure-foundry and ai.enabled is true.",
+    );
+  }
+
   return {
     paths: {
       rootDir,
@@ -101,16 +107,14 @@ export async function loadConfig(
     controlPlane: {
       enabled: controlPlane.enabled,
       commandPrefix: controlPlane.commandPrefix,
-      trustedControllerLogins: controlPlane.trustedControllerLogins.length > 0
-        ? controlPlane.trustedControllerLogins
-        : (controlPlane.trustedControllers ?? []).map((c) => c.login),
       broadcasterAlwaysAllowed: controlPlane.broadcasterAlwaysAllowed,
       allowedPromptPacks: controlPlane.allowedPromptPacks,
       modelPresets: controlPlane.modelPresets,
-      ...(controlPlane.trustedControllers ? { trustedControllers: controlPlane.trustedControllers } : {}),
+      trustedControllers: controlPlane.trustedControllers,
     },
     secrets: {
       ...(env.OPENAI_API_KEY ? { openaiApiKey: env.OPENAI_API_KEY } : {}),
+      ...(env.AZURE_FOUNDRY_API_KEY ? { azureFoundryApiKey: env.AZURE_FOUNDRY_API_KEY } : {}),
     },
     twitch: {
       ...appConfig.twitch,
@@ -128,10 +132,19 @@ export async function loadConfig(
     },
     ai: {
       ...appConfig.ai,
+      requestDefaults: {
+        temperature: appConfig.ai.requestDefaults.temperature,
+        maxOutputTokens: appConfig.ai.requestDefaults.maxOutputTokens,
+        timeoutMs: appConfig.ai.requestDefaults.timeoutMs,
+        ...(appConfig.ai.requestDefaults.socialTemperature !== undefined
+          ? { socialTemperature: appConfig.ai.requestDefaults.socialTemperature }
+          : {}),
+      },
       promptPack,
     },
     admin: appConfig.admin,
     actions: appConfig.actions,
+    ...(appConfig.social !== undefined ? { social: appConfig.social } : {}),
     cooldowns,
     moderationPolicy,
     prompts,

@@ -14,7 +14,7 @@ interface ReplayCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run replay -- [--limit <n>] [--provider ollama|openai|llama-cpp] [--model <name>] [--prompt-pack <name>]",
+    "Usage: npm run replay -- [--limit <n>] [--provider ollama|openai|azure-foundry|llama-cpp] [--model <name>] [--prompt-pack <name>]",
   );
 }
 
@@ -50,8 +50,8 @@ function parseArgs(argv: string[]): ReplayCliOptions {
       case "--provider": {
         const value = argv[index + 1];
 
-        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
-          throw new Error("--provider must be ollama, openai, or llama-cpp");
+        if (value !== "ollama" && value !== "openai" && value !== "azure-foundry" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, azure-foundry, or llama-cpp");
         }
 
         options.provider = value;

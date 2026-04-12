@@ -33,7 +33,19 @@ const aiDecisionPayloadBaseSchema = z
   })
   .strict();
 
-export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((payload, context) => {
+export function createAiDecisionPayloadSchema(options?: { isFirstTimeChatter?: boolean }) {
+  return aiDecisionPayloadBaseSchema.superRefine((payload, context) => {
+    _validateAiDecisionPayload(payload, context, options?.isFirstTimeChatter ?? false);
+  });
+}
+
+export const aiDecisionPayloadSchema = createAiDecisionPayloadSchema();
+
+function _validateAiDecisionPayload(
+  payload: z.infer<typeof aiDecisionPayloadBaseSchema>,
+  context: z.RefinementCtx,
+  isFirstTimeChatter: boolean,
+): void {
   if (payload.actions.length > 2) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -115,7 +127,8 @@ export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((
     return;
   }
 
-  if (payload.actions.length === 1 && firstAction.kind !== "warn") {
+  const allowGreetingSay = isFirstTimeChatter && firstAction.kind === "say" && payload.moderationCategory === "none";
+  if (payload.actions.length === 1 && firstAction.kind !== "warn" && !allowGreetingSay) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'single moderation actions must use kind "warn"',
@@ -132,7 +145,7 @@ export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((
       });
     }
   }
-});
+}
 
 export const aiDecisionJsonSchema = (function stripSchemaMeta(value: unknown): unknown {
   if (Array.isArray(value)) {

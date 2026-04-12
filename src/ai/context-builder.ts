@@ -11,6 +11,10 @@ import type {
   TwitchIdentity,
 } from "../types.js";
 
+/** Keep context text short to stay within the ~4096 token LLM window. */
+const MAX_MESSAGE_TEXT_CHARS = 220;
+const MAX_ACTION_TEXT_CHARS = 180;
+
 function trimText(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
     return text;
@@ -26,7 +30,7 @@ function summarizeMessage(snapshot: PersistedMessageSnapshot, botIdentity: Twitc
     chatterId: snapshot.message.chatterId,
     chatterLogin: snapshot.message.chatterLogin,
     chatterDisplayName: snapshot.message.chatterDisplayName,
-    text: trimText(snapshot.message.text, 220),
+    text: trimText(snapshot.message.text, MAX_MESSAGE_TEXT_CHARS),
     roles: snapshot.message.roles,
     isPrivileged: snapshot.message.isPrivileged,
     isBotMessage:
@@ -43,10 +47,10 @@ function summarizeInteraction(action: PersistedActionRecord): AiContextInteracti
     source: action.source,
     status: action.status,
     dryRun: action.dryRun,
-    reason: trimText(action.reason, 180),
+    reason: trimText(action.reason, MAX_ACTION_TEXT_CHARS),
     targetUserId: action.targetUserId,
     targetUserName: action.targetUserName,
-    ...(action.payload.message ? { message: trimText(action.payload.message, 180) } : {}),
+    ...(action.payload.message ? { message: trimText(action.payload.message, MAX_ACTION_TEXT_CHARS) } : {}),
     ...(action.payload.durationSeconds ? { durationSeconds: action.payload.durationSeconds } : {}),
     processingMode: action.processingMode,
   };

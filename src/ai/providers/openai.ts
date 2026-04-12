@@ -36,9 +36,7 @@ interface OpenAiResponsesResponse extends OpenAiErrorResponse {
   }>;
 }
 
-function stripTrailingSlash(baseUrl: string): string {
-  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-}
+import { stripTrailingSlash } from "./util.js";
 
 function extractResponseText(payload: OpenAiResponsesResponse): string {
   if (payload.output_text) {
@@ -122,7 +120,7 @@ export class OpenAiAiProvider implements AiProvider {
         body: JSON.stringify({
           model: input.config.ai.openai.model,
           store: false,
-          temperature: input.config.ai.requestDefaults.temperature,
+          temperature: input.temperature,
           max_output_tokens: input.config.ai.requestDefaults.maxOutputTokens,
           input: [
             {

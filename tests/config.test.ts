@@ -13,6 +13,7 @@ const ENV_KEYS = [
   "TWITCH_OAUTH_HOST",
   "TWITCH_OAUTH_PORT",
   "OPENAI_API_KEY",
+  "AZURE_FOUNDRY_API_KEY",
   "APP_LOG_LEVEL",
 ] as const;
 
@@ -27,8 +28,9 @@ async function createFixtureProject(rootDir: string, appYaml: string): Promise<v
     `
 enabled: true
 commandPrefix: aimod
-trustedControllerLogins:
-  - testchannel
+trustedControllers:
+  - login: testchannel
+    role: admin
 broadcasterAlwaysAllowed: true
 allowedPromptPacks:
   - witty-mod
@@ -129,6 +131,7 @@ function setTestEnv(): Record<string, string | undefined> {
   process.env.TWITCH_OAUTH_HOST = "localhost";
   process.env.TWITCH_OAUTH_PORT = "3000";
   process.env.OPENAI_API_KEY = "openai-test-key";
+  process.env.AZURE_FOUNDRY_API_KEY = "azure-foundry-test-key";
   process.env.APP_LOG_LEVEL = "debug";
   return previous;
 }
@@ -206,6 +209,8 @@ actions:
     assert.equal(config.storage.sqlitePath, path.join(rootDir, "data", "test.sqlite"));
     assert.equal(config.controlPlane.commandPrefix, "aimod");
     assert.equal(config.controlPlane.modelPresets["local-default"]?.model, "qwen3:4b-instruct");
+    assert.equal(config.runtime.eventSubDisconnectGraceSeconds, 600);
+    assert.equal(config.runtime.exitOnEventSubStall, true);
   } finally {
     restoreEnv(previousEnv);
     await rm(rootDir, { recursive: true, force: true });
@@ -322,6 +327,72 @@ actions:
     await assert.rejects(
       () => loadConfig(rootDir),
       /OPENAI_API_KEY is required when ai.provider is openai and ai.enabled is true/u,
+    );
+  } finally {
+    restoreEnv(previousEnv);
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("loadConfig requires AZURE_FOUNDRY_API_KEY only when Azure AI Foundry is selected and enabled", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "twitch-ai-mod-config-azure-foundry-"));
+  const previousEnv = setTestEnv();
+
+  try {
+    delete process.env.AZURE_FOUNDRY_API_KEY;
+
+    await createFixtureProject(
+      rootDir,
+      `
+app:
+  name: twitch-ai-mod
+  environment: test
+runtime:
+  dryRun: true
+  logLevel: info
+  tokenValidationIntervalMinutes: 60
+storage:
+  sqlitePath: ./data/test.sqlite
+promptPacks:
+  defaultPack: witty-mod
+twitch:
+  broadcasterLogin: testchannel
+  botLogin: testbot
+  requiredScopes:
+    - user:read:chat
+    - user:write:chat
+    - moderator:manage:banned_users
+ai:
+  enabled: true
+  provider: azure-foundry
+  requestDefaults:
+    temperature: 0
+    maxOutputTokens: 200
+    timeoutMs: 45000
+  context:
+    recentRoomMessages: 5
+    recentUserMessages: 8
+    recentBotInteractions: 4
+    maxPromptChars: 4000
+  ollama:
+    baseUrl: http://localhost:11434
+    model: qwen3:4b-instruct
+  openai:
+    baseUrl: https://api.openai.com/v1
+    model: gpt-4o-mini
+  azureFoundry:
+    baseUrl: https://example-resource.openai.azure.com/openai/v1/
+    deployment: gpt-4.1-mini
+    apiStyle: chat-completions
+actions:
+  allowLiveChatMessages: true
+  allowLiveModeration: false
+`,
+    );
+
+    await assert.rejects(
+      () => loadConfig(rootDir),
+      /AZURE_FOUNDRY_API_KEY is required when ai.provider is azure-foundry and ai.enabled is true/u,
     );
   } finally {
     restoreEnv(previousEnv);

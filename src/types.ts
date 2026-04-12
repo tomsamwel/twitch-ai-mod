@@ -3,7 +3,7 @@ import { z } from "zod";
 export const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
 export type LogLevel = z.infer<typeof logLevelSchema>;
 
-export const AI_PROVIDER_KINDS = ["ollama", "openai", "llama-cpp"] as const;
+export const AI_PROVIDER_KINDS = ["ollama", "openai", "azure-foundry", "llama-cpp"] as const;
 export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
 export type AiMode = "social" | "moderation";
 export const moderationCategorySchema = z.enum([
@@ -24,6 +24,7 @@ export type RuntimeOverrideKey =
   | "aiEnabled"
   | "aiModerationEnabled"
   | "socialRepliesEnabled"
+  | "greetingsEnabled"
   | "dryRun"
   | "liveModerationEnabled"
   | "promptPack"
@@ -211,17 +212,21 @@ export interface ConfigSnapshot {
     dryRun: boolean;
     logLevel: LogLevel;
     tokenValidationIntervalMinutes: number;
+    eventSubDisconnectGraceSeconds: number;
+    exitOnEventSubStall: boolean;
   };
   storage: {
     sqlitePath: string;
   };
   secrets: {
     openaiApiKey?: string;
+    azureFoundryApiKey?: string;
   };
   twitch: {
     broadcasterLogin: string;
     botLogin: string;
     requiredScopes: string[];
+    channelRules: string[];
     clientId: string;
     clientSecret: string;
     redirectUri: string;
@@ -234,8 +239,7 @@ export interface ConfigSnapshot {
   controlPlane: {
     enabled: boolean;
     commandPrefix: string;
-    trustedControllerLogins: string[];
-    trustedControllers?: Array<{ login: string; role: "admin" | "mod" }>;
+    trustedControllers: Array<{ login: string; role: "admin" | "mod" }>;
     broadcasterAlwaysAllowed: boolean;
     allowedPromptPacks: string[];
     modelPresets: Record<
@@ -253,6 +257,7 @@ export interface ConfigSnapshot {
     promptPack: string;
     requestDefaults: {
       temperature: number;
+      socialTemperature?: number;
       maxOutputTokens: number;
       timeoutMs: number;
     };
@@ -272,6 +277,11 @@ export interface ConfigSnapshot {
       baseUrl: string;
       model: string;
     };
+    azureFoundry?: {
+      baseUrl: string;
+      deployment: string;
+      apiStyle: "chat-completions";
+    } | undefined;
     llamaCpp?: {
       baseUrl: string;
       model: string;
@@ -292,6 +302,17 @@ export interface ConfigSnapshot {
   actions: {
     allowLiveChatMessages: boolean;
     allowLiveModeration: boolean;
+  };
+  social?: {
+    greetings: {
+      enabled: boolean;
+      onFirstMessage: boolean;
+      onChatterJoin: boolean;
+      chatterPollIntervalMs: number;
+      maxQueueDepth: number;
+      rateLimitMs: number;
+      greetingCooldownMs: number;
+    };
   };
   cooldowns: {
     chat: {
@@ -372,6 +393,8 @@ export interface AiPromptPayload {
 
 export interface AiDecisionInput {
   mode: AiMode;
+  temperature: number;
+  isFirstTimeChatter: boolean;
   message: NormalizedChatMessage;
   context: AiContextSnapshot;
   config: ConfigSnapshot;
@@ -391,6 +414,17 @@ export interface TwitchUserResolver {
 export interface TwitchGatewayContext {
   broadcaster: TwitchIdentity;
   bot: TwitchIdentity;
+}
+
+export interface EventSubConnectionStatus {
+  connected: boolean;
+  reconnectGraceSeconds: number;
+  exitOnStall: boolean;
+  stale: boolean;
+  disconnectCount: number;
+  lastConnectAt: string | null;
+  lastDisconnectAt: string | null;
+  lastDisconnectError: string | null;
 }
 
 export interface WhisperMessage {
@@ -552,6 +586,7 @@ export type ControlCommand =
   | { kind: "set-ai"; enabled: boolean }
   | { kind: "set-ai-moderation"; enabled: boolean }
   | { kind: "set-social"; enabled: boolean }
+  | { kind: "set-greetings"; enabled: boolean }
   | { kind: "set-dry-run"; enabled: boolean }
   | { kind: "set-live-moderation"; enabled: boolean }
   | { kind: "set-pack"; packName: string }
@@ -583,6 +618,7 @@ export interface RuntimeOverrideSnapshot {
   aiEnabled?: boolean;
   aiModerationEnabled?: boolean;
   socialRepliesEnabled?: boolean;
+  greetingsEnabled?: boolean;
   dryRun?: boolean;
   liveModerationEnabled?: boolean;
   promptPack?: string;
@@ -596,6 +632,7 @@ export interface EffectiveRuntimeSettings {
   aiEnabled: boolean;
   aiModerationEnabled: boolean;
   socialRepliesEnabled: boolean;
+  greetingsEnabled: boolean;
   dryRun: boolean;
   liveModerationEnabled: boolean;
   promptPack: string;

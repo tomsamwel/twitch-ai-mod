@@ -1,6 +1,7 @@
 import type { ConfigSnapshot, NormalizedChatMessage, ProposedAction, RuleDecision } from "../types.js";
 import { countMentions } from "../utils.js";
 import { CooldownManager } from "./cooldown-manager.js";
+import { compressRepeatedChars } from "./unicode-normalize.js";
 import { analyzeVisualSpam } from "./visual-spam.js";
 
 function escapeRegExp(value: string): string {
@@ -70,7 +71,7 @@ export class RuleEngine {
     const blockedTermMatch = this.findBlockedTerm(message.normalizedText);
 
     if (blockedTermMatch && this.config.moderationPolicy.deterministicRules.escalationThresholds.timeoutOnBlockedTerm) {
-      return this.buildTimeoutDecision(message, "blocked_term", `matched blocked term: ${blockedTermMatch}`, now, {
+      return this.buildTimeoutDecision(message, "blocked_term", "blocked term", now, {
         blockedTerm: blockedTermMatch,
       });
     }
@@ -78,7 +79,7 @@ export class RuleEngine {
     const spamSignals = this.detectSpamSignals(message);
 
     if (spamSignals.length > 0 && this.config.moderationPolicy.deterministicRules.escalationThresholds.timeoutOnSpam) {
-      return this.buildTimeoutDecision(message, "spam_heuristic", `spam heuristics matched: ${spamSignals.join(", ")}`, now, {
+      return this.buildTimeoutDecision(message, "spam_heuristic", "spam detected", now, {
         spamSignals,
       });
     }
@@ -170,7 +171,7 @@ export class RuleEngine {
   }
 
   private findBlockedTerm(text: string): string | null {
-    const lowerText = text.toLowerCase();
+    const lowerText = compressRepeatedChars(text.toLowerCase());
 
     for (const entry of this.blockedTermMatchers) {
       if (entry.matcher.test(lowerText)) {

@@ -192,6 +192,11 @@ export class BotDatabase {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS greeted_users (
+        user_id TEXT PRIMARY KEY,
+        greeted_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS runtime_controllers (
         login TEXT PRIMARY KEY,
         user_id TEXT,
@@ -209,6 +214,8 @@ export class BotDatabase {
     this.ensureColumn("actions", "processing_mode", "TEXT NOT NULL DEFAULT 'live'");
     this.ensureColumn("actions", "run_id", "TEXT");
     this.ensureColumn("message_snapshots", "processing_mode", "TEXT NOT NULL DEFAULT 'live'");
+    this.ensureColumn("decisions", "system_prompt", "TEXT");
+    this.ensureColumn("decisions", "user_prompt", "TEXT");
     this.ensureColumn("runtime_controllers", "user_id", "TEXT");
     this.ensureColumn("runtime_controllers", "display_name", "TEXT");
     this.ensureColumn("runtime_controllers", "updated_at", "TEXT");
@@ -966,8 +973,16 @@ export class BotDatabase {
     message: { eventId: string; sourceMessageId: string; chatterId: string; chatterLogin: string },
     decision: AiDecision,
     context: { processingMode?: ProcessingMode; runId?: string } = {},
+    prompt?: { system: string; user: string },
   ): void {
-    this.recordDecision("ai", message, decision.outcome, decision.reason, undefined, decision, context);
+    this.recordDecision("ai", message, decision.outcome, decision.reason, undefined, decision, context, prompt);
+  }
+
+  public getDecisionPrompt(eventId: string): { systemPrompt: string; userPrompt: string } | null {
+    const row = this.database
+      .prepare(`SELECT system_prompt, user_prompt FROM decisions WHERE event_id = ? AND stage = 'ai' AND system_prompt IS NOT NULL LIMIT 1`)
+      .get(eventId) as { system_prompt: string; user_prompt: string } | undefined;
+    return row ? { systemPrompt: row.system_prompt, userPrompt: row.user_prompt } : null;
   }
 
   public countRecentTimeoutsForUser(
@@ -1043,6 +1058,7 @@ export class BotDatabase {
     matchedRule: string | undefined,
     payload: unknown,
     context: { processingMode?: ProcessingMode; runId?: string } = {},
+    prompt?: { system: string; user: string },
   ): void {
     this.database
       .prepare(
@@ -1060,8 +1076,10 @@ export class BotDatabase {
             processing_mode,
             run_id,
             payload_json,
+            system_prompt,
+            user_prompt,
             created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
       )
       .run(
@@ -1077,6 +1095,8 @@ export class BotDatabase {
         context.processingMode ?? "live",
         context.runId ?? null,
         stringifyJson(payload),
+        prompt?.system ?? null,
+        prompt?.user ?? null,
         new Date().toISOString(),
       );
   }
@@ -1165,6 +1185,27 @@ export class BotDatabase {
 
   public clearExemptUsers(): number {
     const result = this.database.prepare(`DELETE FROM exempt_users`).run();
+    return result.changes;
+  }
+
+  // --- Greeted users ---
+
+  public recordGreetedUser(userId: string): void {
+    this.database
+      .prepare(`INSERT INTO greeted_users (user_id, greeted_at) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET greeted_at = excluded.greeted_at`)
+      .run(userId, new Date().toISOString());
+  }
+
+  public isRecentlyGreeted(userId: string, windowMs: number): boolean {
+    const cutoff = new Date(Date.now() - windowMs).toISOString();
+    const row = this.database
+      .prepare(`SELECT 1 FROM greeted_users WHERE user_id = ? AND greeted_at > ? LIMIT 1`)
+      .get(userId, cutoff);
+    return row !== undefined;
+  }
+
+  public clearGreetedUsers(): number {
+    const result = this.database.prepare(`DELETE FROM greeted_users`).run();
     return result.changes;
   }
 
@@ -1420,6 +1461,7 @@ export class BotDatabase {
                 json_extract(d.payload_json, '$.mode') as mode,
                 json_extract(d.payload_json, '$.confidence') as confidence,
                 json_extract(d.payload_json, '$.moderationCategory') as category,
+                json_extract(d.payload_json, '$.actions[0].message') as action_message,
                 substr(json_extract(m.message_json, '$.text'), 1, 80) as text_snippet,
                 (SELECT GROUP_CONCAT(action_kind || ':' || status, ', ')
                  FROM actions
@@ -1447,6 +1489,7 @@ export class BotDatabase {
         category: row.category ?? null,
         stage: row.stage,
         actions: row.actions_summary ?? null,
+        actionMessage: row.action_message ?? null,
         createdAt: row.created_at,
       })),
       total: countRow.total,
@@ -1678,19 +1721,21 @@ export class BotDatabase {
     return purge();
   }
 
-  public purgeOperationalData(): { messages: number; decisions: number; actions: number; events: number; reviews: number } {
+  public purgeOperationalData(): { messages: number; decisions: number; actions: number; events: number; reviews: number; greetedUsers: number } {
     const purge = this.database.transaction(() => {
       const messages = this.database.prepare(`DELETE FROM message_snapshots`).run();
       const decisions = this.database.prepare(`DELETE FROM decisions`).run();
       const actions = this.database.prepare(`DELETE FROM actions`).run();
       const events = this.database.prepare(`DELETE FROM ingested_events`).run();
       const reviews = this.database.prepare(`DELETE FROM review_decisions`).run();
+      const greetedUsers = this.database.prepare(`DELETE FROM greeted_users`).run();
       return {
         messages: messages.changes,
         decisions: decisions.changes,
         actions: actions.changes,
         events: events.changes,
         reviews: reviews.changes,
+        greetedUsers: greetedUsers.changes,
       };
     });
     return purge();

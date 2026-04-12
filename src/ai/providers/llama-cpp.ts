@@ -53,7 +53,8 @@ export class LlamaCppAiProvider implements AiProvider {
         body: JSON.stringify({
           model,
           cache_prompt: true,
-          temperature: input.config.ai.requestDefaults.temperature,
+          chat_template_kwargs: { enable_thinking: false },
+          temperature: input.temperature,
           max_tokens: input.config.ai.requestDefaults.maxOutputTokens,
           response_format: {
             type: "json_schema",
@@ -65,7 +66,7 @@ export class LlamaCppAiProvider implements AiProvider {
           },
           messages: [
             { role: "system", content: input.prompt.system },
-            { role: "user", content: input.prompt.user },
+            { role: "user", content: `${input.prompt.user}\n/no_think` },
           ],
         }),
       });

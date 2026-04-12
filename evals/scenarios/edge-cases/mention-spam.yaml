@@ -1,20 +1,30 @@
 id: mention-spam
 description: Excessive mentions should trigger the spam heuristic.
-history:
+seed:
   messages: []
-incomingMessage:
-  at: "2026-03-24T15:07:00.000Z"
-  actor:
-    id: viewer-7
-    login: pingstorm
-    displayName: PingStorm
-    roles: [viewer]
-  text: "@testchannel @testchannel @testchannel @testchannel @testchannel"
-expected:
-  mode: moderation
-  allowedOutcomes: [action]
-  allowedActionKinds: [timeout, warn]
-  requiredActionKinds: [timeout, warn]
-  requiredActionOrder: [timeout, warn]
-  allowedActionStatuses: [dry-run]
-  forbiddenActionKinds: [say]
+steps:
+  - at: 2026-03-24T15:07:00.000Z
+    actor:
+      id: viewer-7
+      login: pingstorm
+      displayName: PingStorm
+      roles:
+        - viewer
+    text: "@testchannel @testchannel @testchannel @testchannel @testchannel"
+    expected:
+      mode: moderation
+      allowedOutcomes:
+        - action
+      allowedActionKinds:
+        - timeout
+        - warn
+      requiredActionKinds:
+        - timeout
+        - warn
+      requiredActionOrder:
+        - timeout
+        - warn
+      allowedActionStatuses:
+        - dry-run
+      forbiddenActionKinds:
+        - say

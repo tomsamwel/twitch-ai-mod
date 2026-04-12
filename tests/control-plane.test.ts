@@ -36,7 +36,7 @@ function createMockDatabase(overrides: Record<string, unknown> = {}) {
     getRuntimeControllerByUserId() { return null; },
     touchRuntimeControllerIdentity() { return false; },
     purgeUserHistory() { return { messages: 0, decisions: 0, actions: 0 }; },
-    purgeOperationalData() { return { messages: 0, decisions: 0, actions: 0, events: 0, reviews: 0 }; },
+    purgeOperationalData() { return { messages: 0, decisions: 0, actions: 0, events: 0, reviews: 0, greetedUsers: 0 }; },
     ...overrides,
   };
 }
@@ -50,6 +50,7 @@ function createRuntimeSettingsState(config = createTestConfig()): {
       aiEnabled: true,
       aiModerationEnabled: false,
       socialRepliesEnabled: true,
+      greetingsEnabled: false,
       dryRun: true,
       liveModerationEnabled: false,
       promptPack: config.ai.promptPack,

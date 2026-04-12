@@ -1,32 +1,40 @@
 id: prior-warning-repeat-promo
-description: Recent bot warning context should support a firmer follow-up on repeated promo without forcing timeout.
-history:
+description: Recent bot warning context should support a firmer follow-up on
+  repeated promo without forcing timeout.
+seed:
   messages:
-    - at: "2026-03-24T15:10:00.000Z"
+    - at: 2026-03-24T15:10:00.000Z
       actor:
         id: promo-2
         login: repeatpromo
         displayName: RepeatPromo
-        roles: [viewer]
-      text: "check out my shop after stream"
+        roles:
+          - viewer
+      text: check out my shop after stream
   botInteractions:
-    - at: "2026-03-24T15:10:10.000Z"
+    - at: 2026-03-24T15:10:10.000Z
       kind: warn
       source: ai
       status: executed
-      reason: "asked viewer to stop promoting"
+      reason: asked viewer to stop promoting
       message: "@RepeatPromo Please keep self-promo out of chat."
-incomingMessage:
-  at: "2026-03-24T15:10:30.000Z"
-  actor:
-    id: promo-2
-    login: repeatpromo
-    displayName: RepeatPromo
-    roles: [viewer]
-  text: "seriously, my shop link is in bio"
-expected:
-  mode: moderation
-  allowedOutcomes: [abstain, action]
-  allowedActionKinds: [warn]
-  allowedActionStatuses: [dry-run]
-  forbiddenActionKinds: [timeout]
+steps:
+  - at: 2026-03-24T15:10:30.000Z
+    actor:
+      id: promo-2
+      login: repeatpromo
+      displayName: RepeatPromo
+      roles:
+        - viewer
+    text: seriously, my shop link is in bio
+    expected:
+      mode: moderation
+      allowedOutcomes:
+        - abstain
+        - action
+      allowedActionKinds:
+        - warn
+      allowedActionStatuses:
+        - dry-run
+      forbiddenActionKinds:
+        - timeout

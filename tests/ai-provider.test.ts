@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AiProviderRegistry, createAiProvider } from "../src/ai/provider-registry.js";
+import { AzureFoundryAiProvider } from "../src/ai/providers/azure-foundry.js";
 import { OllamaAiProvider } from "../src/ai/providers/ollama.js";
 import { OpenAiAiProvider } from "../src/ai/providers/openai.js";
 import { createLogger } from "../src/storage/logger.js";
@@ -66,6 +67,23 @@ test("createAiProvider selects OpenAI and invokes startup health check", async (
 
       assert.ok(provider instanceof OpenAiAiProvider);
       assert.equal(modelChecked, true);
+    },
+  );
+});
+
+test("createAiProvider selects Azure AI Foundry without a billable startup probe", async () => {
+  const config = createTestConfig();
+  config.ai.provider = "azure-foundry";
+  const logger = createLogger("info", "test");
+
+  await withMockFetch(
+    (async () => {
+      throw new Error("Azure provider should not fetch during healthCheck");
+    }) as typeof fetch,
+    async () => {
+      const provider = await createAiProvider(config, logger);
+
+      assert.ok(provider instanceof AzureFoundryAiProvider);
     },
   );
 });
@@ -196,6 +214,119 @@ test("OpenAI provider abstains cleanly on auth failure", async () => {
         failureKind: "request_failed",
         errorType: "Error",
       });
+    },
+  );
+});
+
+test("Azure AI Foundry provider maps a structured response into an action decision", async () => {
+  const config = createTestConfig();
+  config.ai.provider = "azure-foundry";
+  const logger = createLogger("info", "test");
+  const provider = new AzureFoundryAiProvider(config, logger);
+  const input = buildAiDecisionInput(
+    normalizeChatMessage(
+      createChatEvent({
+        messageText: "@testbot hello there",
+        messageParts: [
+          {
+            type: "mention",
+            text: "@testbot",
+            mention: {
+              user_id: "bot-1",
+              user_login: "testbot",
+              user_name: "TestBot",
+            },
+          },
+        ],
+      }),
+    ),
+    createEmptyContext(),
+    config,
+    {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+  );
+
+  await withMockFetch(
+    (async (resource) => {
+      const url = String(resource);
+
+      if (url.endsWith("/chat/completions")) {
+        return new Response(
+          JSON.stringify({
+            id: "chatcmpl-test",
+            object: "chat.completion",
+            created: 0,
+            model: config.ai.azureFoundry?.deployment,
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: "assistant",
+                  content: JSON.stringify({
+                    outcome: "action",
+                    reason: "reply helps",
+                    confidence: 0.9,
+                    mode: "social",
+                    moderationCategory: "none",
+                    actions: [
+                      {
+                        kind: "say",
+                        reason: "brief reply",
+                        message: "hello!",
+                      },
+                    ],
+                  }),
+                },
+                finish_reason: "stop",
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      throw new Error(`Unexpected fetch to ${url}`);
+    }) as typeof fetch,
+    async () => {
+      const decision = await provider.decide(input);
+
+      assert.equal(decision.outcome, "action");
+      assert.equal(decision.actions[0]?.kind, "say");
+      assert.equal(decision.source, "azure-foundry");
+    },
+  );
+});
+
+test("Azure AI Foundry provider abstains cleanly on auth failure", async () => {
+  const config = createTestConfig();
+  config.ai.provider = "azure-foundry";
+  const logger = createLogger("info", "test");
+  const provider = new AzureFoundryAiProvider(config, logger);
+  const input = buildAiDecisionInput(normalizeChatMessage(createChatEvent()), createEmptyContext(), config, {
+    id: "bot-1",
+    login: "testbot",
+    displayName: "TestBot",
+  });
+
+  await withMockFetch(
+    (async () =>
+      new Response(
+        JSON.stringify({
+          error: {
+            message: "Invalid API key",
+          },
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } },
+      )) as typeof fetch,
+    async () => {
+      const decision = await provider.decide(input);
+
+      assert.equal(decision.outcome, "abstain");
+      assert.equal(decision.source, "azure-foundry");
+      assert.equal(decision.metadata?.failureKind, "request_failed");
     },
   );
 });

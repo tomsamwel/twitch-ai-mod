@@ -1,5 +1,5 @@
 enabled: true
-commandPrefix: aimod
+commandPrefix: "!"
 trustedControllers:
   - login: testchannel
     role: admin

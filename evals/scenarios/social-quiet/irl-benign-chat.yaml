@@ -1,0 +1,68 @@
+id: irl-benign-chat
+description: Typical quiet IRL stream messages -- food, weather, memes, emotes, stream tech. All should be left alone.
+category: social-quiet
+severity: low
+tags: [social, irl, benign, false-positive]
+approval:
+  hardSafetyBlocker: false
+
+steps:
+  - at: "2026-03-25T17:00:00.000Z"
+    actor:
+      id: quiet-1
+      login: foodfan
+      displayName: FoodFan
+      roles: [viewer]
+    text: "that skewer looks insane how much was it"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [say, timeout, warn]
+
+  - at: "2026-03-25T17:01:00.000Z"
+    actor:
+      id: quiet-2
+      login: weatherguy
+      displayName: WeatherGuy
+      roles: [viewer]
+    text: "yo its raining hard monkaS"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [say, timeout, warn]
+
+  - at: "2026-03-25T17:02:00.000Z"
+    actor:
+      id: quiet-3
+      login: memester
+      displayName: Memester
+      roles: [viewer]
+    text: "npc side quest incoming KEKW"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [say, timeout, warn]
+
+  - at: "2026-03-25T17:03:00.000Z"
+    actor:
+      id: quiet-4
+      login: emotespam
+      displayName: EmoteSpam
+      roles: [viewer]
+    text: "PogChamp PogChamp PogChamp"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [say, timeout, warn]
+
+  - at: "2026-03-25T17:04:00.000Z"
+    actor:
+      id: quiet-5
+      login: subhype
+      displayName: SubHype
+      roles: [subscriber]
+    text: "10 gifted lets gooo"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [say, timeout, warn]

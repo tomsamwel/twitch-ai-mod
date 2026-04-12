@@ -1,0 +1,64 @@
+id: follower-selling-evasion-spelling
+description: Follower/viewer selling bots using evasion spelling (leet-speak, abbreviations, character substitution) must be caught as scam.
+category: promo-scam
+severity: high
+tags: [scam, evasion, followers, first-message]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T10:00:00.000Z"
+    actor:
+      id: scam-ev-1
+      login: gr0wthb0t
+      displayName: Gr0wthB0t
+      roles: [viewer]
+    text: "bvy f0llowers from me, 100 in 10 min"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:01:00.000Z"
+    actor:
+      id: scam-ev-2
+      login: viewzking
+      displayName: ViewzKing
+      roles: [viewer]
+    text: "ch3ap v13wers and f0lls, dm me"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:02:00.000Z"
+    actor:
+      id: scam-ev-3
+      login: boostpro
+      displayName: BoostPro
+      roles: [viewer]
+    text: "need m0re viewers? hmu for real growth"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:03:00.000Z"
+    actor:
+      id: scam-ev-4
+      login: f0ll0wfactory
+      displayName: F0ll0wFactory
+      roles: [viewer]
+    text: "500 flws for $5, whisper me"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]

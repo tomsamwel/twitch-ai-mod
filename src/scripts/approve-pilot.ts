@@ -12,7 +12,7 @@ interface ApprovePilotCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run approve:pilot -- [--provider ollama|openai|llama-cpp] [--prompt-pack <name>] [--model <name>]",
+    "Usage: npm run approve:pilot -- [--provider ollama|openai|azure-foundry|llama-cpp] [--prompt-pack <name>] [--model <name>]",
   );
 }
 
@@ -39,8 +39,8 @@ function parseArgs(argv: string[]): ApprovePilotCliOptions {
       }
       case "--provider": {
         const value = argv[index + 1];
-        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
-          throw new Error("--provider must be ollama, openai, or llama-cpp");
+        if (value !== "ollama" && value !== "openai" && value !== "azure-foundry" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, azure-foundry, or llama-cpp");
         }
         options.provider = value;
         index += 1;
@@ -84,6 +84,13 @@ async function main(): Promise<void> {
           provider: report.provider,
           ...(report.provider === "ollama"
             ? { ollama: { ...config.ai.ollama, model: report.model } }
+            : report.provider === "azure-foundry" && config.ai.azureFoundry
+              ? {
+                  azureFoundry: {
+                    ...config.ai.azureFoundry,
+                    deployment: report.model,
+                  },
+                }
             : report.provider === "llama-cpp" && config.ai.llamaCpp
               ? { llamaCpp: { ...config.ai.llamaCpp, model: report.model } }
               : { openai: { ...config.ai.openai, model: report.model } }),

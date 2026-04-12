@@ -13,6 +13,8 @@ import { AiReviewQueue, type PressureState } from "./runtime/ai-review-queue.js"
 import { MessageProcessor, type AiReviewWorkItem } from "./runtime/message-processor.js";
 import { createPriorityClassifier, workItemCoalesceKey, coalesceWorkItems } from "./runtime/priority-classifier.js";
 import { OutboundMessageTracker } from "./runtime/outbound-message-tracker.js";
+import { SessionChatterTracker } from "./runtime/session-chatter-tracker.js";
+import { ChatterPollService } from "./runtime/chatter-poll-service.js";
 import { BotDatabase } from "./storage/database.js";
 import { createLogger } from "./storage/logger.js";
 import { ensureLlamaServer } from "./scripts/script-support.js";
@@ -114,6 +116,11 @@ export async function createAppServices(): Promise<AppServices> {
     outboundMessageTracker,
     isUserExempt,
   );
+  const greetingCooldownMs = config.social?.greetings?.greetingCooldownMs;
+  const sessionChatterTracker = new SessionChatterTracker(greetingCooldownMs != null ? {
+    isRecentlyGreeted: (userId) => database.isRecentlyGreeted(userId, greetingCooldownMs),
+    recordGreeted: (userId) => database.recordGreetedUser(userId),
+  } : undefined);
   const messageProcessor = new MessageProcessor(
     config,
     logger,
@@ -126,10 +133,36 @@ export async function createAppServices(): Promise<AppServices> {
     actionExecutor,
     outboundMessageTracker,
     aiReviewQueue,
+    sessionChatterTracker,
+    () => aiReviewQueue.getStats().depth,
   );
   aiReviewQueue.start(async (work) => {
     await messageProcessor.processAiReview(work);
   });
+
+  // Poll-path greeting: detect silent viewers who haven't sent a message yet.
+  // Enqueues an AI-generated greeting through the same pipeline as first-message greetings.
+  let chatterPollService: ChatterPollService | null = null;
+  if (config.social?.greetings?.onChatterJoin) {
+    chatterPollService = new ChatterPollService(
+      authContext.apiClient,
+      authContext.broadcaster.id,
+      authContext.bot.id,
+      sessionChatterTracker,
+      config.social.greetings,
+      () => aiReviewQueue.getStats().depth,
+      (viewers) => {
+        messageProcessor.enqueuePollGreeting(viewers, authContext.bot, authContext.broadcaster);
+      },
+      () => runtimeSettings.getEffectiveSettings().greetingsEnabled,
+      logger,
+    );
+    chatterPollService.start();
+    logger.info(
+      { intervalMs: config.social.greetings.chatterPollIntervalMs },
+      "chatter poll service started",
+    );
+  }
   const trustedControllers = config.controlPlane.enabled
     ? await resolveTrustedControllers(config, authContext, userResolver)
     : [];
@@ -165,6 +198,7 @@ export async function createAppServices(): Promise<AppServices> {
           aiReviewQueue,
           configControllers,
           userResolver,
+          twitchGateway,
         })
       : null;
 
@@ -197,6 +231,7 @@ export async function createAppServices(): Promise<AppServices> {
     adminServer,
     llamaServerManager,
     async close(): Promise<void> {
+      if (chatterPollService) chatterPollService.stop();
       await twitchGateway.stop();
       aiReviewQueue.stop();
       if (adminServer) await adminServer.stop();
@@ -286,18 +321,12 @@ async function resolveTrustedControllers(
   authContext: Awaited<ReturnType<typeof createTwitchAuthContext>>,
   userResolver: TwitchUserResolver,
 ): Promise<TrustedController[]> {
-  const requestedLogins = new Set(config.controlPlane.trustedControllerLogins.map((login) => login.toLowerCase()));
-  const resolved: TrustedController[] = [];
-
-  const roleMap = new Map<string, "admin" | "mod">();
-  if (config.controlPlane.trustedControllers) {
-    for (const entry of config.controlPlane.trustedControllers) {
-      roleMap.set(entry.login.toLowerCase(), entry.role);
-    }
+  const requestedControllers = new Map<string, "admin" | "mod">();
+  for (const entry of config.controlPlane.trustedControllers) {
+    requestedControllers.set(entry.login.toLowerCase(), entry.role);
   }
-
-  for (const login of requestedLogins) {
-    const role = roleMap.get(login) ?? "admin";
+  const resolved: TrustedController[] = [];
+  for (const [login, role] of requestedControllers) {
 
     const user = await resolveConfiguredControllerIdentity(login, authContext.broadcaster, userResolver);
     resolved.push({

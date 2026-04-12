@@ -14,12 +14,20 @@ http://localhost:3000/callback
    - [config/control-plane.yaml](config/control-plane.yaml)
    - [config/cooldowns.yaml](config/cooldowns.yaml)
    - [config/moderation-policy.yaml](config/moderation-policy.yaml)
-4. Install llama-server and pull the model:
+4. Choose your AI backend.
+
+For local `llama-cpp`:
 
 ```bash
 brew install llama.cpp
 ollama pull qwen3:4b-instruct
 ```
+
+For Azure AI Foundry:
+- set `ai.provider: azure-foundry`
+- set `ai.azureFoundry.baseUrl` to your OpenAI v1 endpoint
+- set `ai.azureFoundry.deployment` to the deployed model name
+- set `AZURE_FOUNDRY_API_KEY` in `.env`
 
 5. Use a dedicated bot account for whisper control.
 6. Mod that bot account in the broadcaster channel.
@@ -29,17 +37,22 @@ ollama pull qwen3:4b-instruct
 npm run auth:login
 ```
 
-8. Start llama-server (keep this terminal open):
-
-```bash
-./scripts/start-llama-server.sh
-```
-
-9. Start the bot (in a second terminal):
+8. Start the bot:
 
 ```bash
 npm run dev
 ```
+
+When `ai.provider: llama-cpp` and `ai.llamaCpp.managed: true`, the app starts `llama-server` automatically. If managed startup is disabled, run your own compatible server at the configured `ai.llamaCpp.baseUrl`.
+
+For unattended operation, prefer:
+
+```bash
+npm run build
+npm start
+```
+
+Run that under `systemd`, `launchd`, `pm2`, or a container restart policy. The bot now has an EventSub disconnect watchdog and can exit after a long Twitch/network outage, but a supervisor is what turns that into an automatic restart.
 
 ## Re-Auth After Scope Changes
 
@@ -107,6 +120,7 @@ npm run eval:scenarios -- --suite promo-scam --prompt-pack safer-control
 npm run eval:scenarios -- --suite adversarial
 npm run eval:compare -- --baseline safer-control --candidate witty-mod --model qwen3:4b-instruct
 npm run eval:scenarios -- --model qwen2.5:1.5b
+npm run eval:scenarios -- --provider azure-foundry --model your-deployment-name
 ```
 
 To find production decisions worth promoting to eval scenarios:
@@ -252,6 +266,8 @@ Use:
 ```text
 aimod status
 ```
+
+Also check the admin `Health` panel. It now shows EventSub connection state, disconnect count, last disconnect time, and whether the disconnect watchdog considers the connection stalled.
 
 ### Bot speaks to itself
 

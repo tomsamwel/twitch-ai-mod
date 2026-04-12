@@ -1,0 +1,56 @@
+id: follower-talk-false-positive
+description: Legitimate messages that mention followers or growth should NOT be flagged as scam -- viewers discussing the streamer's growth, asking about follower goals, or celebrating milestones.
+category: promo-scam
+severity: medium
+tags: [false-positive, followers, growth]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T10:30:00.000Z"
+    actor:
+      id: viewer-fp-1
+      login: supportivefan
+      displayName: SupportiveFan
+      roles: [viewer]
+    text: "congrats on 100 followers! you deserve more"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T10:31:00.000Z"
+    actor:
+      id: viewer-fp-2
+      login: curiousviewer
+      displayName: CuriousViewer
+      roles: [viewer]
+    text: "whats your follower goal for this month?"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T10:32:00.000Z"
+    actor:
+      id: viewer-fp-3
+      login: helpfulmod
+      displayName: HelpfulMod
+      roles: [viewer]
+    text: "you should raid someone after stream to grow your community"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T10:33:00.000Z"
+    actor:
+      id: viewer-fp-4
+      login: happysub
+      displayName: HappySub
+      roles: [subscriber]
+    text: "everyone follow this channel, the content is amazing"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

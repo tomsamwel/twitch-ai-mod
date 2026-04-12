@@ -23,6 +23,8 @@ export function createTestConfig(): ConfigSnapshot {
       dryRun: true,
       logLevel: "info",
       tokenValidationIntervalMinutes: 60,
+      eventSubDisconnectGraceSeconds: 600,
+      exitOnEventSubStall: true,
     },
     storage: {
       sqlitePath: "/tmp/twitch-ai-mod-test/data/test.sqlite",
@@ -33,7 +35,7 @@ export function createTestConfig(): ConfigSnapshot {
     controlPlane: {
       enabled: true,
       commandPrefix: "aimod",
-      trustedControllerLogins: ["testchannel"],
+      trustedControllers: [{ login: "testchannel", role: "admin" }],
       broadcasterAlwaysAllowed: true,
       allowedPromptPacks: ["witty-mod", "safer-control"],
       modelPresets: {
@@ -51,11 +53,13 @@ export function createTestConfig(): ConfigSnapshot {
     },
     secrets: {
       openaiApiKey: "openai-test-key",
+      azureFoundryApiKey: "azure-foundry-test-key",
     },
     twitch: {
       broadcasterLogin: "testchannel",
       botLogin: "testbot",
       requiredScopes: ["user:read:chat", "user:write:chat", "moderator:manage:banned_users"],
+      channelRules: [],
       clientId: "client-id",
       clientSecret: "client-secret",
       redirectUri: "http://localhost:3000/callback",
@@ -84,6 +88,11 @@ export function createTestConfig(): ConfigSnapshot {
       openai: {
         baseUrl: "https://api.openai.com/v1",
         model: "gpt-4o-mini",
+      },
+      azureFoundry: {
+        baseUrl: "https://example-resource.openai.azure.com/openai/v1/",
+        deployment: "gpt-4.1-mini",
+        apiStyle: "chat-completions",
       },
       queue: {
         capacity: 50,

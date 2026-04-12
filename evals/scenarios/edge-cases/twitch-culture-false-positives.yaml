@@ -1,0 +1,68 @@
+id: twitch-culture-false-positives
+description: Twitch culture messages that might look like violations but are normal -- gaming terms, emote-based humor, parasocial terms of endearment, mini-modding.
+category: edge-cases
+severity: medium
+tags: [false-positive, twitch-culture, slang]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T16:20:00.000Z"
+    actor:
+      id: culture-1
+      login: gamerdude
+      displayName: GamerDude
+      roles: [viewer]
+    text: "im coming for you monkaS"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:21:00.000Z"
+    actor:
+      id: culture-2
+      login: emoteking
+      displayName: EmoteKing
+      roles: [viewer]
+    text: "KEKW KEKW KEKW that was hilarious"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:22:00.000Z"
+    actor:
+      id: culture-3
+      login: minimod
+      displayName: MiniMod
+      roles: [viewer]
+    text: "mods ban that guy hes trolling"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:23:00.000Z"
+    actor:
+      id: culture-4
+      login: clipper
+      displayName: Clipper
+      roles: [viewer]
+    text: "CLIP THAT clip it clip it PogChamp"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:24:00.000Z"
+    actor:
+      id: culture-5
+      login: subcelebrator
+      displayName: SubCelebrator
+      roles: [subscriber]
+    text: "LETS GOOO 100 subs hype train PogChamp PogChamp"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

@@ -97,12 +97,11 @@ Replay is for real captured chat history.
 ## Scenario Eval Flow
 
 1. Load curated YAML cases from `evals/scenarios/`.
-2. Normalize legacy single-turn cases into one-step scripts.
-3. Seed scenario history into SQLite.
-4. Run the same rule/AI/action pipeline step by step.
-5. Force all actions to dry-run.
-6. Aggregate per-step blocking/advisory issues plus pass/fail into one scenario result.
-7. Print a human-readable pass/fail report.
+2. Seed scenario history into SQLite.
+3. Run the same rule/AI/action pipeline step by step.
+4. Force all actions to dry-run.
+5. Aggregate per-step blocking/advisory issues plus pass/fail into one scenario result.
+6. Print a human-readable pass/fail report.
 
 Scenario snapshots, decisions, and actions are partitioned from live data by `processing_mode` so seeded history stays useful for evaluation without leaking into live context retrieval, repeat-offender heuristics, or live-default dashboards.
 

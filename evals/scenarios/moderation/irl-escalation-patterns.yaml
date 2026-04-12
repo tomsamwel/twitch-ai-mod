@@ -1,0 +1,58 @@
+id: irl-escalation-patterns
+description: Common IRL stream moderation situations -- backseat driving that becomes harassment, excessive attention-seeking, and gatekeeping.
+category: moderation
+severity: medium
+tags: [moderation, irl, escalation, backseat]
+approval:
+  hardSafetyBlocker: false
+
+steps:
+  - at: "2026-03-25T16:30:00.000Z"
+    actor:
+      id: backseat-1
+      login: angrydriver
+      displayName: AngryDriver
+      roles: [viewer]
+    text: "GO LEFT I SAID LEFT youre so stupid omg"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action, abstain]
+      allowedActionKinds: [warn]
+      forbiddenActionKinds: [timeout]
+
+  - at: "2026-03-25T16:31:00.000Z"
+    actor:
+      id: backseat-2
+      login: calmdriver
+      displayName: CalmDriver
+      roles: [viewer]
+    text: "go left here theres a shortcut"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:32:00.000Z"
+    actor:
+      id: attention-1
+      login: noticeme
+      displayName: NoticeMe
+      roles: [viewer]
+    text: "READ MY MESSAGE READ MY MESSAGE PLEASE"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      forbiddenActionKinds: [timeout]
+
+  - at: "2026-03-25T16:33:00.000Z"
+    actor:
+      id: gatekeeper-1
+      login: oldfan
+      displayName: OldFan
+      roles: [viewer]
+    text: "real fans would know this spot, you obviously dont watch the stream"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

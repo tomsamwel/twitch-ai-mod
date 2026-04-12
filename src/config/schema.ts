@@ -11,6 +11,7 @@ export const envSchema = z.object({
   TWITCH_BROADCASTER_LOGIN: z.string().min(1).optional(),
   TWITCH_BOT_LOGIN: z.string().min(1).optional(),
   OPENAI_API_KEY: z.string().min(1).optional(),
+  AZURE_FOUNDRY_API_KEY: z.string().min(1).optional(),
   APP_LOG_LEVEL: logLevelSchema.optional(),
 });
 
@@ -23,6 +24,8 @@ export const appConfigSchema = z.object({
     dryRun: z.boolean(),
     logLevel: logLevelSchema,
     tokenValidationIntervalMinutes: z.number().int().positive(),
+    eventSubDisconnectGraceSeconds: z.number().int().positive().default(600),
+    exitOnEventSubStall: z.boolean().default(true),
   }),
   storage: z.object({
     sqlitePath: z.string().min(1),
@@ -34,12 +37,14 @@ export const appConfigSchema = z.object({
     broadcasterLogin: z.string().min(1),
     botLogin: z.string().min(1),
     requiredScopes: z.array(z.string().min(1)).min(1),
+    channelRules: z.array(z.string().min(1)).default([]),
   }),
   ai: z.object({
     enabled: z.boolean(),
     provider: z.enum(AI_PROVIDER_KINDS),
     requestDefaults: z.object({
       temperature: z.number().min(0).max(2),
+      socialTemperature: z.number().min(0).max(2).optional(),
       maxOutputTokens: z.number().int().positive(),
       timeoutMs: z.number().int().positive(),
     }),
@@ -59,6 +64,11 @@ export const appConfigSchema = z.object({
       baseUrl: z.url(),
       model: z.string().min(1),
     }),
+    azureFoundry: z.object({
+      baseUrl: z.url(),
+      deployment: z.string().min(1),
+      apiStyle: z.literal("chat-completions"),
+    }).optional(),
     llamaCpp: z.object({
       baseUrl: z.url(),
       model: z.string().min(1),
@@ -80,16 +90,26 @@ export const appConfigSchema = z.object({
     allowLiveChatMessages: z.boolean(),
     allowLiveModeration: z.boolean(),
   }),
+  social: z.object({
+    greetings: z.object({
+      enabled: z.boolean(),
+      onFirstMessage: z.boolean(),
+      onChatterJoin: z.boolean(),
+      chatterPollIntervalMs: z.number().int().positive(),
+      maxQueueDepth: z.number().int().nonnegative(),
+      rateLimitMs: z.number().int().nonnegative(),
+      greetingCooldownMs: z.number().int().positive().default(28_800_000),
+    }),
+  }).optional(),
 });
 
 export const controlPlaneSchema = z.object({
   enabled: z.boolean(),
   commandPrefix: z.string().min(1),
-  trustedControllerLogins: z.array(z.string().min(1)).default([]),
   trustedControllers: z.array(z.object({
     login: z.string().min(1),
     role: z.enum(["admin", "mod"]),
-  })).optional(),
+  })).default([]),
   broadcasterAlwaysAllowed: z.boolean(),
   allowedPromptPacks: z.array(z.string().min(1)).min(1),
   modelPresets: z.record(

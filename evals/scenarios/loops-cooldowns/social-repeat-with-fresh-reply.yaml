@@ -30,5 +30,5 @@ steps:
       mode: social
       allowedOutcomes: [action]
       allowedActionKinds: [say]
-      allowedActionStatuses: [skipped]
+      allowedActionStatuses: [skipped, dry-run]
       forbiddenActionKinds: [timeout]

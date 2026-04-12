@@ -1,0 +1,64 @@
+id: follower-selling-url-evasion
+description: Scam bots that disguise URLs with spaced domains, bracket notation, or link shorteners.
+category: promo-scam
+severity: high
+tags: [scam, url-evasion, followers, first-message]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T10:40:00.000Z"
+    actor:
+      id: scam-url-1
+      login: bigfollows1
+      displayName: BigFollows1
+      roles: [viewer]
+    text: "Want to become famous? Buy followers and viewers on bigfollows .com"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:41:00.000Z"
+    actor:
+      id: scam-url-2
+      login: viewzshop
+      displayName: ViewzShop
+      roles: [viewer]
+    text: "best viewers and followers on stvvviews . c o m"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:42:00.000Z"
+    actor:
+      id: scam-url-3
+      login: streamrise
+      displayName: StreamRise
+      roles: [viewer]
+    text: "promo promo!! cheap followers viewers subs all at streamrise .gg hmu"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:43:00.000Z"
+    actor:
+      id: scam-url-4
+      login: growthsite
+      displayName: GrowthSite
+      roles: [viewer]
+    text: "Buy primes, subs, followers on twitch-growth . store (remove spaces)"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]

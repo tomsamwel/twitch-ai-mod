@@ -22,6 +22,7 @@ function isRepeatOffender(deps: PriorityClassifierDeps, chatterId: string, nowMs
 
 export function createPriorityClassifier(deps: PriorityClassifierDeps): (item: AiReviewWorkItem) => Priority {
   return (item: AiReviewWorkItem): Priority => {
+    if (item.isPollGreeting) return "low";
     if (item.aiMode.mode === "social") return "normal";
 
     if (isRepeatOffender(deps, item.message.chatterId, item.nowMs)) return "high";

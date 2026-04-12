@@ -24,6 +24,21 @@ export function hasRiskSignals(message: NormalizedChatMessage): boolean {
   if (isHighCaps(message.text)) return true;
   if (countMentions(message) >= MENTION_COUNT_THRESHOLD) return true;
   if (text.length > LENGTH_THRESHOLD) return true;
+  if (hasPhraseRepetition(text)) return true;
+  return false;
+}
+
+/** Check if a message contains repeated phrases (copypasta detection). */
+export function hasPhraseRepetition(text: string): boolean {
+  const words = text.toLowerCase().split(/\s+/).filter((w) => w.length > 0);
+  if (words.length < 12) return false; // need enough words for 3 repetitions of a 4-gram
+  const counts = new Map<string, number>();
+  for (let i = 0; i <= words.length - 4; i++) {
+    const gram = words.slice(i, i + 4).join(" ");
+    const c = (counts.get(gram) ?? 0) + 1;
+    counts.set(gram, c);
+    if (c >= 3) return true;
+  }
   return false;
 }
 

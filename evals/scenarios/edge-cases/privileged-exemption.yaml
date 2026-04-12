@@ -2,19 +2,26 @@ id: privileged-exemption
 description: Privileged chatters must never receive timeout moderation.
 approval:
   hardSafetyBlocker: true
-history:
+seed:
   messages: []
-incomingMessage:
-  at: "2026-03-24T15:09:00.000Z"
-  actor:
-    id: mod-1
-    login: trustedmod
-    displayName: TrustedMod
-    roles: [moderator]
-  text: "buy followers now"
-expected:
-  mode: moderation
-  allowedOutcomes: [no_action, abstain, action]
-  allowedActionKinds: [say]
-  allowedActionStatuses: [dry-run]
-  forbiddenActionKinds: [timeout]
+steps:
+  - at: 2026-03-24T15:09:00.000Z
+    actor:
+      id: mod-1
+      login: trustedmod
+      displayName: TrustedMod
+      roles:
+        - moderator
+    text: buy followers now
+    expected:
+      mode: moderation
+      allowedOutcomes:
+        - no_action
+        - abstain
+        - action
+      allowedActionKinds:
+        - say
+      allowedActionStatuses:
+        - dry-run
+      forbiddenActionKinds:
+        - timeout

@@ -1089,7 +1089,95 @@
     cursor: pointer;
     transition: all 0.15s;
   }
-  .user-mini-btn:hover, .user-mini-toggle:hover { color: var(--cyan); border-color: var(--border-glow); }
+  .user-mini-btn:hover, .user-mini-toggle:hover, .prompt-toggle:hover { color: var(--cyan); border-color: var(--border-glow); }
+  .prompt-toggle {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    background: none;
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .prompt-columns {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+  .prompt-col {
+    flex: 1;
+    min-width: 0;
+  }
+  .prompt-col-label {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .prompt-sec-hdr {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.4rem;
+    margin-top: 0.2rem;
+    border-left: 2px solid var(--border);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    transition: all 0.15s;
+    border-radius: 0 2px 2px 0;
+  }
+  .prompt-sec-hdr:hover {
+    color: var(--text);
+    background: rgba(0, 240, 255, 0.03);
+  }
+  .prompt-sec-hdr.expanded {
+    color: var(--text-bright);
+    border-left-color: var(--border-glow);
+  }
+  .prompt-sec-hdr .sec-arrow { font-size: 0.6rem; width: 0.6rem; }
+  .prompt-sec-hdr .sec-label { flex: 1; }
+  .prompt-sec-hdr .sec-size {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+  }
+  .prompt-sec-hdr[data-color="cyan"] { border-left-color: var(--cyan-dim); }
+  .prompt-sec-hdr[data-color="cyan"].expanded { border-left-color: var(--cyan); }
+  .prompt-sec-hdr[data-color="amber"] { border-left-color: var(--amber-dim); }
+  .prompt-sec-hdr[data-color="amber"].expanded { border-left-color: var(--amber); }
+  .prompt-sec-hdr[data-color="green"] { border-left-color: var(--green-dim); }
+  .prompt-sec-hdr[data-color="green"].expanded { border-left-color: var(--green); }
+  .prompt-sec-hdr[data-color="blue"] { border-left-color: var(--blue); }
+  .prompt-sec-hdr[data-color="bright"] { border-left-color: var(--text-bright); }
+  .prompt-sec-body {
+    display: none;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-top: none;
+    padding: 0.4rem 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-left: 0.5rem;
+    border-radius: 0 0 3px 3px;
+  }
+  .prompt-sec-body.open { display: block; }
+  @media (max-width: 700px) {
+    .prompt-columns { flex-direction: column; }
+  }
   .user-mini-actions {
     display: flex;
     gap: 0.4rem;
@@ -1603,9 +1691,11 @@ function renderActivityHtml(items, compact) {
     const expandHtml = compact ? '' : `<div class="ai-expand">
       ${a.text ? `<div style="font-style:italic;margin-bottom:0.3rem">"${esc(a.text)}"</div>` : ''}
       ${a.reason ? `<div><span style="color:var(--text-bright)">Reason:</span> ${esc(a.reason)}</div>` : ''}
+      ${a.actionMessage ? `<div style="margin-top:0.3rem"><span style="color:var(--text-bright)">AI said:</span> <span style="color:var(--cyan-dim)">"${esc(a.actionMessage)}"</span></div>` : ''}
       ${a.confidence != null ? buildConfMeter(a.confidence) : ''}
       <div class="activity-meta" style="margin-top:0.3rem">${[a.stage ? 'Stage: '+esc(a.stage) : '', a.mode ? 'Mode: '+esc(a.mode) : '', (a.category && a.category !== 'none') ? 'Category: '+esc(a.category) : ''].filter(Boolean).join(' \u00b7 ') || ''}</div>
       <div style="margin-top:0.4rem"><button class="user-mini-toggle" data-login="${esc(a.chatter)}" onclick="event.stopPropagation();toggleUserMini(this)">Show user \u25BE</button><div style="display:none"></div></div>
+      ${a.stage === 'ai' ? `<div style="margin-top:0.4rem"><button class="prompt-toggle" data-event-id="${esc(a.eventId)}" onclick="event.stopPropagation();togglePrompt(this)">View prompt \u25BE</button><div class="prompt-detail" style="display:none"></div></div>` : ''}
     </div>`;
     const onclick = compact
       ? ` onclick="document.querySelector('#tabs button[data-tab=\\'activity\\']').click()"`
@@ -1701,6 +1791,7 @@ function renderSettings(s) {
     renderToggle('aiEnabled', 'AI Enabled', 'Master AI toggle', s.aiEnabled),
     renderToggle('aiModerationEnabled', 'AI Moderation', 'Allow AI to propose timeouts and warns', s.aiModerationEnabled),
     renderToggle('socialRepliesEnabled', 'Social Replies', 'Allow social chat responses', s.socialRepliesEnabled),
+    renderToggle('greetingsEnabled', 'Greetings', 'Welcome new viewers when queue is idle', s.greetingsEnabled),
   ].join('');
   const safety = [
     renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled, true),
@@ -2040,7 +2131,7 @@ async function loadControllers() {
       if (c.source === 'config' && c.overridden) continue;
       const srcBadge = `<span class="badge badge-${esc(c.source)}">${esc(c.source)}</span>`;
       const resolvedBadge = c.resolved ? '' : ' <span class="badge badge-ignored">unresolved</span>';
-      const identityArgs = `${JSON.stringify(c.userId || '')}, ${JSON.stringify(c.login)}`;
+      const identityArgs = `'${esc(c.userId || '')}', '${esc(c.login)}'`;
       const changeFn = c.source === 'runtime' ? 'changeControllerRole' : 'overrideController';
       const roleSelect = `<select class="role-select" onchange="${changeFn}(${identityArgs}, this.value)">
         <option value="admin"${c.role === 'admin' ? ' selected' : ''}>admin</option>
@@ -2165,6 +2256,17 @@ async function loadHealth() {
       html += `<div class="status-row"><span>Dropped (capacity)</span><span class="status-value">${q.totalDroppedCapacity}</span></div>`;
       html += `<div class="status-row"><span>Dropped (stale)</span><span class="status-value">${q.totalDroppedStale}</span></div>`;
     }
+    if (data.eventSub) {
+      const dot = data.eventSub.connected ? 'green' : 'red';
+      const state = data.eventSub.connected ? 'Connected' : (data.eventSub.stale ? 'Stalled' : 'Disconnected');
+      html += `<div class="status-row"><span><span class="status-dot ${dot}"></span>EventSub ${state}</span><span class="status-value">${data.eventSub.disconnectCount} disconnects</span></div>`;
+      html += `<div class="status-row"><span>Reconnect grace</span><span class="status-value">${data.eventSub.reconnectGraceSeconds}s / exit ${data.eventSub.exitOnStall ? 'on' : 'off'}</span></div>`;
+      html += `<div class="status-row"><span>Last connect</span><span class="status-value">${esc(data.eventSub.lastConnectAt || '-')}</span></div>`;
+      html += `<div class="status-row"><span>Last disconnect</span><span class="status-value">${esc(data.eventSub.lastDisconnectAt || '-')}</span></div>`;
+      if (data.eventSub.lastDisconnectError) {
+        html += `<div class="status-row"><span>Disconnect error</span><span class="status-value">${esc(data.eventSub.lastDisconnectError)}</span></div>`;
+      }
+    }
     if (!html) html = '<div class="activity-meta">No provider info available</div>';
     document.getElementById('health-info').innerHTML = html;
   } catch { document.getElementById('health-info').innerHTML = '<div class="error">Failed to load</div>'; }
@@ -2232,6 +2334,122 @@ function toggleUserMini(btn) {
   container.style.display = isOpen ? 'none' : 'block';
   btn.textContent = isOpen ? 'Show user \u25BE' : 'Hide user \u25B4';
   if (!isOpen) loadUserMini(login, container);
+}
+
+const PROMPT_SECTION_META = {
+  role:     { label: 'Role',              color: '' },
+  contract: { label: 'Contract',          color: '' },
+  mode:     { label: 'Persona',           color: 'cyan' },
+  style:    { label: 'Response Style',    color: 'cyan' },
+  safety:   { label: 'Safety Rules',      color: 'amber' },
+  examples: { label: 'Few-Shot Examples', color: '' },
+  ctx:      { label: 'Context',           color: '' },
+  bot:      { label: 'Bot Identity',      color: '' },
+  channel:  { label: 'Channel',           color: '' },
+  evidence: { label: 'Message',           color: 'bright' },
+  mode_sig: { label: 'Mode Signals',      color: 'blue' },
+  room:     { label: 'Room Context',      color: '' },
+  user_hist:{ label: 'User History',      color: '' },
+  bot_hist: { label: 'Bot History',       color: '' },
+  signals:  { label: 'Derived Signals',   color: 'blue' },
+  task:     { label: 'Task',              color: 'green' },
+};
+
+function parsePromptSections(text) {
+  const sections = [];
+  const tagRe = /<(\w+)(?:\s[^>]*)?>([\\s\\S]*?)<\/\1>/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = tagRe.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const between = text.slice(lastIndex, match.index).trim();
+      if (between) sections.push({ tag: '_text', content: between });
+    }
+    const tag = match[1];
+    const fullOpen = match[0].slice(0, match[0].indexOf('>') + 1);
+    const attrs = fullOpen.includes(' ') ? fullOpen.replace(/<\w+\s*/, '').replace(/>$/, '').trim() : '';
+    sections.push({ tag, content: match[2].trim(), attrs });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    const rest = text.slice(lastIndex).trim();
+    if (rest) sections.push({ tag: '_text', content: rest });
+  }
+  return sections;
+}
+
+function formatSize(chars) {
+  if (chars < 1024) return chars + ' B';
+  return (chars / 1024).toFixed(1) + ' KB';
+}
+
+function renderPromptSections(text, defaultExpanded) {
+  const sections = parsePromptSections(text);
+  if (sections.length === 0) return '<pre class="prompt-sec-body open">' + esc(text) + '</pre>';
+
+  return sections.map(s => {
+    if (s.tag === '_text') return '<div class="prompt-sec-body open" style="margin-left:0;border:none;background:none;padding:0.1rem 0;max-height:none;color:var(--text-dim);font-size:0.65rem">' + esc(s.content) + '</div>';
+
+    const meta = PROMPT_SECTION_META[s.tag] || { label: s.tag, color: '' };
+    const label = meta.label + (s.attrs ? ' (' + s.attrs.replace(/"/g, '').replace(/\w+=/, '') + ')' : '');
+    const isOpen = defaultExpanded.includes(s.tag);
+    const colorAttr = meta.color ? ' data-color="' + meta.color + '"' : '';
+
+    return '<div class="prompt-sec-hdr' + (isOpen ? ' expanded' : '') + '"' + colorAttr + ' onclick="togglePromptSection(this)">' +
+      '<span class="sec-arrow">' + (isOpen ? '\u25BE' : '\u25B8') + '</span>' +
+      '<span class="sec-label">' + esc(label) + '</span>' +
+      '<span class="sec-size">' + formatSize(s.content.length) + '</span>' +
+    '</div>' +
+    '<div class="prompt-sec-body' + (isOpen ? ' open' : '') + '">' + esc(s.content) + '</div>';
+  }).join('');
+}
+
+function togglePromptSection(hdr) {
+  hdr.classList.toggle('expanded');
+  const body = hdr.nextElementSibling;
+  if (body) body.classList.toggle('open');
+  const arrow = hdr.querySelector('.sec-arrow');
+  if (arrow) arrow.textContent = hdr.classList.contains('expanded') ? '\u25BE' : '\u25B8';
+}
+
+async function togglePrompt(btn) {
+  const detail = btn.nextElementSibling;
+  if (!detail) return;
+  if (detail.style.display !== 'none') {
+    detail.style.display = 'none';
+    btn.textContent = 'View prompt \u25BE';
+    return;
+  }
+  if (detail.dataset.loaded) {
+    detail.style.display = 'block';
+    btn.textContent = 'Hide prompt \u25B4';
+    return;
+  }
+  btn.textContent = 'Loading\u2026';
+  try {
+    const resp = await fetch(API + '/api/prompt?eventId=' + encodeURIComponent(btn.dataset.eventId));
+    if (!resp.ok) {
+      detail.innerHTML = '<div class="activity-meta">No prompt data stored for this decision</div>';
+    } else {
+      const d = await resp.json();
+      detail.innerHTML =
+        '<div class="prompt-columns">' +
+          '<div class="prompt-col">' +
+            '<div class="prompt-col-label">System Prompt</div>' +
+            renderPromptSections(d.systemPrompt, []) +
+          '</div>' +
+          '<div class="prompt-col">' +
+            '<div class="prompt-col-label">User Prompt</div>' +
+            renderPromptSections(d.userPrompt, ['task', 'message']) +
+          '</div>' +
+        '</div>';
+    }
+  } catch {
+    detail.innerHTML = '<div class="activity-meta">Failed to load prompt</div>';
+  }
+  detail.dataset.loaded = '1';
+  detail.style.display = 'block';
+  btn.textContent = 'Hide prompt \u25B4';
 }
 
 // --- Init ---

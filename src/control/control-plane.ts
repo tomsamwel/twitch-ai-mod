@@ -17,6 +17,9 @@ import type {
 } from "../types.js";
 import type { TwurpleTwitchGateway } from "../twitch/twitch-gateway.js";
 
+/** Twitch whispers are capped at 500 chars; leave headroom for framing. */
+const WHISPER_MAX_CHARS = 450;
+
 function formatTimeAgo(isoTimestamp: string): string {
   const seconds = Math.floor((Date.now() - new Date(isoTimestamp).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s`;
@@ -28,7 +31,7 @@ export class WhisperControlPlane {
   private readonly controllersByUserId: Map<string, TrustedController>;
 
   private static readonly FULL_ACCESS: Set<ControlCommand["kind"]> = new Set([
-    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-dry-run",
+    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-greetings", "set-dry-run",
     "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
     "recent", "stats", "exempt", "block", "purge",
   ]);
@@ -233,6 +236,13 @@ export class WhisperControlPlane {
           command.enabled,
           actor,
           `social ${command.enabled ? "on" : "off"}`,
+        );
+      case "set-greetings":
+        return this.applyOverride(
+          "greetingsEnabled",
+          command.enabled,
+          actor,
+          `greetings ${command.enabled ? "on" : "off"}`,
         );
       case "set-dry-run":
         return this.applyOverride(
@@ -442,7 +452,7 @@ export class WhisperControlPlane {
     for (const row of rows) {
       const ago = formatTimeAgo(row.createdAt as string);
       const entry = `@${row.chatter as string} ${row.outcome as string}${row.category ? `(${row.category as string})` : ""} ${ago}`;
-      if (totalLen + entry.length + 3 > 450) break;
+      if (totalLen + entry.length + 3 > WHISPER_MAX_CHARS) break;
       parts.push(entry);
       totalLen += entry.length + 3;
     }

@@ -4,8 +4,9 @@ import { EventSubWsListener } from "@twurple/eventsub-ws";
 import type { RefreshingAuthProvider } from "@twurple/auth";
 import type { Logger } from "pino";
 
-import type { ConfigSnapshot, TwitchGatewayContext } from "../types.js";
+import type { ConfigSnapshot, EventSubConnectionStatus, TwitchGatewayContext } from "../types.js";
 import { validateTwitchAccessToken } from "./token-validation.js";
+import { EventSubConnectionMonitor } from "./eventsub-connection-monitor.js";
 
 export interface SentChatMessage {
   id: string;
@@ -14,10 +15,19 @@ export interface SentChatMessage {
   dropReasonMessage?: string;
 }
 
+export interface TwitchGatewayFatalFailure {
+  kind: "eventsub-stalled" | "token-validation-failed";
+  error?: Error;
+  connectionStatus: EventSubConnectionStatus;
+}
+
 export class TwurpleTwitchGateway {
   private readonly listener: EventSubWsListener;
+  private readonly connectionMonitor: EventSubConnectionMonitor;
   private validationInterval: NodeJS.Timeout | null = null;
   private started = false;
+  private fatalFailureNotified = false;
+  private fatalFailureHandler: ((failure: TwitchGatewayFatalFailure) => void | Promise<void>) | null = null;
 
   public constructor(
     private readonly config: ConfigSnapshot,
@@ -29,10 +39,43 @@ export class TwurpleTwitchGateway {
     this.listener = new EventSubWsListener({
       apiClient: this.apiClient,
     });
+    this.connectionMonitor = new EventSubConnectionMonitor(
+      this.config.runtime.eventSubDisconnectGraceSeconds,
+      this.config.runtime.exitOnEventSubStall,
+      (status) => {
+        if (!status.exitOnStall) {
+          this.logger.error(
+            { connectionStatus: status },
+            "EventSub WebSocket remained disconnected past the grace period",
+          );
+          return;
+        }
+
+        this.logger.fatal(
+          { connectionStatus: status },
+          "EventSub WebSocket remained disconnected past the grace period; requesting shutdown",
+        );
+        this.notifyFatalFailure({
+          kind: "eventsub-stalled",
+          connectionStatus: status,
+          ...(status.lastDisconnectError ? { error: new Error(status.lastDisconnectError) } : {}),
+        });
+      },
+    );
   }
 
   public getContext(): TwitchGatewayContext {
     return this.context;
+  }
+
+  public setFatalFailureHandler(
+    handler: (failure: TwitchGatewayFatalFailure) => void | Promise<void>,
+  ): void {
+    this.fatalFailureHandler = handler;
+  }
+
+  public getConnectionStatus(): EventSubConnectionStatus {
+    return this.connectionMonitor.getStatus();
   }
 
   public async start(
@@ -44,11 +87,27 @@ export class TwurpleTwitchGateway {
     }
 
     this.listener.onUserSocketConnect((userId) => {
-      this.logger.info({ userId }, "EventSub WebSocket connected");
+      const { reconnectedAfterMs } = this.connectionMonitor.markConnected();
+      this.logger.info(
+        {
+          userId,
+          ...(reconnectedAfterMs !== null ? { reconnectedAfterMs } : {}),
+        },
+        "EventSub WebSocket connected",
+      );
     });
 
     this.listener.onUserSocketDisconnect((userId, error) => {
-      this.logger.warn({ userId, err: error }, "EventSub WebSocket disconnected");
+      this.connectionMonitor.markDisconnected(error);
+      this.logger.warn(
+        {
+          userId,
+          err: error,
+          reconnectGraceSeconds: this.config.runtime.eventSubDisconnectGraceSeconds,
+          exitOnStall: this.config.runtime.exitOnEventSubStall,
+        },
+        "EventSub WebSocket disconnected",
+      );
     });
 
     this.listener.onSubscriptionCreateFailure((subscription, error) => {
@@ -104,6 +163,8 @@ export class TwurpleTwitchGateway {
   }
 
   public async stop(): Promise<void> {
+    this.connectionMonitor.stop();
+
     if (this.validationInterval) {
       clearInterval(this.validationInterval);
       this.validationInterval = null;
@@ -143,6 +204,13 @@ export class TwurpleTwitchGateway {
         ...(replyParentMessageId ? { replyParentMessageId } : {}),
       });
 
+      if (!result.isSent) {
+        this.logger.warn(
+          { dropReasonCode: result.dropReasonCode, dropReasonMessage: result.dropReasonMessage },
+          "Twitch API accepted chat message but did not send it",
+        );
+      }
+
       return {
         id: result.id,
         isSent: result.isSent,
@@ -176,15 +244,26 @@ export class TwurpleTwitchGateway {
     const intervalMs = this.config.runtime.tokenValidationIntervalMinutes * 60 * 1000;
     this.validationInterval = setInterval(() => {
       void this.validateCurrentToken().catch((error) => {
-        this.logger.fatal({ err: error }, "Twitch token validation failed; stopping bot");
+        this.logger.fatal({ err: error }, "Twitch token validation failed; requesting shutdown");
         if (this.validationInterval) {
           clearInterval(this.validationInterval);
           this.validationInterval = null;
         }
-        void this.stop().finally(() => {
-          process.exitCode = 1;
+        this.notifyFatalFailure({
+          kind: "token-validation-failed",
+          error: error instanceof Error ? error : new Error(String(error)),
+          connectionStatus: this.connectionMonitor.getStatus(),
         });
       });
     }, intervalMs);
+  }
+
+  private notifyFatalFailure(failure: TwitchGatewayFatalFailure): void {
+    if (this.fatalFailureNotified) {
+      return;
+    }
+
+    this.fatalFailureNotified = true;
+    void this.fatalFailureHandler?.(failure);
   }
 }

@@ -54,7 +54,6 @@ Recommended during active tuning:
 
 ## Later
 
-- Azure/OpenAI-compatible adapters
 - broader moderation escalation policies
 - richer but still low-volume social behavior
 - stronger regression reporting around prompt packs and models

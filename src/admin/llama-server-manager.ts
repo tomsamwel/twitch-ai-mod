@@ -68,7 +68,7 @@ export class LlamaServerManager {
     this.logger = options.logger;
     this.modelTag = options.modelTag;
     this.port = options.port;
-    this.ctxSize = options.ctxSize ?? 4096;
+    this.ctxSize = options.ctxSize ?? 8192;
     this.checkpointEvery = options.checkpointEvery ?? 256;
     this.pidFilePath = path.join(options.dataDir, ".llama-server.pid");
   }
@@ -88,7 +88,7 @@ export class LlamaServerManager {
         "-c", String(this.ctxSize),
         "-ngl", "999",
         "--checkpoint-every-n-tokens", String(this.checkpointEvery),
-        "--flash-attn",
+        "--flash-attn", "on",
         "--cont-batching",
         "--mlock",
         "--parallel", "2",
@@ -102,13 +102,20 @@ export class LlamaServerManager {
       }
     });
 
+    const stderrLines: string[] = [];
     this.child.stderr?.on("data", (data: Buffer) => {
       for (const line of data.toString().trim().split("\n")) {
-        if (line) this.logger.debug({ source: "llama-server" }, line);
+        if (line) {
+          stderrLines.push(line);
+          this.logger.debug({ source: "llama-server" }, line);
+        }
       }
     });
 
     this.child.on("exit", (code, signal) => {
+      if (code !== 0 && stderrLines.length > 0) {
+        this.logger.warn({ code, signal, source: "llama-server" }, stderrLines.slice(-10).join("\n"));
+      }
       this.logger.warn({ code, signal }, "llama-server exited");
       this.child = null;
       this.startedAt = null;

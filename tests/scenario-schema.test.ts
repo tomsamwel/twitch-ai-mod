@@ -3,27 +3,29 @@ import test from "node:test";
 
 import { normalizeScenarioFile, scenarioInputSchema } from "../src/eval/scenario-schema.js";
 
-test("normalizeScenarioFile upgrades legacy single-turn scenarios into one-step scripts", () => {
+test("normalizeScenarioFile parses scripted scenarios", () => {
   const normalized = normalizeScenarioFile(
     scenarioInputSchema.parse({
-      id: "legacy-scenario",
-      description: "legacy format",
-      history: {
+      id: "scripted-scenario",
+      description: "scripted format",
+      seed: {
         messages: [],
         botInteractions: [],
       },
-      incomingMessage: {
-        at: "2026-03-25T10:00:00.000Z",
-        actor: {
-          id: "viewer-1",
-          login: "viewerone",
-          roles: ["viewer"],
+      steps: [
+        {
+          at: "2026-03-25T10:00:00.000Z",
+          actor: {
+            id: "viewer-1",
+            login: "viewerone",
+            roles: ["viewer"],
+          },
+          text: "hello there",
+          expected: {
+            allowedOutcomes: ["abstain"],
+          },
         },
-        text: "hello there",
-      },
-      expected: {
-        allowedOutcomes: ["abstain"],
-      },
+      ],
     }),
   );
 

@@ -3,13 +3,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Logger } from "pino";
-import { z } from "zod";
-
 import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import type { BotDatabase } from "../storage/database.js";
 import type { LlamaServerManager } from "./llama-server-manager.js";
 import type { AiReviewQueueStats } from "../runtime/ai-review-queue.js";
 import type {
+  EventSubConnectionStatus,
   RuntimeControllerIdentifier,
   RuntimeControllerRecord,
   RuntimeOverrideKey,
@@ -21,6 +20,7 @@ const VALID_OVERRIDE_KEYS: readonly RuntimeOverrideKey[] = [
   "aiEnabled",
   "aiModerationEnabled",
   "socialRepliesEnabled",
+  "greetingsEnabled",
   "dryRun",
   "liveModerationEnabled",
   "promptPack",
@@ -36,6 +36,10 @@ interface AiReviewQueueLike {
   getStats(): AiReviewQueueStats;
 }
 
+interface TwitchGatewayHealthLike {
+  getConnectionStatus(): EventSubConnectionStatus;
+}
+
 type ConfigController = Pick<TrustedController, "login" | "role" | "userId" | "displayName">;
 
 interface AdminServerOptions {
@@ -47,6 +51,7 @@ interface AdminServerOptions {
   aiReviewQueue?: AiReviewQueueLike | undefined;
   configControllers?: ConfigController[] | undefined;
   userResolver: TwitchUserResolver;
+  twitchGateway: TwitchGatewayHealthLike;
 }
 
 function formatTerminalLink(url: string, label = url): string {
@@ -165,6 +170,9 @@ export class AdminServer {
     if (req.method === "GET" && url.pathname === "/api/chatters") {
       return this.handleGetChatters(url, res);
     }
+    if (req.method === "GET" && url.pathname === "/api/prompt") {
+      return this.handleGetPrompt(url, res);
+    }
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
   }
@@ -201,9 +209,19 @@ export class AdminServer {
     const availableModels = this.options.runtimeSettings.listAvailableModelPresets();
     const llamaServer = this.options.llamaServerManager?.getStatus() ?? null;
     const aiQueue = this.options.aiReviewQueue?.getStats() ?? null;
+    const eventSub = this.options.twitchGateway.getConnectionStatus();
     const recentActivity = this.getRecentActivity();
 
-    const body = { settings, overrides, availablePacks, availableModels, llamaServer, aiQueue, recentActivity };
+    const body = {
+      settings,
+      overrides,
+      availablePacks,
+      availableModels,
+      llamaServer,
+      aiQueue,
+      eventSub,
+      recentActivity,
+    };
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
   }
@@ -340,7 +358,8 @@ export class AdminServer {
   private handleGetHealth(res: http.ServerResponse): void {
     const llamaServer = this.options.llamaServerManager?.getStatus() ?? null;
     const aiQueue = this.options.aiReviewQueue?.getStats() ?? null;
-    this.jsonResponse(res, 200, { llamaServer, aiQueue });
+    const eventSub = this.options.twitchGateway.getConnectionStatus();
+    this.jsonResponse(res, 200, { llamaServer, aiQueue, eventSub });
   }
 
   private handleGetControllers(res: http.ServerResponse): void {
@@ -429,6 +448,20 @@ export class AdminServer {
     this.jsonResponse(res, 200, { ok: true, ...result });
   }
 
+  private handleGetPrompt(url: URL, res: http.ServerResponse): void {
+    const eventId = url.searchParams.get("eventId");
+    if (!eventId) {
+      this.jsonResponse(res, 400, { error: "eventId is required" });
+      return;
+    }
+    const prompt = this.options.database.getDecisionPrompt(eventId);
+    if (!prompt) {
+      this.jsonResponse(res, 404, { error: "No prompt data for this event" });
+      return;
+    }
+    this.jsonResponse(res, 200, prompt);
+  }
+
   private handleGetChatters(url: URL, res: http.ServerResponse): void {
     const prefix = url.searchParams.get("prefix") ?? "";
     if (prefix.length < 1) {
@@ -451,25 +484,6 @@ export class AdminServer {
     }
 
     this.jsonResponse(res, 400, { error: "Invalid JSON" });
-    return null;
-  }
-
-  private async readValidatedJsonBody<S extends z.ZodTypeAny>(
-    req: http.IncomingMessage,
-    res: http.ServerResponse,
-    schema: S,
-  ): Promise<z.infer<S> | null> {
-    const parsed = await this.readJsonBody<unknown>(req, res);
-    if (parsed === null) {
-      return null;
-    }
-
-    const validated = schema.safeParse(parsed);
-    if (validated.success) {
-      return validated.data;
-    }
-
-    this.jsonResponse(res, 400, { error: validated.error.issues[0]?.message ?? "Invalid request body" });
     return null;
   }
 
@@ -497,12 +511,25 @@ export class AdminServer {
   }
 }
 
+const MAX_REQUEST_BODY_BYTES = 1_048_576; // 1 MB
+
 function readRequestBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.once("end", () => resolve(Buffer.concat(chunks).toString()));
-    req.once("error", reject);
+    let totalBytes = 0;
+    let settled = false;
+    req.on("data", (chunk: Buffer) => {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_REQUEST_BODY_BYTES && !settled) {
+        settled = true;
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.once("end", () => { if (!settled) resolve(Buffer.concat(chunks).toString()); });
+    req.once("error", (err) => { if (!settled) { settled = true; reject(err); } });
   });
 }
 

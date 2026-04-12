@@ -57,7 +57,8 @@ test("runtime blocked term triggers timeout", () => {
   const message = normalizeChatMessage(event);
   const decision = engine.evaluate(message);
   assert.equal(decision.outcome, "action");
-  assert.match(decision.reason, /raid slur phrase/u);
+  assert.equal(decision.reason, "blocked term");
+  assert.equal((decision.metadata as Record<string, unknown>)?.blockedTerm, "raid slur phrase");
 });
 
 test("runtime blocked terms do not affect clean messages", () => {

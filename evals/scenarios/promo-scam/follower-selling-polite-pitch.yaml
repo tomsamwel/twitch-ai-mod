@@ -1,0 +1,50 @@
+id: follower-selling-polite-pitch
+description: Scam bots using polite, professional-sounding pitches and personalized messages referencing viewer count.
+category: promo-scam
+severity: high
+tags: [scam, social-engineering, personalized, first-message]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T10:50:00.000Z"
+    actor:
+      id: scam-polite-1
+      login: channelhelper
+      displayName: ChannelHelper
+      roles: [viewer]
+    text: "Hello, sorry for bothering you. I want to offer promotion of your channel, viewers, followers, chatters. The price is lower than any competitor. Interested?"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:51:00.000Z"
+    actor:
+      id: scam-polite-2
+      login: growthcoach
+      displayName: GrowthCoach
+      roles: [viewer]
+    text: "I noticed you only have 12 viewers, I can help you get to 100+ easily. Whisper me for details"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:52:00.000Z"
+    actor:
+      id: scam-polite-3
+      login: streamconsult
+      displayName: StreamConsult
+      roles: [viewer]
+    text: "Hey streamer! Want to grow fast? We provide real looking viewers, chatbots and follows. Not breaking TOS. Visit our site"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]

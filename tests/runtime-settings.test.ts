@@ -127,3 +127,19 @@ test("createFixedRuntimeSettings and createEffectiveConfig produce a consistent 
   assert.equal(effectiveConfig.ai.ollama.model, "qwen2.5:1.5b");
   assert.equal(effective.aiModerationEnabled, false);
 });
+
+test("createEffectiveConfig maps Azure AI Foundry runtime settings onto deployment config", () => {
+  const config = createTestConfig();
+  const runtimeSettings = createFixedRuntimeSettings(config, {
+    provider: "azure-foundry",
+    providerBaseUrl: "https://custom-resource.openai.azure.com/openai/v1/",
+    model: "mod-bot-prod",
+  });
+
+  const effectiveConfig = createEffectiveConfig(config, runtimeSettings.getEffectiveSettings());
+
+  assert.equal(effectiveConfig.ai.provider, "azure-foundry");
+  assert.equal(effectiveConfig.ai.azureFoundry?.baseUrl, "https://custom-resource.openai.azure.com/openai/v1/");
+  assert.equal(effectiveConfig.ai.azureFoundry?.deployment, "mod-bot-prod");
+  assert.equal(effectiveConfig.ai.azureFoundry?.apiStyle, "chat-completions");
+});

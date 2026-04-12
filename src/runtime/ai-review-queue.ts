@@ -1,6 +1,6 @@
 import type { Logger } from "pino";
 
-export type Priority = "high" | "normal";
+export type Priority = "high" | "normal" | "low";
 
 export interface AiReviewQueueConfig {
   capacity: number;
@@ -12,10 +12,12 @@ export interface AiReviewQueueConfig {
 export interface AiReviewQueueStats {
   highDepth: number;
   normalDepth: number;
+  lowDepth: number;
   depth: number;
   processing: number;
   totalEnqueued: number;
   totalProcessed: number;
+  totalErrors: number;
   totalDroppedCapacity: number;
   totalDroppedStale: number;
   totalCoalesced: number;
@@ -47,21 +49,26 @@ interface QueueEntry<T> {
 /**
  * Bounded two-tier priority queue with concurrency control and per-tier staleness.
  *
- * High-priority items (moderation) always drain before normal-priority items (social).
- * When at capacity, normal items are evicted first. Staleness thresholds are per-tier:
- * moderation items can be configured to never go stale (threshold 0).
+ * Three-tier priority queue: high (moderation) > normal (social + first-message greetings) > low (poll greetings).
+ * When at capacity, low items are evicted first, then normal, then high.
+ * Staleness thresholds are per-tier: moderation items can be configured to never go stale (threshold 0).
  *
  * Generic over `T` so it can be tested with simple data types.
  */
 export class AiReviewQueue<T> {
   private readonly highItems: QueueEntry<T>[] = [];
   private readonly normalItems: QueueEntry<T>[] = [];
+  private readonly lowItems: QueueEntry<T>[] = [];
+  private get totalDepth(): number {
+    return this.highItems.length + this.normalItems.length + this.lowItems.length;
+  }
   private processing = 0;
   private handler: ((item: T) => Promise<void>) | null = null;
   private stopped = false;
 
   private totalEnqueued = 0;
   private totalProcessed = 0;
+  private totalErrors = 0;
   private totalDroppedCapacity = 0;
   private totalDroppedStale = 0;
   private totalCoalesced = 0;
@@ -112,9 +119,12 @@ export class AiReviewQueue<T> {
       }
     }
 
-    const totalDepth = this.highItems.length + this.normalItems.length;
+    const totalDepth = this.totalDepth;
     if (totalDepth >= this.config.capacity) {
-      if (this.normalItems.length > 0) {
+      if (this.lowItems.length > 0) {
+        this.lowItems.shift();
+        this.recordDrop("capacity", "low");
+      } else if (this.normalItems.length > 0) {
         this.normalItems.shift();
         this.recordDrop("capacity", "normal");
       } else {
@@ -126,8 +136,10 @@ export class AiReviewQueue<T> {
     const entry: QueueEntry<T> = { data, enqueuedAt: Date.now(), priority, ...(key ? { coalesceKey: key } : {}), coalescedCount: 1 };
     if (priority === "high") {
       this.highItems.push(entry);
-    } else {
+    } else if (priority === "normal") {
       this.normalItems.push(entry);
+    } else {
+      this.lowItems.push(entry);
     }
     this.totalEnqueued++;
     this.drain();
@@ -137,10 +149,12 @@ export class AiReviewQueue<T> {
     return {
       highDepth: this.highItems.length,
       normalDepth: this.normalItems.length,
-      depth: this.highItems.length + this.normalItems.length,
+      lowDepth: this.lowItems.length,
+      depth: this.totalDepth,
       processing: this.processing,
       totalEnqueued: this.totalEnqueued,
       totalProcessed: this.totalProcessed,
+      totalErrors: this.totalErrors,
       totalDroppedCapacity: this.totalDroppedCapacity,
       totalDroppedStale: this.totalDroppedStale,
       totalCoalesced: this.totalCoalesced,
@@ -151,9 +165,10 @@ export class AiReviewQueue<T> {
   /** In-flight items are not cancelled. */
   public stop(): void {
     this.stopped = true;
-    const discarded = this.highItems.length + this.normalItems.length;
+    const discarded = this.totalDepth;
     this.highItems.length = 0;
     this.normalItems.length = 0;
+    this.lowItems.length = 0;
     this.recentDrops = 0;
     this._underPressure = false;
     if (discarded > 0) {
@@ -173,13 +188,16 @@ export class AiReviewQueue<T> {
     entry.data = result.merged;
     entry.coalescedCount = result.count;
 
-    // Promote normal → high if the incoming item is higher priority.
-    if (entry.priority === "normal" && incomingPriority === "high") {
-      const idx = this.normalItems.indexOf(entry);
+    // Promote to higher priority tier if incoming item has higher priority.
+    const tierRank = { high: 2, normal: 1, low: 0 } as const;
+    if (tierRank[incomingPriority] > tierRank[entry.priority]) {
+      const sourceList = entry.priority === "normal" ? this.normalItems : this.lowItems;
+      const targetList = incomingPriority === "high" ? this.highItems : this.normalItems;
+      const idx = sourceList.indexOf(entry);
       if (idx !== -1) {
-        this.normalItems.splice(idx, 1);
-        entry.priority = "high";
-        this.highItems.push(entry);
+        sourceList.splice(idx, 1);
+        entry.priority = incomingPriority;
+        targetList.push(entry);
       }
     }
 
@@ -197,6 +215,9 @@ export class AiReviewQueue<T> {
     for (const entry of this.normalItems) {
       if (entry.coalesceKey === key) return entry;
     }
+    for (const entry of this.lowItems) {
+      if (entry.coalesceKey === key) return entry;
+    }
     return undefined;
   }
 
@@ -208,11 +229,11 @@ export class AiReviewQueue<T> {
     }
 
     this.logger.warn(
-      { depth: this.highItems.length + this.normalItems.length, capacity: this.config.capacity, reason, droppedTier: tier },
+      { depth: this.totalDepth, capacity: this.config.capacity, reason, droppedTier: tier },
       `AI review queue dropped ${tier}-priority item`,
     );
 
-    if (tier === "normal") {
+    if (tier === "normal" || tier === "low") {
       this.recentDrops++;
       this._underPressure = true;
       this.emitPressure();
@@ -230,14 +251,20 @@ export class AiReviewQueue<T> {
   }
 
   private stalenessForPriority(priority: Priority): number {
-    return priority === "high"
-      ? this.config.moderationStalenessMs
-      : this.config.socialStalenessMs;
+    if (priority === "high") return this.config.moderationStalenessMs;
+    return this.config.socialStalenessMs;
+  }
+
+  private nextSource(): QueueEntry<T>[] | null {
+    if (this.highItems.length > 0) return this.highItems;
+    if (this.normalItems.length > 0) return this.normalItems;
+    if (this.lowItems.length > 0) return this.lowItems;
+    return null;
   }
 
   private drain(): void {
-    while (this.processing < this.config.concurrency && (this.highItems.length > 0 || this.normalItems.length > 0)) {
-      const source = this.highItems.length > 0 ? this.highItems : this.normalItems;
+    let source: QueueEntry<T>[] | null;
+    while (this.processing < this.config.concurrency && (source = this.nextSource()) !== null) {
       const entry = source.shift()!;
       const age = Date.now() - entry.enqueuedAt;
       const stalenessMs = this.stalenessForPriority(entry.priority);
@@ -250,10 +277,14 @@ export class AiReviewQueue<T> {
       this.processing++;
       this.handler!(entry.data)
         .then(() => { this.totalProcessed++; })
-        .catch((err) => this.logger.error({ err }, "AI review handler failed"))
+        .catch((err) => {
+          this.totalErrors++;
+          this.logger.error({ err }, "AI review handler failed");
+        })
         .finally(() => {
           this.processing--;
-          if (this._underPressure && this.highItems.length === 0 && this.normalItems.length === 0) {
+          const depth = this.totalDepth;
+          if (this._underPressure && depth < this.config.capacity / 2) {
             this._underPressure = false;
             this.recentDrops = 0;
           }
