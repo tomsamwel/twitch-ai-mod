@@ -3,7 +3,7 @@ import { runReplayEvaluation } from "../replay/replay-runner.js";
 import { applyNonLiveScriptOverrides, ensureLlamaServer, getActiveModel } from "./script-support.js";
 import { BotDatabase } from "../storage/database.js";
 import { createLogger } from "../storage/logger.js";
-import type { AiProviderKind } from "../types.js";
+import { AI_PROVIDER_KINDS, type AiProviderKind } from "../types.js";
 
 interface ReplayCliOptions {
   limit?: number;
@@ -50,11 +50,11 @@ function parseArgs(argv: string[]): ReplayCliOptions {
       case "--provider": {
         const value = argv[index + 1];
 
-        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp" && value !== "azure") {
-          throw new Error("--provider must be ollama, openai, llama-cpp, or azure");
+        if (!AI_PROVIDER_KINDS.includes(value as AiProviderKind)) {
+          throw new Error(`--provider must be ${AI_PROVIDER_KINDS.join(", ")}`);
         }
 
-        options.provider = value;
+        options.provider = value as AiProviderKind;
         index += 1;
         break;
       }

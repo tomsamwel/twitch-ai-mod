@@ -12,16 +12,17 @@ interface AzureChatChoice {
 }
 
 interface AzureChatResponse {
-  error?: { message?: string; code?: string };
+  error?: { message?: string };
   choices?: AzureChatChoice[];
 }
 
 function buildChatCompletionsUrl(azureConfig: NonNullable<ConfigSnapshot["ai"]["azure"]>): string {
   const base = azureConfig.baseUrl.replace(/\/+$/, "");
 
-  if (azureConfig.apiVersion) {
+  if (azureConfig.deploymentName) {
     // Azure OpenAI Service: deployment-scoped endpoint
-    return `${base}/openai/deployments/${encodeURIComponent(azureConfig.deploymentName)}/chat/completions?api-version=${encodeURIComponent(azureConfig.apiVersion)}`;
+    const version = azureConfig.apiVersion ?? "2024-12-01-preview";
+    return `${base}/openai/deployments/${encodeURIComponent(azureConfig.deploymentName)}/chat/completions?api-version=${encodeURIComponent(version)}`;
   }
 
   // Azure AI Model Inference (serverless): flat endpoint

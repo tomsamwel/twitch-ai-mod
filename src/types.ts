@@ -276,7 +276,7 @@ export interface ConfigSnapshot {
     azure?: {
       baseUrl: string;
       model: string;
-      deploymentName: string;
+      deploymentName?: string | undefined;
       apiVersion?: string | undefined;
     } | undefined;
     queue: {

@@ -68,7 +68,7 @@ export const appConfigSchema = z.object({
     azure: z.object({
       baseUrl: z.url(),
       model: z.string().min(1),
-      deploymentName: z.string().min(1),
+      deploymentName: z.string().min(1).optional(),
       apiVersion: z.string().min(1).optional(),
     }).optional(),
     queue: z.object({
