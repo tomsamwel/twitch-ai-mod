@@ -373,6 +373,30 @@
     transform: scale(1.02);
   }
 
+  /* ── Greetings sub-group ── */
+  .greet-group {
+    border-left: 2px solid rgba(0, 230, 118, 0.15);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 0.2rem 0;
+    transition: border-color 0.3s ease;
+  }
+  .greet-group.greet-active { border-left-color: rgba(0, 230, 118, 0.4); }
+  .greet-master-row { padding-left: 0.75rem; }
+  .greet-sub-group {
+    padding-left: 0.75rem;
+    border-top: 1px solid rgba(0, 230, 118, 0.06);
+    background: rgba(0, 230, 118, 0.02);
+    border-radius: 0 0 var(--radius) 0;
+    transition: opacity 0.3s ease;
+  }
+  .greet-sub-group.greet-sub-dim { opacity: 0.38; }
+  .greet-sub-row { padding-left: 0.75rem; }
+  .greet-sub-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-right: 0.3rem;
+  }
+
   /* ── Status indicators ── */
   .status-row {
     display: flex;
@@ -1786,14 +1810,27 @@ function renderToggle(key, label, desc, value, safety) {
   return `<div class="toggle-row"><div class="toggle-label">${label}<small>${desc}</small></div><button class="${cls}" data-key="${key}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button></div>`;
 }
 
+function renderGreetingsGroup(s) {
+  const masterCls = s.greetingsEnabled ? 'toggle-btn on' : 'toggle-btn off';
+  const masterRow = `<div class="toggle-row greet-master-row"><div class="toggle-label">Greetings<small>AI greetings for new viewers — master switch</small></div><button class="${masterCls}" data-key="greetingsEnabled" onclick="setSetting('greetingsEnabled', ${!s.greetingsEnabled})">${s.greetingsEnabled ? 'ON' : 'OFF'}</button></div>`;
+
+  const fmCls = s.greetFirstMessage ? 'toggle-btn on' : 'toggle-btn off';
+  const ojCls = s.greetOnJoin ? 'toggle-btn on' : 'toggle-btn off';
+  const subRows = [
+    `<div class="toggle-row greet-sub-row"><div class="toggle-label"><span class="greet-sub-label">↳</span>First Message<small>Greet on their first chat message this session</small></div><button class="${fmCls}" data-key="greetFirstMessage" onclick="setSetting('greetFirstMessage', ${!s.greetFirstMessage})">${s.greetFirstMessage ? 'ON' : 'OFF'}</button></div>`,
+    `<div class="toggle-row greet-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="greet-sub-label">↳</span>On Join<small>Greet silent viewers detected by chat poll</small></div><button class="${ojCls}" data-key="greetOnJoin" onclick="setSetting('greetOnJoin', ${!s.greetOnJoin})">${s.greetOnJoin ? 'ON' : 'OFF'}</button></div>`,
+  ].join('');
+
+  const dimCls = s.greetingsEnabled ? '' : ' greet-sub-dim';
+  return `<div class="greet-group${s.greetingsEnabled ? ' greet-active' : ''}">${masterRow}<div class="greet-sub-group${dimCls}">${subRows}</div></div>`;
+}
+
 function renderSettings(s) {
   const regular = [
     renderToggle('aiEnabled', 'AI Enabled', 'Master AI toggle', s.aiEnabled),
     renderToggle('aiModerationEnabled', 'AI Moderation', 'Allow AI to propose timeouts and warns', s.aiModerationEnabled),
     renderToggle('socialRepliesEnabled', 'Social Replies', 'Allow social chat responses', s.socialRepliesEnabled),
-    renderToggle('greetingsEnabled', 'Greetings', 'Master greetings toggle', s.greetingsEnabled),
-    renderToggle('greetFirstMessage', 'Greet First Message', 'Greet chatters on their first message this session', s.greetFirstMessage),
-    renderToggle('greetOnJoin', 'Greet On Join', 'Greet silent lurkers detected by chatter poll', s.greetOnJoin),
+    renderGreetingsGroup(s),
   ].join('');
   const safety = [
     renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled, true),
