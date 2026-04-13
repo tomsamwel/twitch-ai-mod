@@ -770,6 +770,17 @@
     color: var(--text-muted);
     padding-left: 0.1rem;
   }
+  .filter-label.filter-active::after {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--cyan);
+    margin-left: 5px;
+    vertical-align: middle;
+    opacity: 0.75;
+  }
   .filter-bar select {
     min-width: 90px;
     background: var(--bg-surface);
@@ -901,6 +912,10 @@
   /* ── Controller table ── */
   .ctrl-table td:last-child { text-align: right; }
 
+  /* ── Audit fail row ── */
+  tr.audit-fail { background: rgba(229, 57, 53, 0.05); }
+  tr.audit-fail td:first-child { border-left: 2px solid rgba(229, 57, 53, 0.35); }
+
   /* ── Load more ── */
   .load-more { text-align: center; padding: 0.6rem; }
 
@@ -960,6 +975,12 @@
     color: var(--text-dim);
     float: right;
     font-weight: 400;
+  }
+  .queue-badge.queue-empty {
+    color: var(--text-muted);
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+    opacity: 0.6;
   }
   .stats-pulse {
     animation: stats-pulse-glow 0.8s ease-out;
@@ -1563,7 +1584,9 @@ function timeAgo(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return s + 's ago';
   if (s < 3600) return Math.floor(s / 60) + 'm ago';
-  return Math.floor(s / 3600) + 'h ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+  return Math.floor(s / 604800) + 'w ago';
 }
 
 function jsonPost(url, body) {
@@ -1984,7 +2007,12 @@ async function renderStats() {
 
     // Queue badge
     const qb = document.getElementById('queue-badge');
-    if (qb) qb.textContent = q ? `${q.highDepth} high · ${q.normalDepth} normal queued` : '';
+    if (qb) {
+      const total = q ? q.highDepth + q.normalDepth : 0;
+      if (!q) { qb.textContent = ''; qb.className = 'queue-badge'; }
+      else if (total === 0) { qb.textContent = 'QUEUE EMPTY'; qb.className = 'queue-badge queue-empty'; }
+      else { qb.textContent = `${q.highDepth} high · ${q.normalDepth} normal queued`; qb.className = 'queue-badge'; }
+    }
 
     // Bucket activity into 24 bins (2.5 min each)
     const buckets = buildBuckets(actData ? actData.rows : []);
@@ -2063,12 +2091,29 @@ async function refreshDashboard() {
 
 const debouncedActivity = debounce(() => loadActivity(true), 300);
 
+function updateFilterDots() {
+  const checks = [
+    ['act-stage',   '#act-stage',         v => v !== ''],
+    ['act-outcome', '#act-outcome',        v => v !== ''],
+    ['act-range',   '#act-range',          v => v !== ''],
+    ['act-chatter', '#act-chatter',        v => v.trim() !== ''],
+  ];
+  for (const [, sel, isActive] of checks) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const group = el.closest('.filter-group') || el.closest('.autocomplete-wrap')?.closest('.filter-group');
+    const label = group?.querySelector('.filter-label');
+    if (label) label.classList.toggle('filter-active', isActive(el.value));
+  }
+}
+
 function clearFilters() {
   document.getElementById('act-chatter').value = '';
   document.getElementById('act-outcome').value = '';
   document.getElementById('act-stage').value = 'ai';
   document.getElementById('act-range').value = '';
   loadActivity(true);
+  updateFilterDots();
 }
 let actHighWaterTs = null;
 let actPollTimer = null;
@@ -2154,7 +2199,7 @@ async function loadAudit(more) {
     const container = document.getElementById('audit-feed');
     if (auditOffset === 0) container.innerHTML = '';
     if (data.rows.length === 0 && auditOffset === 0) { container.innerHTML = '<div class="activity-meta">No audit entries</div>'; return; }
-    const rowsHtml = data.rows.map(a => `<tr><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : '<span style="color:var(--red)">FAIL</span>'}</td><td>${a.highRisk ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--text-muted)">\u2013</span>'}</td></tr>`).join('');
+    const rowsHtml = data.rows.map(a => `<tr${a.success ? '' : ' class="audit-fail"'}><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : '<span style="color:var(--red)">FAIL</span>'}</td><td>${a.highRisk ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--text-muted)">\u2013</span>'}</td></tr>`).join('');
     if (auditOffset === 0) {
       container.innerHTML = `<table><thead><tr><th>Time</th><th>Actor</th><th>Command</th><th>Status</th><th>High Risk</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
     } else {
@@ -2340,7 +2385,7 @@ async function loadHealth() {
     }
     if (data.aiQueue) {
       const q = data.aiQueue;
-      html += `<div class="status-row"><span>Queue depth</span><span class="status-value">${q.highDepth}h / ${q.normalDepth}n</span></div>`;
+      html += `<div class="status-row"><span>Queue depth</span><span class="status-value">${q.highDepth} high · ${q.normalDepth} normal</span></div>`;
       html += `<div class="status-row"><span>Processing</span><span class="status-value">${q.processing}</span></div>`;
       html += `<div class="status-row"><span>Total processed</span><span class="status-value">${q.totalProcessed}</span></div>`;
       html += `<div class="status-row"><span>Dropped (capacity)</span><span class="status-value">${q.totalDroppedCapacity}</span></div>`;
@@ -2552,10 +2597,11 @@ setupAutocomplete('global-search-wrap', 'global-search', (login) => {
 setupAutocomplete('ctrl-login-wrap', 'ctrl-login', () => {});
 setupAutocomplete('exempt-login-wrap', 'exempt-login', () => {});
 
-document.getElementById('act-outcome').addEventListener('change', () => loadActivity(true));
-document.getElementById('act-stage').addEventListener('change', () => loadActivity(true));
-document.getElementById('act-range').addEventListener('change', () => loadActivity(true));
-document.getElementById('act-chatter').addEventListener('input', debouncedActivity);
+document.getElementById('act-outcome').addEventListener('change', () => { loadActivity(true); updateFilterDots(); });
+document.getElementById('act-stage').addEventListener('change', () => { loadActivity(true); updateFilterDots(); });
+document.getElementById('act-range').addEventListener('change', () => { loadActivity(true); updateFilterDots(); });
+document.getElementById('act-chatter').addEventListener('input', () => { debouncedActivity(); updateFilterDots(); });
+updateFilterDots();
 
 document.getElementById('global-search').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
