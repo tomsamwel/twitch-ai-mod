@@ -73,6 +73,10 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
     soc: "social",
     greet: "greetings",
     greeting: "greetings",
+    gfm: "greet-first-message",
+    "greet-first": "greet-first-message",
+    goj: "greet-on-join",
+    "greet-join": "greet-on-join",
   };
 
   const rawVerb = (tokens[1] ?? "").toLowerCase();
@@ -101,6 +105,10 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
       return { kind: "set-social", enabled: parseToggle(tokens.length, value, fmt(prefix, "social on|off")) };
     case "greetings":
       return { kind: "set-greetings", enabled: parseToggle(tokens.length, value, fmt(prefix, "greet on|off")) };
+    case "greet-first-message":
+      return { kind: "set-greet-first-message", enabled: parseToggle(tokens.length, value, fmt(prefix, "greet-first-message on|off")) };
+    case "greet-on-join":
+      return { kind: "set-greet-on-join", enabled: parseToggle(tokens.length, value, fmt(prefix, "greet-on-join on|off")) };
     case "dry-run":
       return { kind: "set-dry-run", enabled: parseToggle(tokens.length, value, fmt(prefix, "dry-run on|off")) };
     case "live-moderation":

@@ -1791,7 +1791,9 @@ function renderSettings(s) {
     renderToggle('aiEnabled', 'AI Enabled', 'Master AI toggle', s.aiEnabled),
     renderToggle('aiModerationEnabled', 'AI Moderation', 'Allow AI to propose timeouts and warns', s.aiModerationEnabled),
     renderToggle('socialRepliesEnabled', 'Social Replies', 'Allow social chat responses', s.socialRepliesEnabled),
-    renderToggle('greetingsEnabled', 'Greetings', 'Welcome new viewers when queue is idle', s.greetingsEnabled),
+    renderToggle('greetingsEnabled', 'Greetings', 'Master greetings toggle', s.greetingsEnabled),
+    renderToggle('greetFirstMessage', 'Greet First Message', 'Greet chatters on their first message this session', s.greetFirstMessage),
+    renderToggle('greetOnJoin', 'Greet On Join', 'Greet silent lurkers detected by chatter poll', s.greetOnJoin),
   ].join('');
   const safety = [
     renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled, true),

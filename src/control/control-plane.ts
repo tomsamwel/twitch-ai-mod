@@ -31,7 +31,8 @@ export class WhisperControlPlane {
   private readonly controllersByUserId: Map<string, TrustedController>;
 
   private static readonly FULL_ACCESS: Set<ControlCommand["kind"]> = new Set([
-    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-greetings", "set-dry-run",
+    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-greetings",
+    "set-greet-first-message", "set-greet-on-join", "set-dry-run",
     "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
     "recent", "stats", "exempt", "block", "purge",
   ]);
@@ -243,6 +244,20 @@ export class WhisperControlPlane {
           command.enabled,
           actor,
           `greetings ${command.enabled ? "on" : "off"}`,
+        );
+      case "set-greet-first-message":
+        return this.applyOverride(
+          "greetFirstMessage",
+          command.enabled,
+          actor,
+          `greet-first-message ${command.enabled ? "on" : "off"}`,
+        );
+      case "set-greet-on-join":
+        return this.applyOverride(
+          "greetOnJoin",
+          command.enabled,
+          actor,
+          `greet-on-join ${command.enabled ? "on" : "off"}`,
         );
       case "set-dry-run":
         return this.applyOverride(

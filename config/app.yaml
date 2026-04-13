@@ -83,7 +83,7 @@ social:
   greetings:
     enabled: false          # set to true to enable new-viewer greetings
     onFirstMessage: true    # greet when they send their first message this session
-    onChatterJoin: true     # greet silent viewers detected via chatters poll
+    onChatterJoin: false    # greet silent viewers detected via chatters poll (default off)
     chatterPollIntervalMs: 10000  # how often to poll GET /chat/chatters (ms)
     maxQueueDepth: 2        # only greet when AI queue has <= this many pending items
     rateLimitMs: 60000      # minimum ms between any two greetings

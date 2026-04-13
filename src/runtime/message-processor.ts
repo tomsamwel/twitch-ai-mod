@@ -51,6 +51,8 @@ export interface AiReviewWorkItem {
   greetingReplyToMessageId?: string;
   /** True for poll-path greetings (silent joiners). Used by priority classifier for low-priority queueing. */
   isPollGreeting?: boolean;
+  /** Whether the AI should attempt to greet this chatter (separate from isFirstTimeChatter which also drives scam escalation). */
+  greetingEnabled?: boolean;
 }
 
 interface OutboundMessageTrackerLike {
@@ -316,6 +318,8 @@ export class MessageProcessor {
       this.cooldowns.recordAiReview(message.chatterId, aiMode.mode, nowMs);
     }
 
+    const greetingEnabled = effectiveSettings.greetingsEnabled && effectiveSettings.greetFirstMessage;
+
     const workItem: AiReviewWorkItem = {
       message,
       botIdentity: options.botIdentity,
@@ -325,6 +329,7 @@ export class MessageProcessor {
       nowMs,
       aiMode,
       coalescedCount: 1,
+      greetingEnabled,
       ...(aiMode.signals.isFirstTimeChatter ? { greetingReplyToMessageId: message.sourceMessageId } : {}),
     };
 
@@ -368,6 +373,7 @@ export class MessageProcessor {
       work.message, context, effectiveConfig, work.botIdentity, work.aiMode,
       work.coalescedCount > 1 ? work.coalescedCount : undefined,
       work.nowMs,
+      work.greetingEnabled ?? true,
     );
     const aiProvider = await this.aiProviders.getProvider(effectiveConfig);
     let aiDecision = await aiProvider.decide(aiInput);
@@ -552,6 +558,7 @@ export class MessageProcessor {
       },
       coalescedCount: 1,
       isPollGreeting: true,
+      greetingEnabled: true,
     };
 
     this.aiReviewQueue.enqueue(workItem);

@@ -99,7 +99,7 @@ export function parseAiDecisionText(
       );
     }
     const schema = input.isFirstTimeChatter
-      ? createAiDecisionPayloadSchema({ isFirstTimeChatter: true })
+      ? createAiDecisionPayloadSchema({ isFirstTimeChatter: true, greetingEnabled: input.greetingEnabled })
       : aiDecisionPayloadSchema;
     const payload = schema.parse(normalized);
     const decision = payloadToAiDecision(payload, source, input);

@@ -33,9 +33,9 @@ const aiDecisionPayloadBaseSchema = z
   })
   .strict();
 
-export function createAiDecisionPayloadSchema(options?: { isFirstTimeChatter?: boolean }) {
+export function createAiDecisionPayloadSchema(options?: { isFirstTimeChatter?: boolean; greetingEnabled?: boolean }) {
   return aiDecisionPayloadBaseSchema.superRefine((payload, context) => {
-    _validateAiDecisionPayload(payload, context, options?.isFirstTimeChatter ?? false);
+    _validateAiDecisionPayload(payload, context, options?.isFirstTimeChatter ?? false, options?.greetingEnabled ?? true);
   });
 }
 
@@ -45,6 +45,7 @@ function _validateAiDecisionPayload(
   payload: z.infer<typeof aiDecisionPayloadBaseSchema>,
   context: z.RefinementCtx,
   isFirstTimeChatter: boolean,
+  greetingEnabled: boolean = true,
 ): void {
   if (payload.actions.length > 2) {
     context.addIssue({
@@ -127,7 +128,7 @@ function _validateAiDecisionPayload(
     return;
   }
 
-  const allowGreetingSay = isFirstTimeChatter && firstAction.kind === "say" && payload.moderationCategory === "none";
+  const allowGreetingSay = isFirstTimeChatter && greetingEnabled && firstAction.kind === "say" && payload.moderationCategory === "none";
   if (payload.actions.length === 1 && firstAction.kind !== "warn" && !allowGreetingSay) {
     context.addIssue({
       code: z.ZodIssueCode.custom,

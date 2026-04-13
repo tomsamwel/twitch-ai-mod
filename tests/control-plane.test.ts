@@ -51,6 +51,8 @@ function createRuntimeSettingsState(config = createTestConfig()): {
       aiModerationEnabled: false,
       socialRepliesEnabled: true,
       greetingsEnabled: false,
+      greetFirstMessage: true,
+      greetOnJoin: false,
       dryRun: true,
       liveModerationEnabled: false,
       promptPack: config.ai.promptPack,
@@ -536,4 +538,64 @@ test("mod role is denied from set-ai but allowed for status", async () => {
     createWhisper({ id: "whisper-2", senderUserId: "mod-1", senderUserLogin: "channelmod", text: "aimod status" }),
   );
   assert.match(sentReplies[0] ?? "", /ai=/u);
+});
+
+test("WhisperControlPlane greet-first-message command toggles greetFirstMessage override", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  const appliedOverrides: Array<{ key: string; value: unknown }> = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster", role: "broadcaster" as const }],
+    logger,
+    {
+      getEffectiveSettings() { return state.effective; },
+      getOverrides() { return state.overrides; },
+      setOverride(key, value) { appliedOverrides.push({ key, value }); },
+      reset() { return { overrides: 0, exemptUsers: 0, blockedTerms: 0 }; },
+      listAvailablePromptPacks() { return ["witty-mod"]; },
+      listAvailableModelPresets() { return ["local-default"]; },
+    },
+    createMockDatabase(),
+    {
+      async sendWhisper(_targetUserId, message) { sentReplies.push(message); },
+    },
+  );
+
+  await controlPlane.processWhisper(createWhisper({ text: "aimod gfm off" }));
+
+  assert.ok(sentReplies[0]?.includes("greet-first-message"), `reply should mention greet-first-message, got: ${sentReplies[0]}`);
+  assert.deepEqual(appliedOverrides, [{ key: "greetFirstMessage", value: false }]);
+});
+
+test("WhisperControlPlane greet-on-join command toggles greetOnJoin override", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  const appliedOverrides: Array<{ key: string; value: unknown }> = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster", role: "broadcaster" as const }],
+    logger,
+    {
+      getEffectiveSettings() { return state.effective; },
+      getOverrides() { return state.overrides; },
+      setOverride(key, value) { appliedOverrides.push({ key, value }); },
+      reset() { return { overrides: 0, exemptUsers: 0, blockedTerms: 0 }; },
+      listAvailablePromptPacks() { return ["witty-mod"]; },
+      listAvailableModelPresets() { return ["local-default"]; },
+    },
+    createMockDatabase(),
+    {
+      async sendWhisper(_targetUserId, message) { sentReplies.push(message); },
+    },
+  );
+
+  await controlPlane.processWhisper(createWhisper({ text: "aimod goj on" }));
+
+  assert.ok(sentReplies[0]?.includes("greet-on-join"), `reply should mention greet-on-join, got: ${sentReplies[0]}`);
+  assert.deepEqual(appliedOverrides, [{ key: "greetOnJoin", value: true }]);
 });

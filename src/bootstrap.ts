@@ -154,7 +154,10 @@ export async function createAppServices(): Promise<AppServices> {
       (viewers) => {
         messageProcessor.enqueuePollGreeting(viewers, authContext.bot, authContext.broadcaster);
       },
-      () => runtimeSettings.getEffectiveSettings().greetingsEnabled,
+      () => {
+        const s = runtimeSettings.getEffectiveSettings();
+        return s.greetingsEnabled && s.greetOnJoin;
+      },
       logger,
     );
     chatterPollService.start();

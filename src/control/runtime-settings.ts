@@ -71,6 +71,8 @@ export function buildEffectiveRuntimeSettings(
     aiModerationEnabled: overrides.aiModerationEnabled ?? false,
     socialRepliesEnabled: overrides.socialRepliesEnabled ?? true,
     greetingsEnabled: overrides.greetingsEnabled ?? (baseConfig.social?.greetings?.enabled ?? false),
+    greetFirstMessage: overrides.greetFirstMessage ?? (baseConfig.social?.greetings?.onFirstMessage ?? true),
+    greetOnJoin: overrides.greetOnJoin ?? (baseConfig.social?.greetings?.onChatterJoin ?? false),
     dryRun: overrides.dryRun ?? baseConfig.runtime.dryRun,
     liveModerationEnabled: overrides.liveModerationEnabled ?? baseConfig.actions.allowLiveModeration,
     promptPack: promptPackName,
@@ -278,6 +280,12 @@ export class RuntimeSettingsStore {
           break;
         case "greetingsEnabled":
           snapshot.greetingsEnabled = row.value as boolean;
+          break;
+        case "greetFirstMessage":
+          snapshot.greetFirstMessage = row.value as boolean;
+          break;
+        case "greetOnJoin":
+          snapshot.greetOnJoin = row.value as boolean;
           break;
         case "dryRun":
           snapshot.dryRun = row.value as boolean;

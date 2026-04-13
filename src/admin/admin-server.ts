@@ -21,6 +21,8 @@ const VALID_OVERRIDE_KEYS: readonly RuntimeOverrideKey[] = [
   "aiModerationEnabled",
   "socialRepliesEnabled",
   "greetingsEnabled",
+  "greetFirstMessage",
+  "greetOnJoin",
   "dryRun",
   "liveModerationEnabled",
   "promptPack",

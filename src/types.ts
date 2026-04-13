@@ -25,6 +25,8 @@ export type RuntimeOverrideKey =
   | "aiModerationEnabled"
   | "socialRepliesEnabled"
   | "greetingsEnabled"
+  | "greetFirstMessage"
+  | "greetOnJoin"
   | "dryRun"
   | "liveModerationEnabled"
   | "promptPack"
@@ -395,6 +397,7 @@ export interface AiDecisionInput {
   mode: AiMode;
   temperature: number;
   isFirstTimeChatter: boolean;
+  greetingEnabled: boolean;
   message: NormalizedChatMessage;
   context: AiContextSnapshot;
   config: ConfigSnapshot;
@@ -587,6 +590,8 @@ export type ControlCommand =
   | { kind: "set-ai-moderation"; enabled: boolean }
   | { kind: "set-social"; enabled: boolean }
   | { kind: "set-greetings"; enabled: boolean }
+  | { kind: "set-greet-first-message"; enabled: boolean }
+  | { kind: "set-greet-on-join"; enabled: boolean }
   | { kind: "set-dry-run"; enabled: boolean }
   | { kind: "set-live-moderation"; enabled: boolean }
   | { kind: "set-pack"; packName: string }
@@ -619,6 +624,8 @@ export interface RuntimeOverrideSnapshot {
   aiModerationEnabled?: boolean;
   socialRepliesEnabled?: boolean;
   greetingsEnabled?: boolean;
+  greetFirstMessage?: boolean;
+  greetOnJoin?: boolean;
   dryRun?: boolean;
   liveModerationEnabled?: boolean;
   promptPack?: string;
@@ -633,6 +640,8 @@ export interface EffectiveRuntimeSettings {
   aiModerationEnabled: boolean;
   socialRepliesEnabled: boolean;
   greetingsEnabled: boolean;
+  greetFirstMessage: boolean;
+  greetOnJoin: boolean;
   dryRun: boolean;
   liveModerationEnabled: boolean;
   promptPack: string;

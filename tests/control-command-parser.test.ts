@@ -92,6 +92,22 @@ test("parseControlCommand parses greet/greeting aliases", () => {
   assert.deepEqual(parseControlCommand("aimod greetings off", "aimod"), { kind: "set-greetings", enabled: false });
 });
 
+test("parseControlCommand parses greet-first-message command and aliases", () => {
+  assert.deepEqual(parseControlCommand("aimod greet-first-message on", "aimod"), { kind: "set-greet-first-message", enabled: true });
+  assert.deepEqual(parseControlCommand("aimod greet-first-message off", "aimod"), { kind: "set-greet-first-message", enabled: false });
+  assert.deepEqual(parseControlCommand("aimod gfm on", "aimod"), { kind: "set-greet-first-message", enabled: true });
+  assert.deepEqual(parseControlCommand("aimod gfm off", "aimod"), { kind: "set-greet-first-message", enabled: false });
+  assert.deepEqual(parseControlCommand("aimod greet-first on", "aimod"), { kind: "set-greet-first-message", enabled: true });
+});
+
+test("parseControlCommand parses greet-on-join command and aliases", () => {
+  assert.deepEqual(parseControlCommand("aimod greet-on-join on", "aimod"), { kind: "set-greet-on-join", enabled: true });
+  assert.deepEqual(parseControlCommand("aimod greet-on-join off", "aimod"), { kind: "set-greet-on-join", enabled: false });
+  assert.deepEqual(parseControlCommand("aimod goj on", "aimod"), { kind: "set-greet-on-join", enabled: true });
+  assert.deepEqual(parseControlCommand("aimod goj off", "aimod"), { kind: "set-greet-on-join", enabled: false });
+  assert.deepEqual(parseControlCommand("aimod greet-join off", "aimod"), { kind: "set-greet-on-join", enabled: false });
+});
+
 test("parseControlCommand supports glued single-char prefix (!status)", () => {
   assert.deepEqual(parseControlCommand("!status", "!"), { kind: "status" });
   assert.deepEqual(parseControlCommand("!aim on", "!"), { kind: "set-ai-moderation", enabled: true });

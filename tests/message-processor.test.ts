@@ -1091,10 +1091,12 @@ function buildGreetingProcessor(config: ReturnType<typeof buildGreetingConfig>, 
   tracker = new SessionChatterTracker(),
   queueDepth = 0,
   onAiDecide,
+  runtimeOverrides = {},
 }: {
   tracker?: SessionChatterTracker;
   queueDepth?: number;
   onAiDecide?: (mode: string) => void;
+  runtimeOverrides?: Partial<import("../src/types.js").EffectiveRuntimeSettings>;
 } = {}) {
   const logger = createLogger("fatal", "test");
   const cooldowns = new CooldownManager(config.cooldowns);
@@ -1104,10 +1106,11 @@ function buildGreetingProcessor(config: ReturnType<typeof buildGreetingConfig>, 
     listRecentUserMessageSnapshots() { return []; },
     listRecentBotInteractions() { return []; },
   });
-  const runtimeSettings = createTestRuntimeSettings(config, { socialRepliesEnabled: true });
+  const runtimeSettings = createTestRuntimeSettings(config, { socialRepliesEnabled: true, ...runtimeOverrides });
 
   const capturedModes: string[] = [];
   const capturedFirstTimeChatter: boolean[] = [];
+  const capturedGreetingEnabled: boolean[] = [];
 
   const processor = new MessageProcessor(
     config,
@@ -1131,6 +1134,7 @@ function buildGreetingProcessor(config: ReturnType<typeof buildGreetingConfig>, 
           async decide(input): Promise<import("../src/types.js").AiDecision> {
             capturedModes.push(input.mode);
             capturedFirstTimeChatter.push(input.isFirstTimeChatter);
+            capturedGreetingEnabled.push(input.greetingEnabled);
             onAiDecide?.(input.mode);
             return {
               source: "ollama",
@@ -1174,7 +1178,7 @@ function buildGreetingProcessor(config: ReturnType<typeof buildGreetingConfig>, 
     () => queueDepth,
   );
 
-  return { processor, capturedModes, capturedFirstTimeChatter, tracker };
+  return { processor, capturedModes, capturedFirstTimeChatter, capturedGreetingEnabled, tracker };
 }
 
 test("MessageProcessor triggers greeting for first-time chatter in live mode when queue idle", async () => {
@@ -1283,6 +1287,29 @@ test("MessageProcessor tags isFirstTimeChatter even when greetings are disabled 
   });
 
   assert.ok(capturedFirstTimeChatter.includes(true), "isFirstTimeChatter should be set even without greetings config");
+});
+
+test("MessageProcessor passes greetingEnabled=false when greetFirstMessage is off (isFirstTimeChatter still set for scam escalation)", async () => {
+  const config = buildGreetingConfig();
+  const { processor, capturedFirstTimeChatter, capturedGreetingEnabled } = buildGreetingProcessor(config, {
+    runtimeOverrides: { greetingsEnabled: true, greetFirstMessage: false },
+  });
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-gfm-off", chatterId: "new-user-gfm", chatterName: "newviewer" }),
+    new Date("2026-03-24T15:06:00.000Z"),
+  );
+
+  await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:06:00.000Z"),
+  });
+
+  assert.ok(capturedFirstTimeChatter.includes(true), "isFirstTimeChatter should still be true for scam escalation");
+  assert.ok(capturedGreetingEnabled.includes(false), "greetingEnabled should be false when greetFirstMessage is off");
 });
 
 test("MessageProcessor marks chatter as greeted after executing greeting actions", async () => {
