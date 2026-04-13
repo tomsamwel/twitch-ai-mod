@@ -96,15 +96,15 @@ test("buildAiDecisionInput includes annotated examples, false-positive examples,
       {
         id: "bot-say-1",
         createdAt: "2026-03-24T15:00:20.000Z",
-        kind: "say" as const,
+        kind: "warn" as const,
         source: "ai" as const,
-        status: "dry-run" as const,
-        dryRun: true,
+        status: "executed" as const,
+        dryRun: false,
         reason: "brief correction",
         targetUserId: "user-1",
         targetUserName: "viewerone",
         message: "Please stop spamming mentions.",
-        processingMode: "scenario" as const,
+        processingMode: "live" as const,
       },
     ],
   };
@@ -141,4 +141,42 @@ test("buildAiDecisionInput includes annotated examples, false-positive examples,
   assert.match(input.prompt.user, /recent_same_user_messages: 2/u);
   assert.match(input.prompt.user, /recent_bot_correction: yes/u);
   assert.match(input.prompt.user, /visual_spam: none/u);
+});
+
+test("buildAiDecisionInput uses the supplied timestamp for relative prompt context", () => {
+  const config = createTestConfig();
+  const message = normalizeChatMessage(createChatEvent({ messageId: "current-message" }), new Date("2026-03-24T15:00:30.000Z"));
+  const context = {
+    recentRoomMessages: [
+      {
+        eventId: "history-1",
+        receivedAt: "2026-03-24T15:00:00.000Z",
+        chatterId: "user-2",
+        chatterLogin: "roomviewer",
+        chatterDisplayName: "RoomViewer",
+        text: "hello room",
+        roles: ["viewer"],
+        isPrivileged: false,
+        isBotMessage: false,
+      },
+    ],
+    recentUserMessages: [],
+    recentBotInteractions: [],
+  };
+
+  const input = buildAiDecisionInput(
+    message,
+    context,
+    config,
+    {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+    undefined,
+    undefined,
+    Date.parse("2026-03-24T15:01:30.000Z"),
+  );
+
+  assert.match(input.prompt.user, /\[-1m\] roomviewer/u);
 });

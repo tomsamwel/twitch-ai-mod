@@ -1,6 +1,7 @@
 import type { Logger } from "pino";
 
 import { AiContextBuilder } from "../ai/context-builder.js";
+import { applyAiDecisionGuardrails } from "../ai/decision-guardrails.js";
 import { AiProviderRegistry } from "../ai/provider-registry.js";
 import { buildAiDecisionInput, selectAiMode } from "../ai/prompt.js";
 import type { AiModeSelection } from "../ai/prompt.js";
@@ -8,6 +9,7 @@ import type { ActionExecutor } from "../actions/action-executor.js";
 import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import { CooldownManager } from "../moderation/cooldown-manager.js";
 import { RuleEngine } from "../moderation/rule-engine.js";
+import type { SessionChatterTracker } from "./session-chatter-tracker.js";
 import type { BotDatabase } from "../storage/database.js";
 import type {
   ActionResult,
@@ -44,6 +46,13 @@ export interface AiReviewWorkItem {
   forceDryRun?: boolean;
   nowMs: number;
   aiMode: AiModeSelection;
+  coalescedCount: number;
+  /** If set, any say action from this item will be sent as a reply to this message ID. */
+  greetingReplyToMessageId?: string;
+  /** True for poll-path greetings (silent joiners). Used by priority classifier for low-priority queueing. */
+  isPollGreeting?: boolean;
+  /** Whether the AI should attempt to greet this chatter (separate from isFirstTimeChatter which also drives scam escalation). */
+  greetingEnabled?: boolean;
 }
 
 interface OutboundMessageTrackerLike {
@@ -77,7 +86,7 @@ function annotateAiActionForExecution(
       hasRepeatedUserEvidence: context.recentUserMessages.length > 0,
       hasRecentBotCorrectiveInteraction: context.recentBotInteractions.some(
         (interaction) =>
-          (interaction.kind === "say" || interaction.kind === "warn") && interaction.status !== "failed",
+          (interaction.kind === "warn" || interaction.kind === "timeout") && interaction.status !== "failed",
       ),
     },
   };
@@ -120,6 +129,8 @@ export class MessageProcessor {
     private readonly actionExecutor: Pick<ActionExecutor, "createActionRequest" | "execute">,
     private readonly outboundMessageTracker?: OutboundMessageTrackerLike,
     private readonly aiReviewQueue?: AiReviewDispatcher,
+    private readonly sessionChatterTracker?: SessionChatterTracker,
+    private readonly getQueueDepth?: () => number,
   ) {}
 
   public async process(
@@ -146,7 +157,9 @@ export class MessageProcessor {
     }
 
     if (options.persistSnapshot ?? false) {
-      this.database.recordMessageSnapshot(message, options.botIdentity);
+      this.database.recordMessageSnapshot(message, options.botIdentity, {
+        processingMode,
+      });
     }
 
     if (message.chatterId === options.botIdentity.id) {
@@ -232,8 +245,31 @@ export class MessageProcessor {
     }
 
     const effectiveConfig = this.aiProviders.createEffectiveConfig(effectiveSettings);
-    const aiMode = selectAiMode(message, options.botIdentity, effectiveConfig);
+    let aiMode = selectAiMode(message, options.botIdentity, effectiveConfig);
 
+    // First-time chatter detection: always tag isFirstTimeChatter on the first
+    // message this session so the AI gets the scam escalation contract exception.
+    // The AI decides whether to greet (clean message) or moderate (violation).
+    // Only runs in live mode to avoid disrupting eval/replay scenarios.
+    if (processingMode === "live" && this.sessionChatterTracker) {
+      const isNew = this.sessionChatterTracker.isFirstMessage(message.chatterId);
+      if (isNew) {
+        aiMode = {
+          mode: aiMode.mode,
+          signals: { ...aiMode.signals, isFirstTimeChatter: true },
+        };
+        // Mark greeted immediately so the poll path doesn't also greet.
+        this.sessionChatterTracker.markGreeted(message.chatterId, nowMs);
+        this.logger.info(
+          { chatterId: message.chatterId, chatter: message.chatterLogin, mode: aiMode.mode },
+          "first-time chatter this session — tagged for moderation + greeting",
+        );
+      }
+    }
+
+    // Fast path: skip AI for messages that are clearly safe — no risk signals,
+    // not addressing the bot, and no hard-violation keywords. The deterministic
+    // rule engine already ran above, so blocked terms/spam/visual spam are handled.
     if (aiMode.mode === "social" && !effectiveSettings.socialRepliesEnabled) {
       this.logger.debug(
         { chatterId: message.chatterId, eventId: message.eventId, processingMode },
@@ -262,21 +298,27 @@ export class MessageProcessor {
       };
     }
 
-    if (!this.cooldowns.canReviewWithAi(message.chatterId, aiMode.mode, nowMs)) {
-      this.logger.debug(
-        { chatterId: message.chatterId, eventId: message.eventId, processingMode, mode: aiMode.mode },
-        "skipping AI review due to cooldown",
-      );
+    // In live mode with a queue, skip the per-user cooldown — the queue's
+    // coalescing handles rapid-fire messages. Cooldown only gates the direct
+    // path (eval/replay) where there's no queue.
+    if (!this.aiReviewQueue || processingMode !== "live") {
+      if (!this.cooldowns.canReviewWithAi(message.chatterId, aiMode.mode, nowMs)) {
+        this.logger.debug(
+          { chatterId: message.chatterId, eventId: message.eventId, processingMode, mode: aiMode.mode },
+          "skipping AI review due to cooldown",
+        );
 
-      return {
-        status: "processed",
-        ruleDecision,
-        aiDecision: null,
-        actionResults,
-      };
+        return {
+          status: "processed",
+          ruleDecision,
+          aiDecision: null,
+          actionResults,
+        };
+      }
+      this.cooldowns.recordAiReview(message.chatterId, aiMode.mode, nowMs);
     }
 
-    this.cooldowns.recordAiReview(message.chatterId, aiMode.mode, nowMs);
+    const greetingEnabled = effectiveSettings.greetingsEnabled && effectiveSettings.greetFirstMessage;
 
     const workItem: AiReviewWorkItem = {
       message,
@@ -286,6 +328,9 @@ export class MessageProcessor {
       ...(options.forceDryRun ? { forceDryRun: options.forceDryRun } : {}),
       nowMs,
       aiMode,
+      coalescedCount: 1,
+      greetingEnabled,
+      ...(aiMode.signals.isFirstTimeChatter ? { greetingReplyToMessageId: message.sourceMessageId } : {}),
     };
 
     if (this.aiReviewQueue && processingMode === "live") {
@@ -323,8 +368,13 @@ export class MessageProcessor {
       ...(work.runId ? { runId: work.runId } : {}),
     };
 
-    const context = this.contextBuilder.build(work.message, work.botIdentity);
-    const aiInput = buildAiDecisionInput(work.message, context, effectiveConfig, work.botIdentity, work.aiMode);
+    const context = this.contextBuilder.build(work.message, work.botIdentity, work.processingMode);
+    const aiInput = buildAiDecisionInput(
+      work.message, context, effectiveConfig, work.botIdentity, work.aiMode,
+      work.coalescedCount > 1 ? work.coalescedCount : undefined,
+      work.nowMs,
+      work.greetingEnabled ?? true,
+    );
     const aiProvider = await this.aiProviders.getProvider(effectiveConfig);
     let aiDecision = await aiProvider.decide(aiInput);
 
@@ -343,6 +393,8 @@ export class MessageProcessor {
       }
     }
 
+    aiDecision = applyAiDecisionGuardrails(aiDecision, work.message, context, this.config);
+
     this.logger.info(
       {
         eventId: work.message.eventId,
@@ -351,17 +403,28 @@ export class MessageProcessor {
         mode: aiDecision.mode,
         reason: aiDecision.reason,
         actionCount: aiDecision.actions.length,
+        ...(work.coalescedCount > 1 ? { coalescedCount: work.coalescedCount } : {}),
       },
       "processed AI decision",
     );
-    this.database.recordAiDecision(work.message, aiDecision, persistenceContext);
+    this.database.recordAiDecision(work.message, aiDecision, persistenceContext, aiInput.prompt);
 
     const actionResults: ActionResult[] = [];
 
     if (aiDecision.actions.length > 0) {
-      const annotatedActions = aiDecision.actions.map((action) =>
-        annotateAiActionForExecution(action, aiDecision, work.message, context, work.botIdentity),
-      );
+      const annotatedActions = aiDecision.actions.map((action) => {
+        let annotated = annotateAiActionForExecution(action, aiDecision, work.message, context, work.botIdentity);
+        // For first-time greetings, override the reply parent: thread to the
+        // chatter's real message if available, or clear it for poll greetings
+        // (where there is no real message to reply to).
+        if (annotated.kind === "say" && work.aiMode.signals.isFirstTimeChatter) {
+          const { replyParentMessageId: _dropped, ...rest } = annotated;
+          annotated = work.greetingReplyToMessageId
+            ? { ...rest, replyParentMessageId: work.greetingReplyToMessageId }
+            : rest;
+        }
+        return annotated;
+      });
 
       await this.executeActions(annotatedActions, actionResults, {
         source: "ai",
@@ -371,6 +434,12 @@ export class MessageProcessor {
         forceDryRun: work.forceDryRun,
         nowMs: work.nowMs,
       });
+    }
+
+    // Mark greeted after executing actions so the rate limit and de-dupe are
+    // only consumed when the work actually ran (not just on enqueue).
+    if (work.aiMode.signals.isFirstTimeChatter) {
+      this.sessionChatterTracker?.markGreeted(work.message.chatterId, work.nowMs);
     }
 
     return { aiDecision, actionResults };
@@ -411,6 +480,88 @@ export class MessageProcessor {
         previousTimeoutStatus = actionResult.status;
       }
     }
+  }
+
+  /**
+   * Enqueue an AI-generated greeting for one or more viewers detected via the
+   * chatters poll. Builds a single synthetic message listing all viewer names
+   * so the AI produces one combined welcome.
+   */
+  public enqueuePollGreeting(
+    viewers: Array<{ id: string; login: string; displayName: string }>,
+    botIdentity: TwitchIdentity,
+    broadcasterIdentity: TwitchIdentity,
+  ): void {
+    if (!this.aiReviewQueue || viewers.length === 0) return;
+
+    const nowMs = Date.now();
+    const primary = viewers[0]!;
+    const greetingNames = viewers.map((v) => `@${v.displayName}`);
+
+    const syntheticMessage: NormalizedChatMessage = {
+      eventId: `poll-greet-${nowMs}-${Math.random().toString(36).slice(2, 8)}`,
+      sourceMessageId: `poll-greet-${nowMs}`,
+      receivedAt: new Date(nowMs).toISOString(),
+      broadcasterId: broadcasterIdentity.id,
+      broadcasterLogin: broadcasterIdentity.login,
+      broadcasterDisplayName: broadcasterIdentity.displayName,
+      chatterId: primary.id,
+      chatterLogin: primary.login,
+      chatterDisplayName: primary.displayName,
+      text: "",
+      normalizedText: "",
+      urlResult: { detected: false, urls: [] },
+      color: null,
+      messageType: "text",
+      badges: {},
+      roles: [],
+      isPrivileged: false,
+      isReply: false,
+      replyParentMessageId: null,
+      replyParentUserId: null,
+      replyParentUserLogin: null,
+      replyParentUserDisplayName: null,
+      threadMessageId: null,
+      threadMessageUserId: null,
+      threadMessageUserLogin: null,
+      threadMessageUserDisplayName: null,
+      isCheer: false,
+      bits: 0,
+      isRedemption: false,
+      rewardId: null,
+      sourceBroadcasterId: null,
+      sourceBroadcasterLogin: null,
+      sourceBroadcasterDisplayName: null,
+      sourceChatMessageId: null,
+      isSourceOnly: null,
+      parts: [],
+    };
+
+    const workItem: AiReviewWorkItem = {
+      message: syntheticMessage,
+      botIdentity,
+      processingMode: "live",
+      nowMs,
+      aiMode: {
+        mode: "social",
+        signals: {
+          mode: "social",
+          mentionedBot: false,
+          textualMention: false,
+          repliedToBot: false,
+          threadedWithBot: false,
+          rewardTriggered: false,
+          broadcasterAddressed: false,
+          isFirstTimeChatter: true,
+          pollGreetingNames: greetingNames,
+        },
+      },
+      coalescedCount: 1,
+      isPollGreeting: true,
+      greetingEnabled: true,
+    };
+
+    this.aiReviewQueue.enqueue(workItem);
   }
 
   private resolveNowMs(message: NormalizedChatMessage, nowMs: number | undefined): number {

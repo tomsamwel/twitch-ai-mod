@@ -1,0 +1,78 @@
+id: follower-selling-service-variants
+description: Variations of follower/viewer/sub selling beyond basic "buy followers" -- chatbots, view bots, sub gifting scams, lurker services.
+category: promo-scam
+severity: high
+tags: [scam, viewers, chatbots, subs, variants]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T10:20:00.000Z"
+    actor:
+      id: scam-var-1
+      login: chatfiller
+      displayName: ChatFiller
+      roles: [viewer]
+    text: "need chatters? i provide active chat bots cheap"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:21:00.000Z"
+    actor:
+      id: scam-var-2
+      login: viewbot99
+      displayName: ViewBot99
+      roles: [viewer]
+    text: "boost your viewer count to 100+ guaranteed"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:22:00.000Z"
+    actor:
+      id: scam-var-3
+      login: lurkerservice
+      displayName: LurkerService
+      roles: [viewer]
+    text: "real lurkers for your stream, not bots, legit growth"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:23:00.000Z"
+    actor:
+      id: scam-var-4
+      login: partnerhelp
+      displayName: PartnerHelp
+      roles: [viewer]
+    text: "want to reach affiliate fast? I sell concurrent viewers"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:24:00.000Z"
+    actor:
+      id: scam-var-5
+      login: promodeals
+      displayName: PromoDeals
+      roles: [viewer]
+    text: "im selling subs and bits at half price hit me up"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]

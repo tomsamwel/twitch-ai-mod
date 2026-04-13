@@ -29,6 +29,8 @@ test("parseAiDecisionText maps valid say action JSON into an AiDecision", () => 
     "ollama",
     {
       mode: "social",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,
@@ -57,6 +59,8 @@ test("parseAiDecisionText abstains on malformed JSON", () => {
     "openai",
     {
       mode: "moderation",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,
@@ -98,6 +102,8 @@ test("parseAiDecisionText normalizes abstain payloads that incorrectly include a
     "ollama",
     {
       mode: "moderation",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,
@@ -137,6 +143,8 @@ test("parseAiDecisionText preserves the application-selected mode even if the pr
     "ollama",
     {
       mode: "social",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,
@@ -178,6 +186,8 @@ test("parseAiDecisionText maps moderation warn actions into an AiDecision", () =
     "ollama",
     {
       mode: "moderation",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,
@@ -221,6 +231,8 @@ test("parseAiDecisionText accepts ordered timeout plus warn moderation actions",
     "ollama",
     {
       mode: "moderation",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,
@@ -261,6 +273,8 @@ test("parseAiDecisionText fills a generic warn fallback when moderation timeout 
     "ollama",
     {
       mode: "moderation",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,
@@ -307,6 +321,8 @@ test("parseAiDecisionText rejects invalid moderation action combos such as say p
     "ollama",
     {
       mode: "moderation",
+      temperature: 0,
+      isFirstTimeChatter: false,
       message,
       context: createEmptyContext(),
       config,

@@ -4,6 +4,7 @@ import test from "node:test";
 import { AiContextBuilder } from "../src/ai/context-builder.js";
 import { ActionExecutor } from "../src/actions/action-executor.js";
 import { MessageProcessor } from "../src/runtime/message-processor.js";
+import { SessionChatterTracker } from "../src/runtime/session-chatter-tracker.js";
 import { normalizeChatMessage } from "../src/ingest/normalize-chat-message.js";
 import { RuleEngine } from "../src/moderation/rule-engine.js";
 import { CooldownManager } from "../src/moderation/cooldown-manager.js";
@@ -112,7 +113,10 @@ test("MessageProcessor replays AI decisions through the shared action flow in dr
       return [];
     },
   });
-  const replayMessage = normalizeChatMessage(createChatEvent(), new Date("2026-03-24T12:34:56.000Z"));
+  const replayMessage = normalizeChatMessage(
+    createChatEvent({ messageText: "check out https://example.com for free stuff" }),
+    new Date("2026-03-24T12:34:56.000Z"),
+  );
   const createdRequests: ActionRequest[] = [];
   const recordedContexts: Array<{ stage: "rules" | "ai"; processingMode?: string; runId?: string }> = [];
   const runtimeSettings = createTestRuntimeSettings(config, {
@@ -633,6 +637,7 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
           chatterId: "user-1",
           chatterLogin: "viewerone",
           receivedAt: "2026-03-24T12:54:00.000Z",
+          processingMode: "live",
           botIdentity: {
             id: "bot-1",
             login: "testbot",
@@ -646,23 +651,23 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
     listRecentBotInteractions() {
       return [
         {
-          id: "prior-bot-say",
-          kind: "say",
-          status: "dry-run",
+          id: "prior-bot-warn",
+          kind: "warn",
+          status: "executed",
           source: "ai",
           targetUserId: "user-1",
           targetUserName: "viewerone",
           reason: "brief correction",
-          dryRun: true,
+          dryRun: false,
           processingMode: "live",
           payload: {
-            id: "prior-bot-say",
-            kind: "say",
+            id: "prior-bot-warn",
+            kind: "warn",
             source: "ai",
             sourceEventId: "prior-event",
             sourceMessageId: "prior-message",
             processingMode: "live",
-            dryRun: true,
+            dryRun: false,
             initiatedAt: "2026-03-24T12:54:10.000Z",
             reason: "brief correction",
             targetUserId: "user-1",
@@ -670,10 +675,10 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
             message: "Please stop spamming mentions.",
           },
           result: {
-            id: "prior-bot-say",
-            kind: "say",
-            status: "dry-run",
-            dryRun: true,
+            id: "prior-bot-warn",
+            kind: "warn",
+            status: "executed",
+            dryRun: false,
             reason: "brief correction",
           },
           createdAt: "2026-03-24T12:54:10.000Z",
@@ -735,7 +740,7 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
               outcome: "action",
               reason: "repeated mention spam",
               confidence: 0.95,
-              mode: "social",
+              mode: "moderation",
               moderationCategory: "spam-escalation",
               actions: [
                 {
@@ -886,4 +891,450 @@ test("MessageProcessor skips AI moderation for privileged chatters unless the mo
   assert.equal(result.ruleDecision?.outcome, "no_action");
   assert.equal(result.aiDecision, null);
   assert.equal(result.actionResults.length, 0);
+});
+
+test("MessageProcessor suppresses AI moderation for clean de-escalation follow-ups", async () => {
+  const config = createTestConfig();
+  const logger = createLogger("info", "test");
+  const cooldowns = new CooldownManager(config.cooldowns);
+  const ruleEngine = new RuleEngine(config, cooldowns);
+  const priorMessage = normalizeChatMessage(
+    createChatEvent({
+      messageId: "prior-user-message",
+      messageText: "BUY FOLLOWERS NOW BUY FOLLOWERS NOW",
+      messageParts: [
+        {
+          type: "text",
+          text: "BUY FOLLOWERS NOW BUY FOLLOWERS NOW",
+        },
+      ],
+    }),
+    new Date("2026-03-24T12:57:00.000Z"),
+  );
+  const contextBuilder = new AiContextBuilder(config, {
+    listRecentRoomMessageSnapshots() {
+      return [];
+    },
+    listRecentUserMessageSnapshots() {
+      return [
+        {
+          eventId: "prior-user-message",
+          sourceMessageId: "prior-user-message",
+          chatterId: "user-1",
+          chatterLogin: "viewerone",
+          receivedAt: "2026-03-24T12:57:00.000Z",
+          processingMode: "live",
+          botIdentity: {
+            id: "bot-1",
+            login: "testbot",
+            displayName: "TestBot",
+          },
+          message: priorMessage,
+          createdAt: "2026-03-24T12:57:00.000Z",
+        },
+      ];
+    },
+    listRecentBotInteractions() {
+      return [
+        {
+          id: "prior-bot-warn",
+          kind: "warn",
+          status: "executed",
+          source: "ai",
+          targetUserId: "user-1",
+          targetUserName: "viewerone",
+          reason: "spam warning",
+          dryRun: false,
+          processingMode: "live",
+          payload: {
+            id: "prior-bot-warn",
+            kind: "warn",
+            source: "ai",
+            sourceEventId: "prior-event",
+            sourceMessageId: "prior-source-message",
+            processingMode: "live",
+            dryRun: false,
+            initiatedAt: "2026-03-24T12:57:10.000Z",
+            reason: "spam warning",
+            targetUserId: "user-1",
+            targetUserName: "viewerone",
+            message: "@viewerone Keep it clean, please.",
+          },
+          result: {
+            id: "prior-bot-warn",
+            kind: "warn",
+            status: "executed",
+            dryRun: false,
+            reason: "spam warning",
+          },
+          createdAt: "2026-03-24T12:57:10.000Z",
+        },
+      ];
+    },
+  });
+  const message = normalizeChatMessage(
+    createChatEvent({
+      messageId: "clean-followup",
+      messageText: "fair enough, great stream btw",
+      messageParts: [
+        {
+          type: "text",
+          text: "fair enough, great stream btw",
+        },
+      ],
+    }),
+    new Date("2026-03-24T13:03:00.000Z"),
+  );
+  const runtimeSettings = createTestRuntimeSettings(config);
+  let recordedDecision: AiDecision | null = null;
+
+  const processor = new MessageProcessor(
+    config,
+    logger,
+    {
+      registerIngestedEvent() {
+        return true;
+      },
+      recordMessageSnapshot() {},
+      recordRuleDecision() {},
+      recordAiDecision(_message, decision: AiDecision) {
+        recordedDecision = decision;
+      },
+    },
+    cooldowns,
+    ruleEngine,
+    contextBuilder,
+    runtimeSettings,
+    {
+      createEffectiveConfig() {
+        return config;
+      },
+      async getProvider() {
+        return {
+          kind: "ollama",
+          async healthCheck() {},
+          async decide(): Promise<AiDecision> {
+            return {
+              source: "ollama",
+              outcome: "action",
+              reason: "repeat offender after prior warning",
+              confidence: 0.97,
+              mode: "moderation",
+              moderationCategory: "spam-escalation",
+              actions: [
+                {
+                  kind: "timeout",
+                  reason: "repeat offender after prior warning",
+                  durationSeconds: 300,
+                },
+                {
+                  kind: "warn",
+                  reason: "public warning",
+                  message: "That crossed the line. Dial it back.",
+                },
+              ],
+            };
+          },
+        };
+      },
+    },
+    {
+      createActionRequest() {
+        throw new Error("guardrailed de-escalation should not create actions");
+      },
+      async execute() {
+        throw new Error("guardrailed de-escalation should not execute actions");
+      },
+    },
+  );
+
+  const result = await processor.process(message, {
+    botIdentity: {
+      id: "bot-1",
+      login: "testbot",
+      displayName: "TestBot",
+    },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T13:03:00.000Z"),
+  });
+
+  assert.equal(result.status, "processed");
+  assert.equal(result.ruleDecision?.outcome, "no_action");
+  // De-escalation guardrails convert the AI's action into an abstain.
+  assert.equal(result.aiDecision?.outcome, "abstain");
+  assert.equal(result.actionResults.length, 0);
+});
+
+// ─── First-time greeting tests ──────────────────────────────────────────────
+
+function buildGreetingConfig() {
+  const config = createTestConfig();
+  return {
+    ...config,
+    social: {
+      greetings: {
+        enabled: true,
+        onFirstMessage: true,
+        onChatterJoin: false,
+        chatterPollIntervalMs: 30_000,
+        maxQueueDepth: 2,
+        rateLimitMs: 60_000,
+        greetingCooldownMs: 28_800_000,
+      },
+    },
+  } as typeof config;
+}
+
+function buildGreetingProcessor(config: ReturnType<typeof buildGreetingConfig>, {
+  tracker = new SessionChatterTracker(),
+  queueDepth = 0,
+  onAiDecide,
+  runtimeOverrides = {},
+}: {
+  tracker?: SessionChatterTracker;
+  queueDepth?: number;
+  onAiDecide?: (mode: string) => void;
+  runtimeOverrides?: Partial<import("../src/types.js").EffectiveRuntimeSettings>;
+} = {}) {
+  const logger = createLogger("fatal", "test");
+  const cooldowns = new CooldownManager(config.cooldowns);
+  const ruleEngine = new RuleEngine(config, cooldowns);
+  const contextBuilder = new AiContextBuilder(config, {
+    listRecentRoomMessageSnapshots() { return []; },
+    listRecentUserMessageSnapshots() { return []; },
+    listRecentBotInteractions() { return []; },
+  });
+  const runtimeSettings = createTestRuntimeSettings(config, { socialRepliesEnabled: true, ...runtimeOverrides });
+
+  const capturedModes: string[] = [];
+  const capturedFirstTimeChatter: boolean[] = [];
+  const capturedGreetingEnabled: boolean[] = [];
+
+  const processor = new MessageProcessor(
+    config,
+    logger,
+    {
+      registerIngestedEvent() { return true; },
+      recordMessageSnapshot() {},
+      recordRuleDecision() {},
+      recordAiDecision() {},
+    },
+    cooldowns,
+    ruleEngine,
+    contextBuilder,
+    runtimeSettings,
+    {
+      createEffectiveConfig() { return config; },
+      async getProvider() {
+        return {
+          kind: "ollama" as const,
+          async healthCheck() {},
+          async decide(input): Promise<import("../src/types.js").AiDecision> {
+            capturedModes.push(input.mode);
+            capturedFirstTimeChatter.push(input.isFirstTimeChatter);
+            capturedGreetingEnabled.push(input.greetingEnabled);
+            onAiDecide?.(input.mode);
+            return {
+              source: "ollama",
+              outcome: "action",
+              reason: "greeting",
+              confidence: 0.9,
+              mode: "social",
+              moderationCategory: "none",
+              actions: [{ kind: "say", reason: "greeting", message: "Welcome ViewerOne!" }],
+            };
+          },
+        };
+      },
+    },
+    {
+      createActionRequest(action, input) {
+        return {
+          ...action,
+          id: "action-1",
+          source: input.source,
+          sourceEventId: input.sourceEventId,
+          sourceMessageId: input.sourceMessageId,
+          processingMode: input.processingMode ?? "live",
+          dryRun: true,
+          initiatedAt: new Date().toISOString(),
+        };
+      },
+      async execute(req) {
+        return {
+          id: req.id,
+          kind: req.kind,
+          status: "dry-run",
+          dryRun: true,
+          reason: req.reason,
+        };
+      },
+    },
+    undefined,  // outboundMessageTracker
+    undefined,  // aiReviewQueue (direct path — eval-like)
+    tracker,
+    () => queueDepth,
+  );
+
+  return { processor, capturedModes, capturedFirstTimeChatter, capturedGreetingEnabled, tracker };
+}
+
+test("MessageProcessor triggers greeting for first-time chatter in live mode when queue idle", async () => {
+  const config = buildGreetingConfig();
+  const { processor, capturedFirstTimeChatter } = buildGreetingProcessor(config);
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-1", chatterId: "new-user-1", chatterName: "viewerone" }),
+    new Date("2026-03-24T15:00:00.000Z"),
+  );
+
+  const result = await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:00:00.000Z"),
+  });
+
+  assert.equal(result.status, "processed");
+  assert.ok(capturedFirstTimeChatter.includes(true), "expected isFirstTimeChatter signal to be true");
+});
+
+test("MessageProcessor does NOT trigger greeting for returning chatter (same session)", async () => {
+  const config = buildGreetingConfig();
+  const greetedUsers = new Set(["existing-user"]);
+  const tracker = new SessionChatterTracker({
+    isRecentlyGreeted: (userId) => greetedUsers.has(userId),
+    recordGreeted: (userId) => { greetedUsers.add(userId); },
+  });
+  tracker.markSeen("existing-user");
+  tracker.isFirstMessage("existing-user");  // simulate prior message
+  const { processor, capturedFirstTimeChatter } = buildGreetingProcessor(config, { tracker });
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-2", chatterId: "existing-user", chatterName: "regularchatter" }),
+    new Date("2026-03-24T15:01:00.000Z"),
+  );
+
+  await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:01:00.000Z"),
+  });
+
+  assert.ok(!capturedFirstTimeChatter.includes(true), "expected isFirstTimeChatter to be false for returning chatter");
+});
+
+test("MessageProcessor tags isFirstTimeChatter even when queue is deep (AI decides whether to greet)", async () => {
+  const config = buildGreetingConfig();
+  const { processor, capturedFirstTimeChatter } = buildGreetingProcessor(config, { queueDepth: 5 });
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-3", chatterId: "new-user-2", chatterName: "newcomer" }),
+    new Date("2026-03-24T15:02:00.000Z"),
+  );
+
+  await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:02:00.000Z"),
+  });
+
+  assert.ok(capturedFirstTimeChatter.includes(true), "isFirstTimeChatter should be set regardless of queue depth");
+});
+
+test("MessageProcessor does NOT trigger greeting in non-live processing modes", async () => {
+  const config = buildGreetingConfig();
+  const { processor, capturedFirstTimeChatter } = buildGreetingProcessor(config);
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-4", chatterId: "new-user-3", chatterName: "scenarioviewer" }),
+    new Date("2026-03-24T15:03:00.000Z"),
+  );
+
+  await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "scenario",  // Not live
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:03:00.000Z"),
+  });
+
+  assert.ok(!capturedFirstTimeChatter.includes(true), "should not greet in scenario mode");
+});
+
+test("MessageProcessor tags isFirstTimeChatter even when greetings are disabled (scam escalation still applies)", async () => {
+  const config = createTestConfig();  // no social.greetings
+  const { processor, capturedFirstTimeChatter } = buildGreetingProcessor(config);
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-5", chatterId: "new-user-4", chatterName: "newviewer" }),
+    new Date("2026-03-24T15:04:00.000Z"),
+  );
+
+  await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:04:00.000Z"),
+  });
+
+  assert.ok(capturedFirstTimeChatter.includes(true), "isFirstTimeChatter should be set even without greetings config");
+});
+
+test("MessageProcessor passes greetingEnabled=false when greetFirstMessage is off (isFirstTimeChatter still set for scam escalation)", async () => {
+  const config = buildGreetingConfig();
+  const { processor, capturedFirstTimeChatter, capturedGreetingEnabled } = buildGreetingProcessor(config, {
+    runtimeOverrides: { greetingsEnabled: true, greetFirstMessage: false },
+  });
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-gfm-off", chatterId: "new-user-gfm", chatterName: "newviewer" }),
+    new Date("2026-03-24T15:06:00.000Z"),
+  );
+
+  await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:06:00.000Z"),
+  });
+
+  assert.ok(capturedFirstTimeChatter.includes(true), "isFirstTimeChatter should still be true for scam escalation");
+  assert.ok(capturedGreetingEnabled.includes(false), "greetingEnabled should be false when greetFirstMessage is off");
+});
+
+test("MessageProcessor marks chatter as greeted after executing greeting actions", async () => {
+  const config = buildGreetingConfig();
+  const greetedUsers = new Set<string>();
+  const tracker = new SessionChatterTracker({
+    isRecentlyGreeted: (userId) => greetedUsers.has(userId),
+    recordGreeted: (userId) => { greetedUsers.add(userId); },
+  });
+  const { processor } = buildGreetingProcessor(config, { tracker });
+
+  const message = normalizeChatMessage(
+    createChatEvent({ messageId: "msg-6", chatterId: "new-user-5", chatterName: "firsttimer" }),
+    new Date("2026-03-24T15:05:00.000Z"),
+  );
+
+  assert.equal(greetedUsers.has("new-user-5"), false);
+
+  await processor.process(message, {
+    botIdentity: { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    processingMode: "live",
+    dedupe: false,
+    persistSnapshot: false,
+    nowMs: Date.parse("2026-03-24T15:05:00.000Z"),
+  });
+
+  assert.equal(greetedUsers.has("new-user-5"), true);
 });

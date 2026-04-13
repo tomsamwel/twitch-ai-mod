@@ -5,7 +5,7 @@
 Configuration is intentionally split by concern.
 
 - [config/app.yaml](config/app.yaml)
-  App identity, Twitch logins/scopes, provider defaults, prompt-pack selection, context limits, dry-run/live gates.
+  App identity, Twitch logins/scopes, channel rules, provider defaults, prompt-pack selection, context limits, dry-run/live gates.
 - [config/control-plane.yaml](config/control-plane.yaml)
   Whisper command settings, trusted controllers, allowed prompt packs, named model presets.
 - [config/cooldowns.yaml](config/cooldowns.yaml)
@@ -36,6 +36,7 @@ Optional:
 - `TWITCH_OAUTH_HOST`
 - `TWITCH_OAUTH_PORT`
 - `OPENAI_API_KEY`
+- `AZURE_FOUNDRY_API_KEY`
 - `APP_LOG_LEVEL`
 
 Login overrides apply only when running the live bot (`npm run dev`). Eval, replay, and approval scripts always use the YAML-defined logins so scenario identities stay deterministic.
@@ -45,13 +46,15 @@ Login overrides apply only when running the live bot (`npm run dev`). Eval, repl
 [config/app.yaml](config/app.yaml) controls:
 
 - `runtime`
-  Dry-run, log level, token validation cadence.
+  Dry-run, log level, token validation cadence, and EventSub disconnect watchdog policy.
 - `storage`
   SQLite path.
+- `admin`
+  Local admin UI enablement plus port.
 - `promptPacks.defaultPack`
   The default pack loaded at startup.
 - `twitch`
-  Broadcaster login, bot login, required scopes.
+  Broadcaster login, bot login, required scopes, channel rules.
 - `ai`
   Provider selection, request defaults, context limits, provider-specific endpoints/models.
 - `actions`
@@ -67,6 +70,25 @@ Important live flags:
   Allows real timeout actions.
 
 For safe rollout, enable chat send before moderation.
+
+EventSub resilience settings:
+- `runtime.eventSubDisconnectGraceSeconds`
+  How long the bot may stay disconnected from Twitch EventSub before it is considered stalled.
+- `runtime.exitOnEventSubStall`
+  If `true`, the bot exits after the grace period so an external supervisor can restart it.
+
+### Channel Rules
+
+`twitch.channelRules` is an optional string array in `app.yaml`. When set, the rules are injected into the AI prompt context so the bot can answer viewer questions about channel rules.
+
+```yaml
+twitch:
+  channelRules:
+    - Be respectful to everyone
+    - No spam or self-promotion
+    - No hate speech or harassment
+    - Keep it fun and friendly
+```
 
 ## Prompt Packs
 
@@ -99,7 +121,7 @@ The selected pack can come from:
 
 - `enabled`
 - `commandPrefix`
-- `trustedControllerLogins`
+- `trustedControllers`
 - `broadcasterAlwaysAllowed`
 - `allowedPromptPacks`
 - `modelPresets`
@@ -128,8 +150,6 @@ trustedControllers:
 | `broadcaster` | Everything (auto-assigned when `broadcasterAlwaysAllowed`) |
 | `admin` | All toggles, pack, model, reset, exempt, block, panic, chill, off |
 | `mod` | status, recent, stats, exempt, block |
-
-The old `trustedControllerLogins` format still works — all entries default to `admin` role.
 
 ### Supported Commands
 
@@ -160,15 +180,28 @@ The old `trustedControllerLogins` format still works — all entries default to 
 
 Rules:
 - controller access is allowlist-only
-- controller logins are managed locally in YAML, not from Twitch chat
+- controllers can come from YAML or the local admin panel, never from Twitch chat
+- runtime-added controllers are resolved to Twitch user IDs before they are trusted
 - `model` only switches between named presets, not arbitrary model strings
 - `reset` clears SQLite overrides, runtime exemptions, and runtime blocked terms
+
+## Runtime Controllers
+
+The admin panel can add and update trusted controllers at runtime.
+
+Runtime controller behavior:
+- entries are persisted in SQLite and survive restart
+- the operator adds them by login for convenience
+- the bot resolves that login to a stable Twitch user ID before storing trust
+- whisper authorization checks the sender user ID, not just the current login string
+- once a runtime controller is trusted, later authorized whispers refresh the stored login/display-name metadata
+- if an old login-only runtime controller row can no longer be resolved, it stays visible in the admin panel but is not trusted until repaired
 
 ## Runtime Exemptions
 
 Exempt users bypass deterministic rules and AI timeout execution. Managed via:
 - `aimod exempt <user>` / `aimod unexempt <user>` (whisper)
-- Admin panel Tuning tab
+- Admin panel Config tab
 
 Stored in SQLite `exempt_users` table. Cleared on `aimod reset`.
 
@@ -176,7 +209,7 @@ Stored in SQLite `exempt_users` table. Cleared on `aimod reset`.
 
 Additional blocked terms added at runtime, merged with config `deterministicRules.blockedTerms`. Managed via:
 - `aimod block <term>` / `aimod unblock <term>` (whisper)
-- Admin panel Tuning tab
+- Admin panel Config tab
 
 Stored in SQLite `runtime_blocked_terms` table.
 
@@ -205,9 +238,9 @@ Typical override targets:
 - runs against llama-server (`brew install llama.cpp`)
 - OpenAI-compatible `/v1/chat/completions` API
 - KV cache prefix reuse via `--checkpoint-every-n-tokens` (critical for qwen3 hybrid models)
-- start with `./scripts/start-llama-server.sh`
-- configured through `ai.llamaCpp.baseUrl` and `ai.llamaCpp.model`
-- default context size is 4096 tokens (`ai.ollama.numCtx`); sufficient for expanded prompts with full room context on a 4B model
+- configured through `ai.llamaCpp.baseUrl`, `ai.llamaCpp.model`, and optional `ai.llamaCpp.managed`
+- when `managed: true`, the app and offline tooling auto-start `llama-server` at the configured port
+- if `managed` is disabled, run your own compatible server at `ai.llamaCpp.baseUrl`
 
 `ai.provider: ollama`
 - local Ollama HTTP runtime (KV cache broken for qwen3 hybrid models — slower)
@@ -219,7 +252,16 @@ Typical override targets:
 - requires `OPENAI_API_KEY`
 - configured through `ai.openai.baseUrl` and `ai.openai.model`
 
+`ai.provider: azure-foundry`
+- Azure AI Foundry via the Azure OpenAI-compatible OpenAI v1 endpoint
+- uses the supported OpenAI SDK path, not the deprecated Azure AI Inference SDK
+- requires `AZURE_FOUNDRY_API_KEY`
+- configured through `ai.azureFoundry.baseUrl`, `ai.azureFoundry.deployment`, and `ai.azureFoundry.apiStyle`
+- current supported `apiStyle`: `chat-completions`
+
 The app keeps one shared decision schema across providers, so the rest of the pipeline stays the same when switching.
+
+For `control-plane.yaml` model presets, the existing `model` field still applies across all providers. When the preset provider is `azure-foundry`, `model` means the deployment name.
 
 The current action contract is:
 - `[]` for abstain
@@ -228,6 +270,12 @@ The current action contract is:
 - `[timeout, warn]` for timeout plus public room-setting notice
 
 `warn` is moderation-only. Social mode should never emit `warn`.
+
+For paid remote providers, use tighter defaults than the local `llama-cpp` sample:
+- `ai.queue.concurrency: 1`
+- lower `ai.requestDefaults.maxOutputTokens`
+- lower `ai.context.maxPromptChars`
+- longer AI cooldowns in [config/cooldowns.yaml](config/cooldowns.yaml)
 
 ## AI Moderation Policy
 
@@ -325,9 +373,11 @@ Replay:
 - runs rules first, then AI
 - forces all resulting actions to dry-run
 - tags replay decisions/actions separately from live runs
+- persists replay-tagged decisions/actions for comparison without feeding live heuristics
+- leaves live/admin default views scoped to live data unless a tool explicitly asks for replay data
 
 Optional overrides:
-- `--provider llama-cpp|ollama|openai`
+- `--provider llama-cpp|ollama|openai|azure-foundry`
 - `--model <model-name>`
 - `--prompt-pack <pack-name>`
 
@@ -339,17 +389,17 @@ npm run eval:scenarios -- --suite social
 
 Scenario eval:
 - loads YAML scenarios from [evals/scenarios/](evals/scenarios)
-- accepts both legacy single-turn files and scripted `seed + steps[]` files
-- normalizes legacy cases into one-step scripts at load time
+- expects scripted `seed + steps[]` files
 - seeds history into SQLite
 - runs the shared message pipeline
 - forces actions to dry-run
 - prints a readable CLI report with prompt-size hints
+- tags scenario snapshots/decisions/actions separately so scenario history does not contaminate live context or live moderation heuristics
 
 Optional overrides:
 - `--suite <name>`
 - `--scenario <id>`
-- `--provider llama-cpp|ollama|openai`
+- `--provider llama-cpp|ollama|openai|azure-foundry`
 - `--model <model-name>`
 - `--prompt-pack <pack-name>`
 

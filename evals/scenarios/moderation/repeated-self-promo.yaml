@@ -1,26 +1,36 @@
 id: repeated-self-promo
-description: Repeated low-effort self-promo may justify a short corrective reply, but not a timeout.
-history:
+description: Repeated low-effort self-promo may justify a short corrective
+  reply, but not a timeout.
+seed:
   messages:
-    - at: "2026-03-24T15:05:40.000Z"
+    - at: 2026-03-24T15:05:40.000Z
       actor:
         id: promo-1
         login: overlayvendor
         displayName: OverlayVendor
-        roles: [viewer]
-      text: "check my profile for cheap overlays"
-incomingMessage:
-  at: "2026-03-24T15:06:05.000Z"
-  actor:
-    id: promo-1
-    login: overlayvendor
-    displayName: OverlayVendor
-    roles: [viewer]
-  text: "yo buy my overlays after stream"
-expected:
-  mode: moderation
-  allowedOutcomes: [abstain, action]
-  allowedActionKinds: [warn]
-  allowedActionStatuses: [dry-run]
-  forbiddenActionKinds: [timeout]
-  replyShouldNotContainAny: [ban, timeout]
+        roles:
+          - viewer
+      text: check my profile for cheap overlays
+steps:
+  - at: 2026-03-24T15:06:05.000Z
+    actor:
+      id: promo-1
+      login: overlayvendor
+      displayName: OverlayVendor
+      roles:
+        - viewer
+    text: yo buy my overlays after stream
+    expected:
+      mode: moderation
+      allowedOutcomes:
+        - abstain
+        - action
+      allowedActionKinds:
+        - warn
+      allowedActionStatuses:
+        - dry-run
+      forbiddenActionKinds:
+        - timeout
+      replyShouldNotContainAny:
+        - ban
+        - timeout

@@ -26,6 +26,11 @@ export function applyNonLiveScriptOverrides(
   if (options.model) {
     if (provider === "ollama") {
       nextConfig.ai.ollama.model = options.model;
+    } else if (provider === "azure-foundry") {
+      if (!nextConfig.ai.azureFoundry) {
+        throw new Error("ai.azureFoundry configuration is required when provider is azure-foundry");
+      }
+      nextConfig.ai.azureFoundry.deployment = options.model;
     } else if (provider === "llama-cpp" && nextConfig.ai.llamaCpp) {
       nextConfig.ai.llamaCpp.model = options.model;
     } else {

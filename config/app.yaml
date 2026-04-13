@@ -6,6 +6,8 @@ runtime:
   dryRun: false
   logLevel: info
   tokenValidationIntervalMinutes: 60
+  eventSubDisconnectGraceSeconds: 600
+  exitOnEventSubStall: true
 
 storage:
   sqlitePath: ./data/twitch-ai-mod.sqlite
@@ -18,18 +20,25 @@ twitch:
   # IMPORTANT: Use a dedicated bot account in production (must differ from broadcasterLogin).
   # Using the same account is only acceptable for local development/testing.
   botLogin: testbot
+  channelRules:
+    - Be respectful to everyone
+    - No spam or self-promotion
+    - No hate speech or harassment
+    - Keep it fun and friendly
   requiredScopes:
     - user:read:chat
     - user:write:chat
     - moderator:manage:banned_users
     - user:read:whispers
     - user:manage:whispers
+    - moderator:read:chatters
 
 ai:
   enabled: true
   provider: llama-cpp
   requestDefaults:
     temperature: 0
+    socialTemperature: 0.7
     maxOutputTokens: 150
     timeoutMs: 45000
   context:
@@ -45,6 +54,10 @@ ai:
   openai:
     baseUrl: https://api.openai.com/v1
     model: gpt-4o-mini
+  azureFoundry:
+    baseUrl: https://your-resource.openai.azure.com/openai/v1/
+    deployment: your-model-deployment
+    apiStyle: chat-completions
   llamaCpp:
     baseUrl: http://localhost:8081
     model: qwen3:4b-instruct
@@ -53,7 +66,7 @@ ai:
   # Moderation items (high priority) process before social replies (normal priority).
   queue:
     capacity: 50                  # max pending AI reviews before dropping oldest
-    concurrency: 1                # parallel AI calls (1 for local llama-server/ollama, 3-5 for openai)
+    concurrency: 2                # parallel AI calls (1 for local llama-server/ollama, 1-3 for paid remote APIs)
     moderationStalenessMs: 0      # 0 = moderation items never go stale
     socialStalenessMs: 30000      # social replies go stale after 30s
     pressureSignalCooldownMs: 60000  # min interval between pressure whispers
@@ -65,3 +78,13 @@ admin:
 actions:
   allowLiveChatMessages: true
   allowLiveModeration: false
+
+social:
+  greetings:
+    enabled: false          # set to true to enable new-viewer greetings
+    onFirstMessage: true    # greet when they send their first message this session
+    onChatterJoin: false    # greet silent viewers detected via chatters poll (default off)
+    chatterPollIntervalMs: 10000  # how often to poll GET /chat/chatters (ms)
+    maxQueueDepth: 2        # only greet when AI queue has <= this many pending items
+    rateLimitMs: 60000      # minimum ms between any two greetings
+    greetingCooldownMs: 28800000  # 8 hours -- don't re-greet a viewer within this window

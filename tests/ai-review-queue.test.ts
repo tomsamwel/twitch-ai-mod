@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { AiReviewQueue } from "../src/runtime/ai-review-queue.js";
-import type { Priority, PressureState } from "../src/runtime/ai-review-queue.js";
+import type { CoalesceResult, Priority, PressureState } from "../src/runtime/ai-review-queue.js";
 import { createLogger } from "../src/storage/logger.js";
 
 const logger = createLogger("error", "test");
@@ -227,7 +227,7 @@ test("AiReviewQueue handles handler errors without breaking the queue", async ()
   await new Promise((resolve) => setTimeout(resolve, 50));
 
   assert.deepEqual(processed, [1, 3]);
-  assert.equal(queue.getStats().totalProcessed, 3);
+  assert.equal(queue.getStats().totalProcessed, 2); // failed item not counted
 });
 
 // --- Priority queue tests ---
@@ -460,4 +460,218 @@ test("AiReviewQueue.stop() clears both tiers and resets pressure", () => {
   assert.equal(queue.getStats().normalDepth, 0);
   assert.equal(queue.getStats().depth, 0);
   assert.equal(queue.getStats().underPressure, false);
+});
+
+// --- Coalescing tests ---
+
+interface CoalesceItem {
+  id: number;
+  key: string;
+  risk: number;
+}
+
+function createCoalescingQueue(overrides: {
+  capacity?: number;
+  concurrency?: number;
+  classify?: (item: CoalesceItem) => Priority;
+} = {}) {
+  return new AiReviewQueue<CoalesceItem>(
+    {
+      capacity: overrides.capacity ?? 10,
+      concurrency: overrides.concurrency ?? 1,
+      moderationStalenessMs: 0,
+      socialStalenessMs: 30_000,
+    },
+    logger,
+    overrides.classify ?? (() => "high"),
+    undefined,
+    (item) => item.key,
+    (existing, incoming, count): CoalesceResult<CoalesceItem> => {
+      const winner = incoming.risk >= existing.risk ? incoming : existing;
+      return { merged: winner, count: count + 1 };
+    },
+  );
+}
+
+test("AiReviewQueue coalesces items with the same key", async () => {
+  const queue = createCoalescingQueue({ concurrency: 1 });
+  const processed: CoalesceItem[] = [];
+
+  // Block first item so subsequent items queue up and coalesce.
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => { unblock = resolve; });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue({ id: 1, key: "user-a", risk: 0 }); // starts processing (blocked)
+  queue.enqueue({ id: 2, key: "user-a", risk: 0 }); // queued
+  queue.enqueue({ id: 3, key: "user-a", risk: 0 }); // coalesces with id=2
+  queue.enqueue({ id: 4, key: "user-a", risk: 0 }); // coalesces again
+
+  assert.equal(queue.getStats().depth, 1, "only one queued entry for user-a");
+  assert.equal(queue.getStats().totalCoalesced, 2);
+  assert.equal(queue.getStats().totalEnqueued, 4);
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(processed.length, 2);
+  assert.equal(processed[0]!.id, 1, "first item processed before coalescing");
+  // Only 2 items processed despite 4 enqueued — 3 coalesced into 1.
+  assert.equal(queue.getStats().totalProcessed, 2);
+});
+
+test("AiReviewQueue coalescing keeps the riskier message", async () => {
+  const queue = createCoalescingQueue({ concurrency: 1 });
+  const processed: CoalesceItem[] = [];
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => { unblock = resolve; });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue({ id: 1, key: "user-a", risk: 0 }); // processing (blocked)
+  queue.enqueue({ id: 2, key: "user-a", risk: 0 }); // queued
+  queue.enqueue({ id: 3, key: "user-a", risk: 5 }); // coalesces — riskier, wins
+  queue.enqueue({ id: 4, key: "user-a", risk: 1 }); // coalesces — less risky, id=3 stays
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(processed[1]!.id, 3, "riskier message (id=3) wins the coalesce");
+});
+
+test("AiReviewQueue does not coalesce items with different keys", async () => {
+  const queue = createCoalescingQueue({ concurrency: 1 });
+  const processed: CoalesceItem[] = [];
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => { unblock = resolve; });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue({ id: 1, key: "user-a", risk: 0 }); // processing (blocked)
+  queue.enqueue({ id: 2, key: "user-a", risk: 0 }); // queued
+  queue.enqueue({ id: 3, key: "user-b", risk: 0 }); // different key, separate entry
+
+  assert.equal(queue.getStats().depth, 2, "two separate entries for different keys");
+  assert.equal(queue.getStats().totalCoalesced, 0);
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(processed.length, 3);
+});
+
+test("AiReviewQueue does not coalesce with in-flight items", async () => {
+  const queue = createCoalescingQueue({ concurrency: 1 });
+  const processed: CoalesceItem[] = [];
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => { unblock = resolve; });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue({ id: 1, key: "user-a", risk: 0 }); // starts processing — removed from queue
+  queue.enqueue({ id: 2, key: "user-a", risk: 0 }); // no match in queue, added as new entry
+
+  assert.equal(queue.getStats().depth, 1);
+  assert.equal(queue.getStats().totalCoalesced, 0, "in-flight item is not coalesced with");
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.equal(processed.length, 2);
+  assert.equal(processed[0]!.id, 1);
+  assert.equal(processed[1]!.id, 2);
+});
+
+test("AiReviewQueue coalescing promotes normal to high when incoming is high", async () => {
+  const queue = createCoalescingQueue({
+    concurrency: 1,
+    classify: (item) => (item.risk > 3 ? "high" : "normal"),
+  });
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+  const processed: CoalesceItem[] = [];
+
+  queue.start(async (item) => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => { unblock = resolve; });
+    }
+    processed.push(item);
+  });
+
+  queue.enqueue({ id: 0, key: "blocker", risk: 0 }); // processing (blocked)
+  queue.enqueue({ id: 1, key: "user-a", risk: 0 }); // normal, queued
+  assert.equal(queue.getStats().normalDepth, 1);
+  assert.equal(queue.getStats().highDepth, 0);
+
+  queue.enqueue({ id: 2, key: "user-a", risk: 5 }); // high — coalesces and promotes
+  assert.equal(queue.getStats().normalDepth, 0, "promoted out of normal tier");
+  assert.equal(queue.getStats().highDepth, 1, "promoted into high tier");
+  assert.equal(queue.getStats().totalCoalesced, 1);
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  // High-priority coalesced item processes before any remaining normal items.
+  assert.equal(processed[1]!.id, 2, "riskier message wins");
+});
+
+test("AiReviewQueue coalescing skips items with undefined key", async () => {
+  const queue = new AiReviewQueue<CoalesceItem>(
+    { capacity: 10, concurrency: 1, moderationStalenessMs: 0, socialStalenessMs: 30_000 },
+    logger,
+    () => "normal",
+    undefined,
+    () => undefined, // always returns undefined key — no coalescing
+    (existing, incoming, count) => ({ merged: incoming, count: count + 1 }),
+  );
+
+  let unblock: (() => void) | null = null;
+  let firstCall = true;
+
+  queue.start(async () => {
+    if (firstCall) {
+      firstCall = false;
+      await new Promise<void>((resolve) => { unblock = resolve; });
+    }
+  });
+
+  queue.enqueue({ id: 1, key: "user-a", risk: 0 }); // processing (blocked)
+  queue.enqueue({ id: 2, key: "user-a", risk: 0 }); // separate entry (key is undefined)
+  queue.enqueue({ id: 3, key: "user-a", risk: 0 }); // separate entry
+
+  assert.equal(queue.getStats().depth, 2, "no coalescing when key is undefined");
+  assert.equal(queue.getStats().totalCoalesced, 0);
+
+  unblock!();
+  await new Promise((resolve) => setTimeout(resolve, 50));
 });

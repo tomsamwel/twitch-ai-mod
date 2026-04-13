@@ -1,4 +1,5 @@
 import type { ChatMessageEventLike, NormalizedChatMessage, NormalizedMessagePart } from "../types.js";
+import { detectUrls } from "../moderation/url-detect.js";
 import { normalizeUnicode } from "../moderation/unicode-normalize.js";
 
 function deriveRoles(badges: Record<string, string>): string[] {
@@ -67,6 +68,9 @@ export function normalizeChatMessage(
   message: ChatMessageEventLike,
   receivedAt = new Date(),
 ): NormalizedChatMessage {
+  const text = message.messageText;
+  const normalizedText = normalizeUnicode(text);
+  const urlResult = detectUrls(normalizedText ?? text);
   const roles = deriveRoles(message.badges);
   const isPrivileged =
     roles.includes("broadcaster") || roles.includes("moderator") || roles.includes("vip") || roles.includes("trusted");
@@ -81,8 +85,12 @@ export function normalizeChatMessage(
     chatterId: message.chatterId,
     chatterLogin: message.chatterName,
     chatterDisplayName: message.chatterDisplayName,
-    text: message.messageText,
-    normalizedText: normalizeUnicode(message.messageText),
+    text,
+    normalizedText,
+    urlResult: {
+      detected: urlResult.detected,
+      urls: urlResult.urls,
+    },
     color: message.color,
     messageType: message.messageType,
     badges: message.badges,

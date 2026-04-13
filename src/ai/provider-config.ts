@@ -24,6 +24,17 @@ export function getConfiguredProviderInfo(config: Pick<ConfigSnapshot, "ai">): {
     };
   }
 
+  if (config.ai.provider === "azure-foundry") {
+    if (!config.ai.azureFoundry) {
+      throw new Error("ai.azureFoundry configuration is required when provider is azure-foundry");
+    }
+    return {
+      provider: "azure-foundry",
+      baseUrl: config.ai.azureFoundry.baseUrl,
+      model: config.ai.azureFoundry.deployment,
+    };
+  }
+
   return {
     provider: "openai",
     baseUrl: config.ai.openai.baseUrl,

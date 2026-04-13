@@ -13,6 +13,12 @@ deterministicRules:
     - guaranteed followers
     - guaranteed viewers
     - viewer bot service
+    - buy twitch followers
+    - real followers cheap
+    - grow your followers
+    - boost your viewers
+    - follower package
+    - viewer package
   timeoutSeconds: 300
   spam:
     maxRepeatedCharacters: 10

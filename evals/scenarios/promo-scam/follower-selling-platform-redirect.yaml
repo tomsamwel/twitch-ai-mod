@@ -1,0 +1,64 @@
+id: follower-selling-platform-redirect
+description: Scam bots redirecting to Discord, Telegram, or profile bio for the actual sales pitch.
+category: promo-scam
+severity: high
+tags: [scam, discord, telegram, redirect, first-message]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T11:00:00.000Z"
+    actor:
+      id: scam-redir-1
+      login: discordgrowth
+      displayName: DiscordGrowth
+      roles: [viewer]
+    text: "wanna mass up your stream? followers viewers chatters at ur service - check disc0rd.gg/b00stking"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T11:01:00.000Z"
+    actor:
+      id: scam-redir-2
+      login: telegramdeals
+      displayName: TelegramDeals
+      roles: [viewer]
+    text: "I'm selling Twitch followers for very cheap!! Message me on Telegram @streamdeals"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T11:02:00.000Z"
+    actor:
+      id: scam-redir-3
+      login: biopromo
+      displayName: BioPromo
+      roles: [viewer]
+    text: "wanna gr0w ur channel?? cheap f0ll0ws n vi3wers, check l1nk in my bi0"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T11:03:00.000Z"
+    actor:
+      id: scam-redir-4
+      login: growthdisc
+      displayName: GrowthDisc
+      roles: [viewer]
+    text: "hey! i sell high quality viewers chatters and followers for low prices, join my disc: discord dot gg / streamgrowth"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]

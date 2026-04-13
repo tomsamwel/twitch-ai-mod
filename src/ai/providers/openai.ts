@@ -36,9 +36,7 @@ interface OpenAiResponsesResponse extends OpenAiErrorResponse {
   }>;
 }
 
-function stripTrailingSlash(baseUrl: string): string {
-  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
-}
+import { stripTrailingSlash } from "./util.js";
 
 function extractResponseText(payload: OpenAiResponsesResponse): string {
   if (payload.output_text) {
@@ -105,7 +103,10 @@ export class OpenAiAiProvider implements AiProvider {
     const apiKey = input.config.secrets.openaiApiKey;
 
     if (!apiKey) {
-      return buildAbstainDecision(this.kind, input.mode, "OpenAI API key is not configured");
+      this.logger.warn({ provider: this.kind }, "OpenAI API key is not configured; AI decisions will be skipped");
+      return buildAbstainDecision(this.kind, input.mode, "OpenAI API key is not configured", {
+        failureKind: "configuration_error",
+      });
     }
 
     try {
@@ -119,7 +120,7 @@ export class OpenAiAiProvider implements AiProvider {
         body: JSON.stringify({
           model: input.config.ai.openai.model,
           store: false,
-          temperature: input.config.ai.requestDefaults.temperature,
+          temperature: input.temperature,
           max_output_tokens: input.config.ai.requestDefaults.maxOutputTokens,
           input: [
             {

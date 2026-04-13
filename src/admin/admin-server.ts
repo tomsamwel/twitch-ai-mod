@@ -3,17 +3,26 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Logger } from "pino";
-
 import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import type { BotDatabase } from "../storage/database.js";
 import type { LlamaServerManager } from "./llama-server-manager.js";
 import type { AiReviewQueueStats } from "../runtime/ai-review-queue.js";
-import type { RuntimeOverrideKey } from "../types.js";
+import type {
+  EventSubConnectionStatus,
+  RuntimeControllerIdentifier,
+  RuntimeControllerRecord,
+  RuntimeOverrideKey,
+  TrustedController,
+  TwitchUserResolver,
+} from "../types.js";
 
 const VALID_OVERRIDE_KEYS: readonly RuntimeOverrideKey[] = [
   "aiEnabled",
   "aiModerationEnabled",
   "socialRepliesEnabled",
+  "greetingsEnabled",
+  "greetFirstMessage",
+  "greetOnJoin",
   "dryRun",
   "liveModerationEnabled",
   "promptPack",
@@ -21,15 +30,19 @@ const VALID_OVERRIDE_KEYS: readonly RuntimeOverrideKey[] = [
 ];
 
 const ADMIN_ACTOR = { userId: "admin", login: "local-admin" };
+const TERMINAL_LINK_OPEN = "\u001B]8;;";
+const TERMINAL_LINK_SEPARATOR = "\u0007";
+const TERMINAL_LINK_CLOSE = "\u001B]8;;\u0007";
 
 interface AiReviewQueueLike {
   getStats(): AiReviewQueueStats;
 }
 
-interface ConfigController {
-  login: string;
-  role: string;
+interface TwitchGatewayHealthLike {
+  getConnectionStatus(): EventSubConnectionStatus;
 }
+
+type ConfigController = Pick<TrustedController, "login" | "role" | "userId" | "displayName">;
 
 interface AdminServerOptions {
   runtimeSettings: RuntimeSettingsStore;
@@ -39,6 +52,19 @@ interface AdminServerOptions {
   llamaServerManager?: LlamaServerManager | undefined;
   aiReviewQueue?: AiReviewQueueLike | undefined;
   configControllers?: ConfigController[] | undefined;
+  userResolver: TwitchUserResolver;
+  twitchGateway: TwitchGatewayHealthLike;
+}
+
+function formatTerminalLink(url: string, label = url): string {
+  if (!process.stdout.isTTY) {
+    return url;
+  }
+  return `${TERMINAL_LINK_OPEN}${url}${TERMINAL_LINK_SEPARATOR}${label}${TERMINAL_LINK_CLOSE}`;
+}
+
+function printStartupLink(label: string, url: string): void {
+  process.stdout.write(`\n${label}: ${formatTerminalLink(url)}\n\n`);
 }
 
 export class AdminServer {
@@ -62,7 +88,9 @@ export class AdminServer {
 
     return new Promise((resolve) => {
       this.server!.listen(this.options.port, "127.0.0.1", () => {
-        this.options.logger.info({ url: `http://localhost:${this.options.port}` }, "admin panel available");
+        const adminUrl = `http://127.0.0.1:${this.options.port}`;
+        this.options.logger.info({ url: adminUrl }, "admin panel available");
+        printStartupLink("Open admin panel", adminUrl);
         resolve();
       });
     });
@@ -144,7 +172,9 @@ export class AdminServer {
     if (req.method === "GET" && url.pathname === "/api/chatters") {
       return this.handleGetChatters(url, res);
     }
-
+    if (req.method === "GET" && url.pathname === "/api/prompt") {
+      return this.handleGetPrompt(url, res);
+    }
     res.writeHead(404, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "Not found" }));
   }
@@ -181,21 +211,26 @@ export class AdminServer {
     const availableModels = this.options.runtimeSettings.listAvailableModelPresets();
     const llamaServer = this.options.llamaServerManager?.getStatus() ?? null;
     const aiQueue = this.options.aiReviewQueue?.getStats() ?? null;
+    const eventSub = this.options.twitchGateway.getConnectionStatus();
     const recentActivity = this.getRecentActivity();
 
-    const body = { settings, overrides, availablePacks, availableModels, llamaServer, aiQueue, recentActivity };
+    const body = {
+      settings,
+      overrides,
+      availablePacks,
+      availableModels,
+      llamaServer,
+      aiQueue,
+      eventSub,
+      recentActivity,
+    };
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
   }
 
   private async handlePostSettings(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    let parsed: { key?: string; value?: unknown };
-    try {
-      parsed = JSON.parse(body) as { key?: string; value?: unknown };
-    } catch {
-      res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: "Invalid JSON" }));
+    const parsed = await this.readJsonBody<{ key?: string; value?: unknown }>(req, res);
+    if (!parsed) {
       return;
     }
 
@@ -220,9 +255,9 @@ export class AdminServer {
   }
 
   private handlePostReset(res: http.ServerResponse): void {
-    this.options.runtimeSettings.reset(ADMIN_ACTOR);
+    const summary = this.options.runtimeSettings.reset(ADMIN_ACTOR);
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true }));
+    res.end(JSON.stringify({ ok: true, ...summary }));
   }
 
   private handleGetActivity(url: URL, res: http.ServerResponse): void {
@@ -267,8 +302,10 @@ export class AdminServer {
   }
 
   private async handlePostExemptions(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ login?: string }>(body);
+    const parsed = await this.readJsonBody<{ login?: string }>(req, res);
+    if (!parsed) {
+      return;
+    }
     if (!parsed?.login) {
       this.jsonResponse(res, 400, { error: "login is required" });
       return;
@@ -278,8 +315,10 @@ export class AdminServer {
   }
 
   private async handlePostExemptionsRemove(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ login?: string }>(body);
+    const parsed = await this.readJsonBody<{ login?: string }>(req, res);
+    if (!parsed) {
+      return;
+    }
     if (!parsed?.login) {
       this.jsonResponse(res, 400, { error: "login is required" });
       return;
@@ -293,8 +332,10 @@ export class AdminServer {
   }
 
   private async handlePostBlockedTerms(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ term?: string }>(body);
+    const parsed = await this.readJsonBody<{ term?: string }>(req, res);
+    if (!parsed) {
+      return;
+    }
     if (!parsed?.term) {
       this.jsonResponse(res, 400, { error: "term is required" });
       return;
@@ -304,8 +345,10 @@ export class AdminServer {
   }
 
   private async handlePostBlockedTermsRemove(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ term?: string }>(body);
+    const parsed = await this.readJsonBody<{ term?: string }>(req, res);
+    if (!parsed) {
+      return;
+    }
     if (!parsed?.term) {
       this.jsonResponse(res, 400, { error: "term is required" });
       return;
@@ -317,64 +360,83 @@ export class AdminServer {
   private handleGetHealth(res: http.ServerResponse): void {
     const llamaServer = this.options.llamaServerManager?.getStatus() ?? null;
     const aiQueue = this.options.aiReviewQueue?.getStats() ?? null;
-    this.jsonResponse(res, 200, { llamaServer, aiQueue });
+    const eventSub = this.options.twitchGateway.getConnectionStatus();
+    this.jsonResponse(res, 200, { llamaServer, aiQueue, eventSub });
   }
 
   private handleGetControllers(res: http.ServerResponse): void {
-    const configControllers = (this.options.configControllers ?? []).map((c) => ({
-      login: c.login,
-      role: c.role,
-      source: "config" as const,
-    }));
-    const runtimeControllers = this.options.database.listRuntimeControllers().map((c) => ({
-      login: c.login,
-      role: c.role,
-      source: "runtime" as const,
-    }));
+    const configControllers = (this.options.configControllers ?? []).map((controller) =>
+      this.toControllerResponse(controller, "config"),
+    );
+    const runtimeControllers = this.options.database.listRuntimeControllers().map((controller) =>
+      this.toControllerResponse(controller, "runtime"),
+    );
     this.jsonResponse(res, 200, { config: configControllers, runtime: runtimeControllers });
   }
 
   private async handlePostControllers(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ login?: string; role?: string }>(body);
+    const parsed = await this.readJsonBody<{ login?: string; role?: string }>(req, res);
+    if (!parsed) {
+      return;
+    }
     if (!parsed?.login) {
       this.jsonResponse(res, 400, { error: "login is required" });
       return;
     }
     const role = parsed.role === "mod" ? "mod" : "admin";
-    this.options.database.addRuntimeController(parsed.login, role, ADMIN_ACTOR.login);
-    this.jsonResponse(res, 200, { ok: true });
+    const identity = await this.options.userResolver.resolveUserByLogin(parsed.login);
+    if (!identity) {
+      this.jsonResponse(res, 400, { error: `Unable to resolve Twitch user @${parsed.login}.` });
+      return;
+    }
+    const controller = this.options.database.upsertRuntimeController({
+      login: identity.login,
+      userId: identity.id,
+      displayName: identity.displayName,
+      role,
+      addedByLogin: ADMIN_ACTOR.login,
+    });
+    this.jsonResponse(res, 200, { ok: true, controller });
   }
 
   private async handlePostControllersRemove(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ login?: string }>(body);
-    if (!parsed?.login) {
-      this.jsonResponse(res, 400, { error: "login is required" });
+    const parsed = await this.readJsonBody<RuntimeControllerIdentifier>(req, res);
+    if (!parsed) {
       return;
     }
-    const removed = this.options.database.removeRuntimeController(parsed.login);
+    if (!parsed?.login && !parsed?.userId) {
+      this.jsonResponse(res, 400, { error: "login or userId is required" });
+      return;
+    }
+    const removed = this.options.database.removeRuntimeController(parsed);
     this.jsonResponse(res, 200, { ok: true, removed });
   }
 
   private async handlePostControllersRole(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ login?: string; role?: string }>(body);
-    if (!parsed?.login || !parsed.role) {
-      this.jsonResponse(res, 400, { error: "login and role are required" });
+    const parsed = await this.readJsonBody<RuntimeControllerIdentifier & { role?: string }>(req, res);
+    if (!parsed) {
+      return;
+    }
+    if ((!parsed?.login && !parsed?.userId) || !parsed.role) {
+      this.jsonResponse(res, 400, { error: "login or userId and role are required" });
       return;
     }
     if (parsed.role !== "admin" && parsed.role !== "mod") {
       this.jsonResponse(res, 400, { error: "role must be admin or mod" });
       return;
     }
-    const updated = this.options.database.updateRuntimeControllerRole(parsed.login, parsed.role);
+    const updated = this.options.database.updateRuntimeControllerRole(
+      parsed,
+      parsed.role,
+    );
     this.jsonResponse(res, 200, { ok: true, updated });
   }
 
   private async handlePostPurgeUser(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    const parsed = parseJsonBody<{ login?: string }>(body);
+    const parsed = await this.readJsonBody<{ login?: string }>(req, res);
+    if (!parsed) {
+      return;
+    }
     if (!parsed?.login) {
       this.jsonResponse(res, 400, { error: "login is required" });
       return;
@@ -386,6 +448,20 @@ export class AdminServer {
   private handlePostPurgeAll(res: http.ServerResponse): void {
     const result = this.options.database.purgeOperationalData();
     this.jsonResponse(res, 200, { ok: true, ...result });
+  }
+
+  private handleGetPrompt(url: URL, res: http.ServerResponse): void {
+    const eventId = url.searchParams.get("eventId");
+    if (!eventId) {
+      this.jsonResponse(res, 400, { error: "eventId is required" });
+      return;
+    }
+    const prompt = this.options.database.getDecisionPrompt(eventId);
+    if (!prompt) {
+      this.jsonResponse(res, 404, { error: "No prompt data for this event" });
+      return;
+    }
+    this.jsonResponse(res, 200, prompt);
   }
 
   private handleGetChatters(url: URL, res: http.ServerResponse): void {
@@ -403,6 +479,16 @@ export class AdminServer {
     res.end(JSON.stringify(body));
   }
 
+  private async readJsonBody<T>(req: http.IncomingMessage, res: http.ServerResponse): Promise<T | null> {
+    const parsed = parseJsonBody<T>(await readRequestBody(req));
+    if (parsed) {
+      return parsed;
+    }
+
+    this.jsonResponse(res, 400, { error: "Invalid JSON" });
+    return null;
+  }
+
   private getRecentActivity(): Array<Record<string, unknown>> {
     try {
       return this.options.database.getRecentDecisionsForAdmin(10);
@@ -411,14 +497,41 @@ export class AdminServer {
       return [];
     }
   }
+
+  private toControllerResponse(
+    controller: ConfigController | RuntimeControllerRecord,
+    source: "config" | "runtime",
+  ) {
+    return {
+      login: controller.login,
+      userId: controller.userId ?? null,
+      displayName: controller.displayName ?? null,
+      role: controller.role,
+      resolved: controller.userId !== null,
+      source,
+    };
+  }
 }
+
+const MAX_REQUEST_BODY_BYTES = 1_048_576; // 1 MB
 
 function readRequestBody(req: http.IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
-    req.once("end", () => resolve(Buffer.concat(chunks).toString()));
-    req.once("error", reject);
+    let totalBytes = 0;
+    let settled = false;
+    req.on("data", (chunk: Buffer) => {
+      totalBytes += chunk.length;
+      if (totalBytes > MAX_REQUEST_BODY_BYTES && !settled) {
+        settled = true;
+        req.destroy();
+        reject(new Error("Request body too large"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.once("end", () => { if (!settled) resolve(Buffer.concat(chunks).toString()); });
+    req.once("error", (err) => { if (!settled) { settled = true; reject(err); } });
   });
 }
 

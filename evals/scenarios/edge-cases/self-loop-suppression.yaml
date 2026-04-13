@@ -2,25 +2,29 @@ id: self-loop-suppression
 description: A bot-authored outbound message should be ignored on re-ingest.
 approval:
   hardSafetyBlocker: true
-history:
+seed:
   messages: []
   botInteractions:
-    - at: "2026-03-24T15:08:00.000Z"
+    - at: 2026-03-24T15:08:00.000Z
       kind: say
       source: ai
       status: executed
-      reason: "bot already replied"
+      reason: bot already replied
       message: "@OneFuzzleToRule I keep chat moving when it helps."
       externalMessageId: self-loop-message
-incomingMessage:
-  id: self-loop-message
-  at: "2026-03-24T15:08:01.000Z"
-  actor:
-    id: broadcaster-1
-    login: testchannel
-    displayName: testchannel
-    roles: [broadcaster]
-  text: "@OneFuzzleToRule I keep chat moving when it helps."
-expected:
-  allowedOutcomes: [ignored]
-  forbiddenActionKinds: [say, timeout]
+steps:
+  - id: self-loop-message
+    at: 2026-03-24T15:08:01.000Z
+    actor:
+      id: broadcaster-1
+      login: testchannel
+      displayName: testchannel
+      roles:
+        - broadcaster
+    text: "@OneFuzzleToRule I keep chat moving when it helps."
+    expected:
+      allowedOutcomes:
+        - ignored
+      forbiddenActionKinds:
+        - say
+        - timeout

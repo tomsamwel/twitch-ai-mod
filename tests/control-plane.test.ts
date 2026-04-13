@@ -33,9 +33,10 @@ function createMockDatabase(overrides: Record<string, unknown> = {}) {
     addRuntimeBlockedTerm() { return true; },
     removeRuntimeBlockedTerm() { return true; },
     listRuntimeBlockedTerms() { return []; },
-    getRuntimeController() { return null; },
+    getRuntimeControllerByUserId() { return null; },
+    touchRuntimeControllerIdentity() { return false; },
     purgeUserHistory() { return { messages: 0, decisions: 0, actions: 0 }; },
-    purgeOperationalData() { return { messages: 0, decisions: 0, actions: 0, events: 0, reviews: 0 }; },
+    purgeOperationalData() { return { messages: 0, decisions: 0, actions: 0, events: 0, reviews: 0, greetedUsers: 0 }; },
     ...overrides,
   };
 }
@@ -49,6 +50,9 @@ function createRuntimeSettingsState(config = createTestConfig()): {
       aiEnabled: true,
       aiModerationEnabled: false,
       socialRepliesEnabled: true,
+      greetingsEnabled: false,
+      greetFirstMessage: true,
+      greetOnJoin: false,
       dryRun: true,
       liveModerationEnabled: false,
       promptPack: config.ai.promptPack,
@@ -127,6 +131,80 @@ test("WhisperControlPlane denies unauthorized senders without mutating runtime s
   assert.deepEqual(audits, ["unauthorized"]);
 });
 
+test("WhisperControlPlane authorizes runtime controllers by stable user ID", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  let touchedIdentity: { userId: string; login: string; displayName: string } | null = null;
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [],
+    logger,
+    {
+      getEffectiveSettings() {
+        return state.effective;
+      },
+      getOverrides() {
+        return state.overrides;
+      },
+      setOverride() {
+        throw new Error("status should not mutate overrides");
+      },
+      reset() {
+        throw new Error("status should not reset");
+      },
+      listAvailablePromptPacks() {
+        return ["witty-mod", "safer-control"];
+      },
+      listAvailableModelPresets() {
+        return ["local-default", "local-fast"];
+      },
+    },
+    createMockDatabase({
+      getRuntimeControllerByUserId(userId: string) {
+        if (userId !== "runtime-1") {
+          return null;
+        }
+        return {
+          login: "oldlogin",
+          userId,
+          displayName: "Old Login",
+          role: "admin" as const,
+          addedByLogin: "local-admin",
+          createdAt: "2026-03-24T10:00:00.000Z",
+          updatedAt: "2026-03-24T10:00:00.000Z",
+        };
+      },
+      touchRuntimeControllerIdentity(userId: string, login: string, displayName: string) {
+        touchedIdentity = { userId, login, displayName };
+        return true;
+      },
+    }),
+    {
+      async sendWhisper(_targetUserId, message) {
+        sentReplies.push(message);
+      },
+    },
+  );
+
+  await controlPlane.processWhisper(
+    createWhisper({
+      senderUserId: "runtime-1",
+      senderUserLogin: "renamedmod",
+      senderUserDisplayName: "RenamedMod",
+      text: "aimod status",
+    }),
+  );
+
+  assert.match(sentReplies[0] ?? "", /ai=/u);
+  assert.deepEqual(touchedIdentity, {
+    userId: "runtime-1",
+    login: "renamedmod",
+    displayName: "RenamedMod",
+  });
+});
+
 test("WhisperControlPlane applies trusted commands and replies with status", async () => {
   const config = createTestConfig();
   const logger = createLogger("info", "test");
@@ -177,6 +255,11 @@ test("WhisperControlPlane applies trusted commands and replies with status", asy
           updatedAt: null,
           updatedByUserId: null,
           updatedByLogin: null,
+        };
+        return {
+          overrides: 0,
+          exemptUsers: 0,
+          blockedTerms: 0,
         };
       },
       listAvailablePromptPacks() {
@@ -234,7 +317,9 @@ test("WhisperControlPlane ignores duplicate whisper IDs", async () => {
         return state.overrides;
       },
       setOverride() {},
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod", "safer-control"];
       },
@@ -285,7 +370,9 @@ test("WhisperControlPlane panic command enables AI + moderation + live-mod and d
       setOverride(key, value) {
         appliedOverrides.push({ key, value });
       },
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod"];
       },
@@ -332,7 +419,9 @@ test("WhisperControlPlane chill command enables AI + social, disables moderation
       setOverride(key, value) {
         appliedOverrides.push({ key, value });
       },
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod"];
       },
@@ -378,7 +467,9 @@ test("WhisperControlPlane off command disables AI", async () => {
       setOverride(key, value) {
         appliedOverrides.push({ key, value });
       },
-      reset() {},
+      reset() {
+        return { overrides: 0, exemptUsers: 0, blockedTerms: 0 };
+      },
       listAvailablePromptPacks() {
         return ["witty-mod"];
       },
@@ -447,4 +538,64 @@ test("mod role is denied from set-ai but allowed for status", async () => {
     createWhisper({ id: "whisper-2", senderUserId: "mod-1", senderUserLogin: "channelmod", text: "aimod status" }),
   );
   assert.match(sentReplies[0] ?? "", /ai=/u);
+});
+
+test("WhisperControlPlane greet-first-message command toggles greetFirstMessage override", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  const appliedOverrides: Array<{ key: string; value: unknown }> = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster", role: "broadcaster" as const }],
+    logger,
+    {
+      getEffectiveSettings() { return state.effective; },
+      getOverrides() { return state.overrides; },
+      setOverride(key, value) { appliedOverrides.push({ key, value }); },
+      reset() { return { overrides: 0, exemptUsers: 0, blockedTerms: 0 }; },
+      listAvailablePromptPacks() { return ["witty-mod"]; },
+      listAvailableModelPresets() { return ["local-default"]; },
+    },
+    createMockDatabase(),
+    {
+      async sendWhisper(_targetUserId, message) { sentReplies.push(message); },
+    },
+  );
+
+  await controlPlane.processWhisper(createWhisper({ text: "aimod gfm off" }));
+
+  assert.ok(sentReplies[0]?.includes("greet-first-message"), `reply should mention greet-first-message, got: ${sentReplies[0]}`);
+  assert.deepEqual(appliedOverrides, [{ key: "greetFirstMessage", value: false }]);
+});
+
+test("WhisperControlPlane greet-on-join command toggles greetOnJoin override", async () => {
+  const logger = createLogger("info", "test");
+  const state = createRuntimeSettingsState();
+  const sentReplies: string[] = [];
+  const appliedOverrides: Array<{ key: string; value: unknown }> = [];
+
+  const controlPlane = new WhisperControlPlane(
+    "aimod",
+    [{ userId: "streamer-1", login: "testchannel", displayName: "TestChannel", source: "broadcaster", role: "broadcaster" as const }],
+    logger,
+    {
+      getEffectiveSettings() { return state.effective; },
+      getOverrides() { return state.overrides; },
+      setOverride(key, value) { appliedOverrides.push({ key, value }); },
+      reset() { return { overrides: 0, exemptUsers: 0, blockedTerms: 0 }; },
+      listAvailablePromptPacks() { return ["witty-mod"]; },
+      listAvailableModelPresets() { return ["local-default"]; },
+    },
+    createMockDatabase(),
+    {
+      async sendWhisper(_targetUserId, message) { sentReplies.push(message); },
+    },
+  );
+
+  await controlPlane.processWhisper(createWhisper({ text: "aimod goj on" }));
+
+  assert.ok(sentReplies[0]?.includes("greet-on-join"), `reply should mention greet-on-join, got: ${sentReplies[0]}`);
+  assert.deepEqual(appliedOverrides, [{ key: "greetOnJoin", value: true }]);
 });

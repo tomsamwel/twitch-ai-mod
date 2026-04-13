@@ -1,0 +1,64 @@
+id: follower-selling-dm-solicitation
+description: Scam bots that solicit DMs/whispers for follower/viewer services must be caught as scam.
+category: promo-scam
+severity: high
+tags: [scam, dm-solicitation, followers]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T10:10:00.000Z"
+    actor:
+      id: scam-dm-1
+      login: boostservice
+      displayName: BoostService
+      roles: [viewer]
+    text: "want more viewers? dm me for details"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:11:00.000Z"
+    actor:
+      id: scam-dm-2
+      login: growthguru
+      displayName: GrowthGuru
+      roles: [viewer]
+    text: "I can help grow your channel, pm for pricing"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:12:00.000Z"
+    actor:
+      id: scam-dm-3
+      login: streambooster
+      displayName: StreamBooster
+      roles: [viewer]
+    text: "check my bio for real growth services"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T10:13:00.000Z"
+    actor:
+      id: scam-dm-4
+      login: promo247
+      displayName: Promo247
+      roles: [viewer]
+    text: "followers and views available, whisper for info"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]

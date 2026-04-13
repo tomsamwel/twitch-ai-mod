@@ -6,7 +6,7 @@ import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import { CooldownManager } from "../moderation/cooldown-manager.js";
 import type { BotDatabase } from "../storage/database.js";
 import type { ActionRequest, ActionResult, ConfigSnapshot, ProcessingMode, ProposedAction } from "../types.js";
-import type { TwurpleTwitchGateway } from "../twitch/twitch-gateway.js";
+import type { SentChatMessage, TwurpleTwitchGateway } from "../twitch/twitch-gateway.js";
 import { asRecord } from "../utils.js";
 
 interface OutboundMessageRecorder {
@@ -100,7 +100,7 @@ export class ActionExecutor {
       });
     }
 
-    if (result.status === "executed" || result.status === "dry-run") {
+    if (result.status === "executed") {
       this.cooldowns.recordAction(action, resolveActionTimestamp(action));
     }
 
@@ -113,6 +113,7 @@ export class ActionExecutor {
         dryRun: result.dryRun,
         processingMode: action.processingMode,
         targetUserId: action.targetUserId,
+        ...(result.status === "skipped" && result.reason ? { skipReason: result.reason } : {}),
       },
       "processed action request",
     );
@@ -139,7 +140,7 @@ export class ActionExecutor {
       return buildResult(action, "skipped", { reason: "live chat messages are disabled in config" });
     }
 
-    const sentMessage = await this.twitchGateway.sendChatMessage(action.message, action.replyParentMessageId);
+    const sentMessage = await this.sendWithReplyFallback(action);
     this.outboundMessages?.note(sentMessage.id);
 
     return buildResult(action, "executed", { externalMessageId: sentMessage.id });
@@ -184,7 +185,7 @@ export class ActionExecutor {
       return buildResult(action, "skipped", { reason: "live chat messages are disabled in config" });
     }
 
-    const sentMessage = await this.twitchGateway.sendChatMessage(action.message, action.replyParentMessageId);
+    const sentMessage = await this.sendWithReplyFallback(action);
     this.outboundMessages?.note(sentMessage.id);
 
     return buildResult(action, "executed", { externalMessageId: sentMessage.id });
@@ -244,7 +245,8 @@ export class ActionExecutor {
       return action.durationSeconds!;
     }
 
-    const windowStart = new Date(Date.now() - progressive.windowSeconds * 1000).toISOString();
+    const actionTime = resolveActionTimestamp(action);
+    const windowStart = new Date(actionTime - progressive.windowSeconds * 1000).toISOString();
     const priorCount = this.database.countRecentTimeoutsForUser(action.targetUserId, windowStart);
 
     // Find the highest tier where maxPriorTimeouts <= priorCount.
@@ -298,5 +300,21 @@ export class ActionExecutor {
     }
 
     return null;
+  }
+
+  /**
+   * Send a chat message, falling back to a non-reply if the reply-parent message
+   * was purged (e.g. by a preceding timeout).
+   */
+  private async sendWithReplyFallback(action: ActionRequest): Promise<SentChatMessage> {
+    try {
+      return await this.twitchGateway.sendChatMessage(action.message!, action.replyParentMessageId);
+    } catch (error) {
+      if (action.replyParentMessageId && error instanceof Error && error.message.includes("cannot be replied to")) {
+        this.logger.warn({ actionId: action.id }, "reply-parent no longer valid, retrying without reply");
+        return await this.twitchGateway.sendChatMessage(action.message!);
+      }
+      throw error;
+    }
   }
 }

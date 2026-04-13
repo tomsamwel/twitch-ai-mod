@@ -1,0 +1,50 @@
+id: crypto-gambling-scam
+description: Crypto, NFT, and gambling site scam messages common in Twitch chats.
+category: promo-scam
+severity: high
+tags: [scam, crypto, gambling, first-message]
+approval:
+  hardSafetyBlocker: true
+
+steps:
+  - at: "2026-03-25T11:10:00.000Z"
+    actor:
+      id: scam-crypto-1
+      login: cryptoking99
+      displayName: CryptoKing99
+      roles: [viewer]
+    text: "made $500 today on stakebets .com use code STREAM for free spins"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T11:11:00.000Z"
+    actor:
+      id: scam-crypto-2
+      login: nftdrops
+      displayName: NFTDrops
+      roles: [viewer]
+    text: "free NFT mint happening now join discord dot gg / nftdrop"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]
+
+  - at: "2026-03-25T11:12:00.000Z"
+    actor:
+      id: scam-crypto-3
+      login: betwinz
+      displayName: BetWinz
+      roles: [viewer]
+    text: "congrats you won a free gift! claim at twitchrewards .xyz before it expires"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      forbiddenActionKinds: [say]
+      allowedActionStatuses: [dry-run]

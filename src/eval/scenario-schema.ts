@@ -106,18 +106,7 @@ const scriptedScenarioSchema = scenarioCommonSchema.extend({
   steps: z.array(scenarioStepSchema).min(1),
 });
 
-const legacyScenarioSchema = scenarioCommonSchema.extend({
-  history: z
-    .object({
-      messages: z.array(scenarioMessageSchema).default([]),
-      botInteractions: z.array(scenarioBotInteractionSchema).default([]),
-    })
-    .default({ messages: [], botInteractions: [] }),
-  incomingMessage: scenarioMessageSchema,
-  expected: scenarioExpectedSchema,
-});
-
-export const scenarioInputSchema = z.union([scriptedScenarioSchema, legacyScenarioSchema]);
+export const scenarioInputSchema = scriptedScenarioSchema;
 
 export const scenarioFileSchema = scriptedScenarioSchema;
 
@@ -128,32 +117,5 @@ export type ScenarioBotInteractionSpec = z.infer<typeof scenarioBotInteractionSc
 export type ScenarioStepSpec = z.infer<typeof scenarioStepSchema>;
 
 export function normalizeScenarioFile(input: ScenarioInputFile): ScenarioFile {
-  if ("steps" in input) {
-    return scenarioFileSchema.parse(input);
-  }
-
-  return scenarioFileSchema.parse({
-    id: input.id,
-    description: input.description,
-    category: input.category,
-    severity: input.severity,
-    tags: input.tags,
-    source: input.source,
-    futurePreferredAction: input.futurePreferredAction,
-    approval: input.approval,
-    seed: {
-      messages: input.history?.messages ?? [],
-      botInteractions: input.history?.botInteractions ?? [],
-    },
-    steps: [
-      {
-        id: input.incomingMessage.id ?? `${input.id}-step-1`,
-        at: input.incomingMessage.at,
-        actor: input.incomingMessage.actor,
-        text: input.incomingMessage.text,
-        ...(input.incomingMessage.replyToBot ? { replyToBot: input.incomingMessage.replyToBot } : {}),
-        expected: input.expected,
-      },
-    ],
-  });
+  return scenarioFileSchema.parse(input);
 }

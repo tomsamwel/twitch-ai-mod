@@ -15,7 +15,7 @@ interface ScenarioEvalCliOptions {
 
 function printUsage(): void {
   console.log(
-    "Usage: npm run eval:scenarios -- [--suite <name>] [--scenario <id>] [--provider ollama|openai|llama-cpp] [--model <name>] [--prompt-pack <name>]",
+    "Usage: npm run eval:scenarios -- [--suite <name>] [--scenario <id>] [--provider ollama|openai|azure-foundry|llama-cpp] [--model <name>] [--prompt-pack <name>]",
   );
 }
 
@@ -56,8 +56,8 @@ function parseArgs(argv: string[]): ScenarioEvalCliOptions {
       case "--provider": {
         const value = argv[index + 1];
 
-        if (value !== "ollama" && value !== "openai" && value !== "llama-cpp") {
-          throw new Error("--provider must be ollama, openai, or llama-cpp");
+        if (value !== "ollama" && value !== "openai" && value !== "azure-foundry" && value !== "llama-cpp") {
+          throw new Error("--provider must be ollama, openai, azure-foundry, or llama-cpp");
         }
 
         options.provider = value;
@@ -283,8 +283,15 @@ async function main(): Promise<void> {
   }
 
   const results = [];
+  const total = scenarios.length;
 
-  for (const loaded of scenarios) {
+  for (let i = 0; i < total; i++) {
+    const loaded = scenarios[i]!;
+    const pct = Math.round(((i + 1) / total) * 100);
+    const filled = Math.round(pct / 2);
+    const bar = "\u2588".repeat(filled) + "\u2591".repeat(50 - filled);
+    process.stderr.write(`\r  ${bar} ${pct}% (${i + 1}/${total}) ${loaded.scenario.id}`);
+
     const result = await runScenarioEvaluation(loaded.scenario, {
       config,
       logger,
@@ -292,6 +299,7 @@ async function main(): Promise<void> {
 
     results.push(result);
   }
+  process.stderr.write("\r" + " ".repeat(120) + "\r");
 
   printScenarioReport(results);
   printCategoryMetrics(computeCategoryMetrics(results));

@@ -6,13 +6,14 @@ import test from "node:test";
 
 import { BotDatabase } from "../src/storage/database.js";
 import type { NormalizedChatMessage } from "../src/types.js";
+import { DEFAULT_URL_RESULT } from "./helpers.js";
 
 function fakeMessage(overrides: Partial<NormalizedChatMessage> = {}): NormalizedChatMessage {
   return {
     eventId: "evt-1", sourceMessageId: "msg-1", receivedAt: "2026-03-30T10:00:00Z",
     broadcasterId: "b1", broadcasterLogin: "testchannel", broadcasterDisplayName: "TestChannel",
     chatterId: "u1", chatterLogin: "testuser", chatterDisplayName: "TestUser",
-    text: "hello", normalizedText: "hello", color: null, messageType: "text",
+    text: "hello", normalizedText: "hello", urlResult: { ...DEFAULT_URL_RESULT }, color: null, messageType: "text",
     badges: {}, roles: [], isPrivileged: false, isReply: false,
     replyParentMessageId: null, replyParentUserId: null, replyParentUserLogin: null, replyParentUserDisplayName: null,
     threadMessageId: null, threadMessageUserId: null, threadMessageUserLogin: null, threadMessageUserDisplayName: null,
@@ -150,6 +151,36 @@ test("removeRuntimeBlockedTerm removes and returns true, then false", () => {
     assert.equal(db.removeRuntimeBlockedTerm("bad phrase"), true);
     assert.equal(db.listRuntimeBlockedTerms().length, 0);
     assert.equal(db.removeRuntimeBlockedTerm("bad phrase"), false);
+  } finally {
+    cleanup();
+  }
+});
+
+test("clearRuntimeControlState clears overrides, exemptions, and blocked terms but preserves runtime controllers", () => {
+  const { db, cleanup } = createTempDb();
+  try {
+    db.setRuntimeOverride("aiEnabled", false, { userId: "admin-1", login: "local-admin" });
+    db.addExemptUser("vipviewer", "local-admin");
+    db.addRuntimeBlockedTerm("spam phrase", "local-admin");
+    db.upsertRuntimeController({
+      login: "trustedmod",
+      userId: "controller-1",
+      displayName: "TrustedMod",
+      role: "admin",
+      addedByLogin: "local-admin",
+    });
+
+    const summary = db.clearRuntimeControlState();
+
+    assert.deepEqual(summary, {
+      overrides: 1,
+      exemptUsers: 1,
+      blockedTerms: 1,
+    });
+    assert.equal(db.listRuntimeOverrides().length, 0);
+    assert.equal(db.listExemptUsers().length, 0);
+    assert.equal(db.listRuntimeBlockedTerms().length, 0);
+    assert.equal(db.listRuntimeControllers().length, 1);
   } finally {
     cleanup();
   }

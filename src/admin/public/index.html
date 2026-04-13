@@ -251,7 +251,7 @@
   }
 
   /* ── Forms & inputs ── */
-  select, input[type=text], input[type=number] {
+  select, input[type=text], input[type=number], textarea {
     font-family: var(--font-mono);
     font-size: 0.78rem;
     background: var(--bg-surface);
@@ -267,6 +267,12 @@
     box-shadow: 0 0 0 2px rgba(0,240,255,0.08);
   }
   input[type=text] { width: 200px; }
+  textarea {
+    width: 100%;
+    min-height: 120px;
+    resize: vertical;
+    line-height: 1.4;
+  }
   input[type=text]::placeholder { color: var(--text-muted); }
   select { cursor: pointer; }
 
@@ -289,6 +295,14 @@
     background: rgba(0, 240, 255, 0.15);
     border-color: rgba(0, 240, 255, 0.5);
     box-shadow: 0 0 12px rgba(0,240,255,0.1);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+    border-color: var(--border);
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.03);
   }
   .btn-danger {
     background: rgba(229, 57, 53, 0.08);
@@ -357,6 +371,54 @@
   }
   .toggle-btn:hover {
     transform: scale(1.02);
+  }
+
+  /* ── Greetings sub-group ── */
+  .greet-group {
+    border-left: 2px solid rgba(0, 230, 118, 0.15);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 0.2rem 0;
+    transition: border-color 0.3s ease;
+  }
+  .greet-group.greet-active { border-left-color: rgba(0, 230, 118, 0.4); }
+  .greet-master-row { padding-left: 0.75rem; }
+  .greet-sub-group {
+    padding-left: 0.75rem;
+    border-top: 1px solid rgba(0, 230, 118, 0.06);
+    background: rgba(0, 230, 118, 0.02);
+    border-radius: 0 0 var(--radius) 0;
+    transition: opacity 0.3s ease;
+  }
+  .greet-sub-group.greet-sub-dim { opacity: 0.38; }
+  .greet-sub-row { padding-left: 0.75rem; }
+  .greet-sub-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-right: 0.3rem;
+  }
+
+  /* ── AI sub-group ── */
+  .ai-group {
+    border-left: 2px solid rgba(0, 240, 255, 0.15);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 0.2rem 0;
+    transition: border-color 0.3s ease;
+  }
+  .ai-group.ai-active { border-left-color: rgba(0, 240, 255, 0.4); }
+  .ai-master-row { padding-left: 0.75rem; }
+  .ai-sub-group {
+    padding-left: 0.75rem;
+    border-top: 1px solid rgba(0, 240, 255, 0.06);
+    background: rgba(0, 240, 255, 0.02);
+    border-radius: 0 0 var(--radius) 0;
+    transition: opacity 0.3s ease;
+  }
+  .ai-sub-group.ai-sub-dim { opacity: 0.38; }
+  .ai-sub-row { padding-left: 0.75rem; }
+  .ai-sub-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-right: 0.3rem;
   }
 
   /* ── Status indicators ── */
@@ -453,6 +515,11 @@
     background: rgba(0, 240, 255, 0.08);
     border-color: rgba(0, 240, 255, 0.3);
     color: var(--cyan);
+  }
+  .badge-none {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: var(--text-dim);
   }
   .badge-say {
     background: rgba(66, 165, 245, 0.08);
@@ -703,6 +770,17 @@
     color: var(--text-muted);
     padding-left: 0.1rem;
   }
+  .filter-label.filter-active::after {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--cyan);
+    margin-left: 5px;
+    vertical-align: middle;
+    opacity: 0.75;
+  }
   .filter-bar select {
     min-width: 90px;
     background: var(--bg-surface);
@@ -834,6 +912,10 @@
   /* ── Controller table ── */
   .ctrl-table td:last-child { text-align: right; }
 
+  /* ── Audit fail row ── */
+  tr.audit-fail { background: rgba(229, 57, 53, 0.05); }
+  tr.audit-fail td:first-child { border-left: 2px solid rgba(229, 57, 53, 0.35); }
+
   /* ── Load more ── */
   .load-more { text-align: center; padding: 0.6rem; }
 
@@ -893,6 +975,12 @@
     color: var(--text-dim);
     float: right;
     font-weight: 400;
+  }
+  .queue-badge.queue-empty {
+    color: var(--text-muted);
+    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+    opacity: 0.6;
   }
   .stats-pulse {
     animation: stats-pulse-glow 0.8s ease-out;
@@ -1070,7 +1158,95 @@
     cursor: pointer;
     transition: all 0.15s;
   }
-  .user-mini-btn:hover, .user-mini-toggle:hover { color: var(--cyan); border-color: var(--border-glow); }
+  .user-mini-btn:hover, .user-mini-toggle:hover, .prompt-toggle:hover { color: var(--cyan); border-color: var(--border-glow); }
+  .prompt-toggle {
+    font-family: var(--font-display);
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    background: none;
+    border: 1px solid var(--border);
+    padding: 0.2rem 0.5rem;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .prompt-columns {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+  }
+  .prompt-col {
+    flex: 1;
+    min-width: 0;
+  }
+  .prompt-col-label {
+    font-family: var(--font-display);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 0.3rem;
+    padding-bottom: 0.2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .prompt-sec-hdr {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.4rem;
+    margin-top: 0.2rem;
+    border-left: 2px solid var(--border);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    transition: all 0.15s;
+    border-radius: 0 2px 2px 0;
+  }
+  .prompt-sec-hdr:hover {
+    color: var(--text);
+    background: rgba(0, 240, 255, 0.03);
+  }
+  .prompt-sec-hdr.expanded {
+    color: var(--text-bright);
+    border-left-color: var(--border-glow);
+  }
+  .prompt-sec-hdr .sec-arrow { font-size: 0.6rem; width: 0.6rem; }
+  .prompt-sec-hdr .sec-label { flex: 1; }
+  .prompt-sec-hdr .sec-size {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+  }
+  .prompt-sec-hdr[data-color="cyan"] { border-left-color: var(--cyan-dim); }
+  .prompt-sec-hdr[data-color="cyan"].expanded { border-left-color: var(--cyan); }
+  .prompt-sec-hdr[data-color="amber"] { border-left-color: var(--amber-dim); }
+  .prompt-sec-hdr[data-color="amber"].expanded { border-left-color: var(--amber); }
+  .prompt-sec-hdr[data-color="green"] { border-left-color: var(--green-dim); }
+  .prompt-sec-hdr[data-color="green"].expanded { border-left-color: var(--green); }
+  .prompt-sec-hdr[data-color="blue"] { border-left-color: var(--blue); }
+  .prompt-sec-hdr[data-color="bright"] { border-left-color: var(--text-bright); }
+  .prompt-sec-body {
+    display: none;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-top: none;
+    padding: 0.4rem 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+    margin-left: 0.5rem;
+    border-radius: 0 0 3px 3px;
+  }
+  .prompt-sec-body.open { display: block; }
+  @media (max-width: 700px) {
+    .prompt-columns { flex-direction: column; }
+  }
   .user-mini-actions {
     display: flex;
     gap: 0.4rem;
@@ -1221,6 +1397,15 @@
     text-decoration: none;
     font-size: 0.78rem;
   }
+  .panel-link {
+    font-size: 0.72rem;
+    color: var(--cyan);
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    user-select: none;
+  }
+  .panel-link:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -1248,9 +1433,9 @@
   </div>
 
   <nav id="tabs">
-    <button class="active" data-tab="dashboard">Dashboard</button>
-    <button data-tab="activity">Activity</button>
-    <button data-tab="config">Config</button>
+  <button class="active" data-tab="dashboard">Dashboard</button>
+  <button data-tab="activity">Activity</button>
+  <button data-tab="config">Config</button>
   </nav>
 
   <!-- Dashboard Tab -->
@@ -1270,7 +1455,7 @@
           <div id="spark-table"></div>
         </section>
         <section class="panel">
-          <h2>Recent Activity</h2>
+          <h2 style="display:flex;justify-content:space-between;align-items:center">Recent Activity<span class="panel-link" onclick="document.querySelector('#tabs button[data-tab=\'activity\']').click()">View all →</span></h2>
           <div id="activity">Loading...</div>
         </section>
       </div>
@@ -1373,6 +1558,10 @@
       <h2>Danger Zone</h2>
       <p class="activity-meta">Permanently delete operational data. Cannot be undone.</p>
       <button class="btn btn-danger" onclick="purgeAll()">Purge All Operational Data</button>
+      <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+        <p class="activity-meta">Reset runtime overrides, exemptions, and blocked terms to YAML defaults.</p>
+        <button class="btn btn-danger" onclick="resetAll()">Reset All Overrides</button>
+      </div>
     </section>
   </div>
 
@@ -1395,7 +1584,9 @@ function timeAgo(iso) {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return s + 's ago';
   if (s < 3600) return Math.floor(s / 60) + 'm ago';
-  return Math.floor(s / 3600) + 'h ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+  return Math.floor(s / 604800) + 'w ago';
 }
 
 function jsonPost(url, body) {
@@ -1552,7 +1743,7 @@ function categoryBadgeClass(cat) {
 
 function buildConfMeter(c) {
   const n = Number(c);
-  const cls = n >= 0.7 ? 'high' : n >= 0.4 ? 'mid' : 'low';
+  const cls = n >= 0.9 ? 'high' : n >= 0.7 ? 'mid' : 'low';
   return `<div class="conf-wrap"><span class="conf-val ${cls}">${n.toFixed(2)}</span><div class="conf-bar"><span class="conf-fill ${cls}" style="width:${Math.round(n*100)}%"></span></div><span class="conf-threshold">90%</span></div>`;
 }
 
@@ -1584,9 +1775,11 @@ function renderActivityHtml(items, compact) {
     const expandHtml = compact ? '' : `<div class="ai-expand">
       ${a.text ? `<div style="font-style:italic;margin-bottom:0.3rem">"${esc(a.text)}"</div>` : ''}
       ${a.reason ? `<div><span style="color:var(--text-bright)">Reason:</span> ${esc(a.reason)}</div>` : ''}
+      ${a.actionMessage ? `<div style="margin-top:0.3rem"><span style="color:var(--text-bright)">AI said:</span> <span style="color:var(--cyan-dim)">"${esc(a.actionMessage)}"</span></div>` : ''}
       ${a.confidence != null ? buildConfMeter(a.confidence) : ''}
       <div class="activity-meta" style="margin-top:0.3rem">${[a.stage ? 'Stage: '+esc(a.stage) : '', a.mode ? 'Mode: '+esc(a.mode) : '', (a.category && a.category !== 'none') ? 'Category: '+esc(a.category) : ''].filter(Boolean).join(' \u00b7 ') || ''}</div>
       <div style="margin-top:0.4rem"><button class="user-mini-toggle" data-login="${esc(a.chatter)}" onclick="event.stopPropagation();toggleUserMini(this)">Show user \u25BE</button><div style="display:none"></div></div>
+      ${a.stage === 'ai' ? `<div style="margin-top:0.4rem"><button class="prompt-toggle" data-event-id="${esc(a.eventId)}" onclick="event.stopPropagation();togglePrompt(this)">View prompt \u25BE</button><div class="prompt-detail" style="display:none"></div></div>` : ''}
     </div>`;
     const onclick = compact
       ? ` onclick="document.querySelector('#tabs button[data-tab=\\'activity\\']').click()"`
@@ -1636,8 +1829,12 @@ async function setSetting(key, value) {
 }
 
 async function resetAll() {
-  if (!confirm('Reset all overrides to defaults?')) return;
-  await fetch(API + '/api/reset', { method: 'POST' });
+  if (!confirm('Reset runtime controls to defaults? This clears overrides, exemptions, and runtime blocked terms.')) return;
+  const response = await fetch(API + '/api/reset', { method: 'POST' });
+  const data = await response.json().catch(() => null);
+  if (data && data.ok) {
+    alert(`Reset complete: ${data.overrides} override(s), ${data.exemptUsers} exemption(s), ${data.blockedTerms} blocked term(s) cleared.`);
+  }
   refreshDashboard();
 }
 
@@ -1673,19 +1870,47 @@ function renderToggle(key, label, desc, value, safety) {
   return `<div class="toggle-row"><div class="toggle-label">${label}<small>${desc}</small></div><button class="${cls}" data-key="${key}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button></div>`;
 }
 
+function renderAiGroup(s) {
+  const masterCls = s.aiEnabled ? 'toggle-btn on' : 'toggle-btn off';
+  const masterRow = `<div class="toggle-row ai-master-row"><div class="toggle-label">AI Enabled<small>Master AI toggle</small></div><button class="${masterCls}" data-key="aiEnabled" onclick="setSetting('aiEnabled', ${!s.aiEnabled})">${s.aiEnabled ? 'ON' : 'OFF'}</button></div>`;
+
+  const aimCls = s.aiModerationEnabled ? 'toggle-btn on' : 'toggle-btn off';
+  const socCls = s.socialRepliesEnabled ? 'toggle-btn on' : 'toggle-btn off';
+  const subRows = [
+    `<div class="toggle-row ai-sub-row"><div class="toggle-label"><span class="ai-sub-label">↳</span>AI Moderation<small>Allow AI to propose timeouts and warns</small></div><button class="${aimCls}" data-key="aiModerationEnabled" onclick="setSetting('aiModerationEnabled', ${!s.aiModerationEnabled})">${s.aiModerationEnabled ? 'ON' : 'OFF'}</button></div>`,
+    `<div class="toggle-row ai-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="ai-sub-label">↳</span>Social Replies<small>Allow social chat responses</small></div><button class="${socCls}" data-key="socialRepliesEnabled" onclick="setSetting('socialRepliesEnabled', ${!s.socialRepliesEnabled})">${s.socialRepliesEnabled ? 'ON' : 'OFF'}</button></div>`,
+  ].join('');
+
+  const dimCls = s.aiEnabled ? '' : ' ai-sub-dim';
+  return `<div class="ai-group${s.aiEnabled ? ' ai-active' : ''}">${masterRow}<div class="ai-sub-group${dimCls}">${subRows}</div></div>`;
+}
+
+function renderGreetingsGroup(s) {
+  const masterCls = s.greetingsEnabled ? 'toggle-btn on' : 'toggle-btn off';
+  const masterRow = `<div class="toggle-row greet-master-row"><div class="toggle-label">Greetings<small>AI greetings for new viewers — master switch</small></div><button class="${masterCls}" data-key="greetingsEnabled" onclick="setSetting('greetingsEnabled', ${!s.greetingsEnabled})">${s.greetingsEnabled ? 'ON' : 'OFF'}</button></div>`;
+
+  const fmCls = s.greetFirstMessage ? 'toggle-btn on' : 'toggle-btn off';
+  const ojCls = s.greetOnJoin ? 'toggle-btn on' : 'toggle-btn off';
+  const subRows = [
+    `<div class="toggle-row greet-sub-row"><div class="toggle-label"><span class="greet-sub-label">↳</span>First Message<small>Greet on their first chat message this session</small></div><button class="${fmCls}" data-key="greetFirstMessage" onclick="setSetting('greetFirstMessage', ${!s.greetFirstMessage})">${s.greetFirstMessage ? 'ON' : 'OFF'}</button></div>`,
+    `<div class="toggle-row greet-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="greet-sub-label">↳</span>On Join<small>Greet silent viewers detected by chat poll</small></div><button class="${ojCls}" data-key="greetOnJoin" onclick="setSetting('greetOnJoin', ${!s.greetOnJoin})">${s.greetOnJoin ? 'ON' : 'OFF'}</button></div>`,
+  ].join('');
+
+  const dimCls = s.greetingsEnabled ? '' : ' greet-sub-dim';
+  return `<div class="greet-group${s.greetingsEnabled ? ' greet-active' : ''}">${masterRow}<div class="greet-sub-group${dimCls}">${subRows}</div></div>`;
+}
+
 function renderSettings(s) {
   const regular = [
-    renderToggle('aiEnabled', 'AI Enabled', 'Master AI toggle', s.aiEnabled),
-    renderToggle('aiModerationEnabled', 'AI Moderation', 'Allow AI to propose timeouts and warns', s.aiModerationEnabled),
-    renderToggle('socialRepliesEnabled', 'Social Replies', 'Allow social chat responses', s.socialRepliesEnabled),
+    renderAiGroup(s),
+    renderGreetingsGroup(s),
   ].join('');
   const safety = [
     renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled, true),
     renderToggle('dryRun', 'Dry Run', 'Prevent all real actions', s.dryRun, true),
   ].join('');
   document.getElementById('settings').innerHTML = regular +
-    `<div class="safety-toggles"><div class="safety-label">Safety Controls</div>${safety}</div>` +
-    `<div style="margin-top:0.6rem"><button class="btn btn-danger" onclick="resetAll()">Reset All Overrides</button></div>`;
+    `<div class="safety-toggles"><div class="safety-label">Safety Controls</div>${safety}</div>`;
 }
 
 // --- Status Strip & Quick Actions ---
@@ -1721,6 +1946,8 @@ function updateStatusStrip(data) {
   const qText = document.querySelector('.hud-queue-text');
   if (qDot && q) { qDot.className = q.underPressure ? 'hud-dot caution' : q.depth > 0 ? 'hud-dot live' : 'hud-dot dead'; }
   if (qText) { qText.textContent = q ? `Q: ${q.highDepth}h/${q.normalDepth}n` : 'Q: -'; }
+  const qInd = document.getElementById('hud-queue-ind');
+  if (qInd) { qInd.title = q ? `High-priority: ${q.highDepth}, Normal: ${q.normalDepth}` : ''; }
 
   // Quick toggles
   const dryBtn = document.getElementById('hud-qk-dryrun');
@@ -1780,7 +2007,12 @@ async function renderStats() {
 
     // Queue badge
     const qb = document.getElementById('queue-badge');
-    if (qb) qb.textContent = q ? `${q.highDepth}h + ${q.normalDepth}n queued` : '';
+    if (qb) {
+      const total = q ? q.highDepth + q.normalDepth : 0;
+      if (!q) { qb.textContent = ''; qb.className = 'queue-badge'; }
+      else if (total === 0) { qb.textContent = 'QUEUE EMPTY'; qb.className = 'queue-badge queue-empty'; }
+      else { qb.textContent = `${q.highDepth} high · ${q.normalDepth} normal queued`; qb.className = 'queue-badge'; }
+    }
 
     // Bucket activity into 24 bins (2.5 min each)
     const buckets = buildBuckets(actData ? actData.rows : []);
@@ -1859,12 +2091,29 @@ async function refreshDashboard() {
 
 const debouncedActivity = debounce(() => loadActivity(true), 300);
 
+function updateFilterDots() {
+  const checks = [
+    ['act-stage',   '#act-stage',         v => v !== ''],
+    ['act-outcome', '#act-outcome',        v => v !== ''],
+    ['act-range',   '#act-range',          v => v !== ''],
+    ['act-chatter', '#act-chatter',        v => v.trim() !== ''],
+  ];
+  for (const [, sel, isActive] of checks) {
+    const el = document.querySelector(sel);
+    if (!el) continue;
+    const group = el.closest('.filter-group') || el.closest('.autocomplete-wrap')?.closest('.filter-group');
+    const label = group?.querySelector('.filter-label');
+    if (label) label.classList.toggle('filter-active', isActive(el.value));
+  }
+}
+
 function clearFilters() {
   document.getElementById('act-chatter').value = '';
   document.getElementById('act-outcome').value = '';
   document.getElementById('act-stage').value = 'ai';
   document.getElementById('act-range').value = '';
   loadActivity(true);
+  updateFilterDots();
 }
 let actHighWaterTs = null;
 let actPollTimer = null;
@@ -1950,7 +2199,7 @@ async function loadAudit(more) {
     const container = document.getElementById('audit-feed');
     if (auditOffset === 0) container.innerHTML = '';
     if (data.rows.length === 0 && auditOffset === 0) { container.innerHTML = '<div class="activity-meta">No audit entries</div>'; return; }
-    const rowsHtml = data.rows.map(a => `<tr><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : '<span style="color:var(--red)">FAIL</span>'}</td><td>${a.highRisk ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--text-muted)">\u2013</span>'}</td></tr>`).join('');
+    const rowsHtml = data.rows.map(a => `<tr${a.success ? '' : ' class="audit-fail"'}><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : '<span style="color:var(--red)">FAIL</span>'}</td><td>${a.highRisk ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--text-muted)">\u2013</span>'}</td></tr>`).join('');
     if (auditOffset === 0) {
       container.innerHTML = `<table><thead><tr><th>Time</th><th>Actor</th><th>Command</th><th>Status</th><th>High Risk</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
     } else {
@@ -2016,14 +2265,19 @@ async function loadControllers() {
     for (const c of all) {
       if (c.source === 'config' && c.overridden) continue;
       const srcBadge = `<span class="badge badge-${esc(c.source)}">${esc(c.source)}</span>`;
+      const resolvedBadge = c.resolved ? '' : ' <span class="badge badge-ignored">unresolved</span>';
+      const identityArgs = `'${esc(c.userId || '')}', '${esc(c.login)}'`;
       const changeFn = c.source === 'runtime' ? 'changeControllerRole' : 'overrideController';
-      const roleSelect = `<select class="role-select" onchange="${changeFn}('${esc(c.login)}', this.value)">
+      const roleSelect = `<select class="role-select" onchange="${changeFn}(${identityArgs}, this.value)">
         <option value="admin"${c.role === 'admin' ? ' selected' : ''}>admin</option>
         <option value="mod"${c.role === 'mod' ? ' selected' : ''}>mod</option>
       </select>`;
       const removeFn = c.source === 'runtime' ? 'removeController' : 'overrideRemoveController';
-      const actions = `<button class="btn btn-danger btn-sm" onclick="${removeFn}('${esc(c.login)}')">remove</button>`;
-      html += `<tr><td>${userLink(c.login)}</td><td>${roleSelect}</td><td>${srcBadge}</td><td>${actions}</td></tr>`;
+      const actions = `<button class="btn btn-danger btn-sm" onclick="${removeFn}(${identityArgs})">remove</button>`;
+      const label = c.displayName && c.displayName.toLowerCase() !== c.login
+        ? `${esc(c.displayName)} ${userLink(c.login)}`
+        : userLink(c.login);
+      html += `<tr><td>${label}</td><td>${roleSelect}</td><td>${srcBadge}${resolvedBadge}</td><td>${actions}</td></tr>`;
     }
     html += '</tbody></table>';
     document.getElementById('controller-list').innerHTML = html;
@@ -2034,29 +2288,34 @@ async function addController() {
   const login = document.getElementById('ctrl-login').value.trim().toLowerCase();
   const role = document.getElementById('ctrl-role').value;
   if (!login) return;
-  await jsonPost('/api/controllers', { login, role });
+  const response = await jsonPost('/api/controllers', { login, role });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    alert(data?.error || 'Failed to add controller');
+    return;
+  }
   document.getElementById('ctrl-login').value = '';
   loadControllers();
 }
 
-async function removeController(login) {
-  await jsonPost('/api/controllers/remove', { login });
+async function removeController(userId, login) {
+  await jsonPost('/api/controllers/remove', { userId: userId || undefined, login });
   loadControllers();
 }
 
-async function changeControllerRole(login, role) {
-  await jsonPost('/api/controllers/role', { login, role });
+async function changeControllerRole(userId, login, role) {
+  await jsonPost('/api/controllers/role', { userId: userId || undefined, login, role });
   loadControllers();
 }
 
-async function overrideController(login, role) {
+async function overrideController(_userId, login, role) {
   await jsonPost('/api/controllers', { login, role });
   loadControllers();
 }
 
-async function overrideRemoveController(login) {
+async function overrideRemoveController(userId, login) {
   if (!confirm(`@${login} is defined in YAML config. Remove the runtime override? To fully remove, edit control-plane.yaml.`)) return;
-  await jsonPost('/api/controllers/remove', { login });
+  await jsonPost('/api/controllers/remove', { userId: userId || undefined, login });
   loadControllers();
 }
 
@@ -2126,11 +2385,22 @@ async function loadHealth() {
     }
     if (data.aiQueue) {
       const q = data.aiQueue;
-      html += `<div class="status-row"><span>Queue depth</span><span class="status-value">${q.highDepth}h / ${q.normalDepth}n</span></div>`;
+      html += `<div class="status-row"><span>Queue depth</span><span class="status-value">${q.highDepth} high · ${q.normalDepth} normal</span></div>`;
       html += `<div class="status-row"><span>Processing</span><span class="status-value">${q.processing}</span></div>`;
       html += `<div class="status-row"><span>Total processed</span><span class="status-value">${q.totalProcessed}</span></div>`;
       html += `<div class="status-row"><span>Dropped (capacity)</span><span class="status-value">${q.totalDroppedCapacity}</span></div>`;
       html += `<div class="status-row"><span>Dropped (stale)</span><span class="status-value">${q.totalDroppedStale}</span></div>`;
+    }
+    if (data.eventSub) {
+      const dot = data.eventSub.connected ? 'green' : 'red';
+      const state = data.eventSub.connected ? 'Connected' : (data.eventSub.stale ? 'Stalled' : 'Disconnected');
+      html += `<div class="status-row"><span><span class="status-dot ${dot}"></span>EventSub ${state}</span><span class="status-value">${data.eventSub.disconnectCount} disconnects</span></div>`;
+      html += `<div class="status-row"><span>Reconnect grace</span><span class="status-value">${data.eventSub.reconnectGraceSeconds}s / exit ${data.eventSub.exitOnStall ? 'on' : 'off'}</span></div>`;
+      html += `<div class="status-row"><span>Last connect</span><span class="status-value" title="${esc(data.eventSub.lastConnectAt || '')}">${data.eventSub.lastConnectAt ? timeAgo(data.eventSub.lastConnectAt) : '-'}</span></div>`;
+      html += `<div class="status-row"><span>Last disconnect</span><span class="status-value" title="${esc(data.eventSub.lastDisconnectAt || '')}">${data.eventSub.lastDisconnectAt ? timeAgo(data.eventSub.lastDisconnectAt) : '-'}</span></div>`;
+      if (data.eventSub.lastDisconnectError) {
+        html += `<div class="status-row"><span>Disconnect error</span><span class="status-value">${esc(data.eventSub.lastDisconnectError)}</span></div>`;
+      }
     }
     if (!html) html = '<div class="activity-meta">No provider info available</div>';
     document.getElementById('health-info').innerHTML = html;
@@ -2201,6 +2471,122 @@ function toggleUserMini(btn) {
   if (!isOpen) loadUserMini(login, container);
 }
 
+const PROMPT_SECTION_META = {
+  role:     { label: 'Role',              color: '' },
+  contract: { label: 'Contract',          color: '' },
+  mode:     { label: 'Persona',           color: 'cyan' },
+  style:    { label: 'Response Style',    color: 'cyan' },
+  safety:   { label: 'Safety Rules',      color: 'amber' },
+  examples: { label: 'Few-Shot Examples', color: '' },
+  ctx:      { label: 'Context',           color: '' },
+  bot:      { label: 'Bot Identity',      color: '' },
+  channel:  { label: 'Channel',           color: '' },
+  evidence: { label: 'Message',           color: 'bright' },
+  mode_sig: { label: 'Mode Signals',      color: 'blue' },
+  room:     { label: 'Room Context',      color: '' },
+  user_hist:{ label: 'User History',      color: '' },
+  bot_hist: { label: 'Bot History',       color: '' },
+  signals:  { label: 'Derived Signals',   color: 'blue' },
+  task:     { label: 'Task',              color: 'green' },
+};
+
+function parsePromptSections(text) {
+  const sections = [];
+  const tagRe = /<(\w+)(?:\s[^>]*)?>([\\s\\S]*?)<\/\1>/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = tagRe.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const between = text.slice(lastIndex, match.index).trim();
+      if (between) sections.push({ tag: '_text', content: between });
+    }
+    const tag = match[1];
+    const fullOpen = match[0].slice(0, match[0].indexOf('>') + 1);
+    const attrs = fullOpen.includes(' ') ? fullOpen.replace(/<\w+\s*/, '').replace(/>$/, '').trim() : '';
+    sections.push({ tag, content: match[2].trim(), attrs });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    const rest = text.slice(lastIndex).trim();
+    if (rest) sections.push({ tag: '_text', content: rest });
+  }
+  return sections;
+}
+
+function formatSize(chars) {
+  if (chars < 1024) return chars + ' B';
+  return (chars / 1024).toFixed(1) + ' KB';
+}
+
+function renderPromptSections(text, defaultExpanded) {
+  const sections = parsePromptSections(text);
+  if (sections.length === 0) return '<pre class="prompt-sec-body open">' + esc(text) + '</pre>';
+
+  return sections.map(s => {
+    if (s.tag === '_text') return '<div class="prompt-sec-body open" style="margin-left:0;border:none;background:none;padding:0.1rem 0;max-height:none;color:var(--text-dim);font-size:0.65rem">' + esc(s.content) + '</div>';
+
+    const meta = PROMPT_SECTION_META[s.tag] || { label: s.tag, color: '' };
+    const label = meta.label + (s.attrs ? ' (' + s.attrs.replace(/"/g, '').replace(/\w+=/, '') + ')' : '');
+    const isOpen = defaultExpanded.includes(s.tag);
+    const colorAttr = meta.color ? ' data-color="' + meta.color + '"' : '';
+
+    return '<div class="prompt-sec-hdr' + (isOpen ? ' expanded' : '') + '"' + colorAttr + ' onclick="togglePromptSection(this)">' +
+      '<span class="sec-arrow">' + (isOpen ? '\u25BE' : '\u25B8') + '</span>' +
+      '<span class="sec-label">' + esc(label) + '</span>' +
+      '<span class="sec-size">' + formatSize(s.content.length) + '</span>' +
+    '</div>' +
+    '<div class="prompt-sec-body' + (isOpen ? ' open' : '') + '">' + esc(s.content) + '</div>';
+  }).join('');
+}
+
+function togglePromptSection(hdr) {
+  hdr.classList.toggle('expanded');
+  const body = hdr.nextElementSibling;
+  if (body) body.classList.toggle('open');
+  const arrow = hdr.querySelector('.sec-arrow');
+  if (arrow) arrow.textContent = hdr.classList.contains('expanded') ? '\u25BE' : '\u25B8';
+}
+
+async function togglePrompt(btn) {
+  const detail = btn.nextElementSibling;
+  if (!detail) return;
+  if (detail.style.display !== 'none') {
+    detail.style.display = 'none';
+    btn.textContent = 'View prompt \u25BE';
+    return;
+  }
+  if (detail.dataset.loaded) {
+    detail.style.display = 'block';
+    btn.textContent = 'Hide prompt \u25B4';
+    return;
+  }
+  btn.textContent = 'Loading\u2026';
+  try {
+    const resp = await fetch(API + '/api/prompt?eventId=' + encodeURIComponent(btn.dataset.eventId));
+    if (!resp.ok) {
+      detail.innerHTML = '<div class="activity-meta">No prompt data stored for this decision</div>';
+    } else {
+      const d = await resp.json();
+      detail.innerHTML =
+        '<div class="prompt-columns">' +
+          '<div class="prompt-col">' +
+            '<div class="prompt-col-label">System Prompt</div>' +
+            renderPromptSections(d.systemPrompt, []) +
+          '</div>' +
+          '<div class="prompt-col">' +
+            '<div class="prompt-col-label">User Prompt</div>' +
+            renderPromptSections(d.userPrompt, ['task', 'message']) +
+          '</div>' +
+        '</div>';
+    }
+  } catch {
+    detail.innerHTML = '<div class="activity-meta">Failed to load prompt</div>';
+  }
+  detail.dataset.loaded = '1';
+  detail.style.display = 'block';
+  btn.textContent = 'Hide prompt \u25B4';
+}
+
 // --- Init ---
 
 setupAutocomplete('act-chatter-wrap', 'act-chatter', () => loadActivity(true));
@@ -2211,10 +2597,11 @@ setupAutocomplete('global-search-wrap', 'global-search', (login) => {
 setupAutocomplete('ctrl-login-wrap', 'ctrl-login', () => {});
 setupAutocomplete('exempt-login-wrap', 'exempt-login', () => {});
 
-document.getElementById('act-outcome').addEventListener('change', () => loadActivity(true));
-document.getElementById('act-stage').addEventListener('change', () => loadActivity(true));
-document.getElementById('act-range').addEventListener('change', () => loadActivity(true));
-document.getElementById('act-chatter').addEventListener('input', debouncedActivity);
+document.getElementById('act-outcome').addEventListener('change', () => { loadActivity(true); updateFilterDots(); });
+document.getElementById('act-stage').addEventListener('change', () => { loadActivity(true); updateFilterDots(); });
+document.getElementById('act-range').addEventListener('change', () => { loadActivity(true); updateFilterDots(); });
+document.getElementById('act-chatter').addEventListener('input', () => { debouncedActivity(); updateFilterDots(); });
+updateFilterDots();
 
 document.getElementById('global-search').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {

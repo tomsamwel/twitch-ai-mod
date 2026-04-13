@@ -1,35 +1,12 @@
-import type { Priority } from "./ai-review-queue.js";
+import type { CoalesceResult, Priority } from "./ai-review-queue.js";
 import type { AiReviewWorkItem } from "./message-processor.js";
 import type { NormalizedChatMessage } from "../types.js";
-import { detectUrls } from "../moderation/url-detect.js";
-import { countMentions } from "../utils.js";
+import { hasRiskSignals, messageRiskScore } from "../moderation/risk-signals.js";
 
-export const CAPS_RATIO_THRESHOLD = 0.7;
-export const CAPS_MIN_ALPHA = 8;
-export const MENTION_COUNT_THRESHOLD = 3;
-export const LENGTH_THRESHOLD = 400;
-export const REPEAT_OFFENDER_WINDOW_MS = 3_600_000;
+const REPEAT_OFFENDER_WINDOW_MS = 3_600_000;
 
 export interface PriorityClassifierDeps {
   countRecentTimeoutsForUser(targetUserId: string, afterTimestamp: string): number;
-}
-
-function hasRiskSignals(message: NormalizedChatMessage): boolean {
-  if (detectUrls(message.text).detected) return true;
-
-  let upper = 0;
-  let alpha = 0;
-  for (const ch of message.text) {
-    if (ch >= "A" && ch <= "Z") { upper++; alpha++; }
-    else if (ch >= "a" && ch <= "z") { alpha++; }
-  }
-  if (alpha >= CAPS_MIN_ALPHA && upper / alpha > CAPS_RATIO_THRESHOLD) return true;
-
-  if (countMentions(message) >= MENTION_COUNT_THRESHOLD) return true;
-
-  if (message.text.length > LENGTH_THRESHOLD) return true;
-
-  return false;
 }
 
 function hasTrustSignals(message: NormalizedChatMessage): boolean {
@@ -45,12 +22,46 @@ function isRepeatOffender(deps: PriorityClassifierDeps, chatterId: string, nowMs
 
 export function createPriorityClassifier(deps: PriorityClassifierDeps): (item: AiReviewWorkItem) => Priority {
   return (item: AiReviewWorkItem): Priority => {
+    if (item.isPollGreeting) return "low";
     if (item.aiMode.mode === "social") return "normal";
 
     if (isRepeatOffender(deps, item.message.chatterId, item.nowMs)) return "high";
     if (hasRiskSignals(item.message)) return "high";
     if (hasTrustSignals(item.message)) return "normal";
 
-    return "high";
+    return "normal";
   };
 }
+
+/**
+ * Coalesce key: group by chatter so rapid messages from the same user merge.
+ * Returns undefined for social mode (no coalescing for social replies).
+ */
+export function workItemCoalesceKey(item: AiReviewWorkItem): string | undefined {
+  if (item.aiMode.mode === "social") return undefined;
+  return item.message.chatterId;
+}
+
+/**
+ * Coalesce strategy: keep the riskier message (by signal score), fall back to latest.
+ * Carries forward the cumulative count.
+ */
+export function coalesceWorkItems(
+  existing: AiReviewWorkItem,
+  incoming: AiReviewWorkItem,
+  currentCount: number,
+): CoalesceResult<AiReviewWorkItem> {
+  const newCount = currentCount + 1;
+  const existingRisk = messageRiskScore(existing.message);
+  const incomingRisk = messageRiskScore(incoming.message);
+
+  // Keep the riskier message; on tie, keep the incoming (latest) one.
+  const winner = incomingRisk >= existingRisk ? incoming : existing;
+
+  return {
+    merged: { ...winner, nowMs: incoming.nowMs, coalescedCount: newCount },
+    count: newCount,
+  };
+}
+
+export { messageRiskScore } from "../moderation/risk-signals.js";

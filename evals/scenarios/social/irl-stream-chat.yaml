@@ -1,0 +1,56 @@
+id: irl-stream-chat
+description: Typical IRL stream chat messages -- location guessing, food commentary, stream quality, backseat navigation. All should be left alone.
+category: social
+severity: low
+tags: [social, irl, false-positive, benign]
+approval:
+  hardSafetyBlocker: false
+
+steps:
+  - at: "2026-03-25T16:00:00.000Z"
+    actor:
+      id: irl-1
+      login: travelfan
+      displayName: TravelFan
+      roles: [viewer]
+    text: "omg is that shibuya?? i was there last year"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:01:00.000Z"
+    actor:
+      id: irl-2
+      login: hungrychatter
+      displayName: HungryChatter
+      roles: [viewer]
+    text: "that looks so good how much was it"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:02:00.000Z"
+    actor:
+      id: irl-3
+      login: techviewer
+      displayName: TechViewer
+      roles: [viewer]
+    text: "audio is scuffed can barely hear you"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T16:03:00.000Z"
+    actor:
+      id: irl-4
+      login: weatherwatcher
+      displayName: WeatherWatcher
+      roles: [viewer]
+    text: "beautiful sunset PogChamp"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

@@ -11,10 +11,14 @@ import type {
   ControlCommandResult,
   ControllerRole,
   RuntimeOverrideKey,
+  RuntimeOverrideSnapshot,
   TrustedController,
   WhisperMessage,
 } from "../types.js";
 import type { TwurpleTwitchGateway } from "../twitch/twitch-gateway.js";
+
+/** Twitch whispers are capped at 500 chars; leave headroom for framing. */
+const WHISPER_MAX_CHARS = 450;
 
 function formatTimeAgo(isoTimestamp: string): string {
   const seconds = Math.floor((Date.now() - new Date(isoTimestamp).getTime()) / 1000);
@@ -27,7 +31,8 @@ export class WhisperControlPlane {
   private readonly controllersByUserId: Map<string, TrustedController>;
 
   private static readonly FULL_ACCESS: Set<ControlCommand["kind"]> = new Set([
-    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-dry-run",
+    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-greetings",
+    "set-greet-first-message", "set-greet-on-join", "set-dry-run",
     "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
     "recent", "stats", "exempt", "block", "purge",
   ]);
@@ -64,7 +69,8 @@ export class WhisperControlPlane {
       | "addRuntimeBlockedTerm"
       | "removeRuntimeBlockedTerm"
       | "listRuntimeBlockedTerms"
-      | "getRuntimeController"
+      | "getRuntimeControllerByUserId"
+      | "touchRuntimeControllerIdentity"
       | "purgeUserHistory"
       | "purgeOperationalData"
     >,
@@ -82,19 +88,7 @@ export class WhisperControlPlane {
       return;
     }
 
-    let controller = this.controllersByUserId.get(message.senderUserId);
-    if (!controller) {
-      const runtimeEntry = this.database.getRuntimeController(message.senderUserLogin);
-      if (runtimeEntry) {
-        controller = {
-          userId: message.senderUserId,
-          login: message.senderUserLogin,
-          displayName: message.senderUserDisplayName,
-          source: "config",
-          role: runtimeEntry.role as ControllerRole,
-        };
-      }
-    }
+    const controller = this.resolveController(message);
     if (!controller) {
       await this.finalize(message, null, {
         accepted: false,
@@ -136,7 +130,21 @@ export class WhisperControlPlane {
       return;
     }
 
-    const result = this.executeCommand(command, message);
+    let result: ControlCommandResult;
+    try {
+      result = this.executeCommand(command, message);
+    } catch (error) {
+      this.logger.error({ err: error, command: command.kind }, "control command execution failed");
+      result = {
+        accepted: true,
+        success: false,
+        commandSummary: command.kind,
+        replyMessage: `Command failed: ${error instanceof Error ? error.message : "unknown error"}`,
+        highRisk: false,
+        changes: [],
+      };
+    }
+
     await this.finalize(message, command, result);
   }
 
@@ -230,6 +238,27 @@ export class WhisperControlPlane {
           actor,
           `social ${command.enabled ? "on" : "off"}`,
         );
+      case "set-greetings":
+        return this.applyOverride(
+          "greetingsEnabled",
+          command.enabled,
+          actor,
+          `greetings ${command.enabled ? "on" : "off"}`,
+        );
+      case "set-greet-first-message":
+        return this.applyOverride(
+          "greetFirstMessage",
+          command.enabled,
+          actor,
+          `greet-first-message ${command.enabled ? "on" : "off"}`,
+        );
+      case "set-greet-on-join":
+        return this.applyOverride(
+          "greetOnJoin",
+          command.enabled,
+          actor,
+          `greet-on-join ${command.enabled ? "on" : "off"}`,
+        );
       case "set-dry-run":
         return this.applyOverride(
           "dryRun",
@@ -286,20 +315,17 @@ export class WhisperControlPlane {
       }
       case "reset": {
         const previous = this.runtimeSettings.getOverrides();
-        this.runtimeSettings.reset(actor);
+        const previousExemptUsers = this.database.listExemptUsers();
+        const previousBlockedTerms = this.database.listRuntimeBlockedTerms();
+        const summary = this.runtimeSettings.reset(actor);
+
         return {
           accepted: true,
           success: true,
           commandSummary: "reset",
-          replyMessage: "Runtime overrides cleared. Defaults are active again.",
+          replyMessage: `Reset runtime controls: ${summary.overrides} override(s), ${summary.exemptUsers} exemption(s), ${summary.blockedTerms} blocked term(s) cleared.`,
           highRisk: false,
-          changes: Object.entries(previous)
-            .filter(([key, value]) => !["updatedAt", "updatedByUserId", "updatedByLogin"].includes(key) && value !== undefined)
-            .map(([key, value]) => ({
-              key: key as RuntimeOverrideKey,
-              previousValue: value,
-              nextValue: null,
-            })),
+          changes: this.buildResetChanges(previous, previousExemptUsers, previousBlockedTerms),
         };
       }
       case "panic": {
@@ -373,6 +399,64 @@ export class WhisperControlPlane {
     }
   }
 
+  private resolveController(message: WhisperMessage): TrustedController | null {
+    const configController = this.controllersByUserId.get(message.senderUserId);
+    if (configController) {
+      return configController;
+    }
+
+    const runtimeEntry = this.database.getRuntimeControllerByUserId(message.senderUserId);
+    if (!runtimeEntry?.userId) {
+      return null;
+    }
+
+    this.database.touchRuntimeControllerIdentity(
+      runtimeEntry.userId,
+      message.senderUserLogin,
+      message.senderUserDisplayName,
+    );
+
+    return {
+      userId: runtimeEntry.userId,
+      login: message.senderUserLogin,
+      displayName: message.senderUserDisplayName,
+      source: "runtime",
+      role: runtimeEntry.role,
+    };
+  }
+
+  private buildResetChanges(
+    previousOverrides: RuntimeOverrideSnapshot,
+    previousExemptUsers: Array<{ userLogin: string }>,
+    previousBlockedTerms: Array<{ term: string }>,
+  ): ControlCommandResult["changes"] {
+    const changes: ControlCommandResult["changes"] = Object.entries(previousOverrides)
+      .filter(([key, value]) => !["updatedAt", "updatedByUserId", "updatedByLogin"].includes(key) && value !== undefined)
+      .map(([key, value]) => ({
+        key: key as RuntimeOverrideKey,
+        previousValue: value,
+        nextValue: null,
+      }));
+
+    if (previousExemptUsers.length > 0) {
+      changes.push({
+        key: "runtimeExemptions",
+        previousValue: previousExemptUsers.map((user) => user.userLogin),
+        nextValue: [],
+      });
+    }
+
+    if (previousBlockedTerms.length > 0) {
+      changes.push({
+        key: "runtimeBlockedTerms",
+        previousValue: previousBlockedTerms.map((term) => term.term),
+        nextValue: [],
+      });
+    }
+
+    return changes;
+  }
+
   private executeRecent(count: number): ControlCommandResult {
     const rows = this.database.getRecentDecisionsForAdmin(count);
     if (rows.length === 0) {
@@ -383,7 +467,7 @@ export class WhisperControlPlane {
     for (const row of rows) {
       const ago = formatTimeAgo(row.createdAt as string);
       const entry = `@${row.chatter as string} ${row.outcome as string}${row.category ? `(${row.category as string})` : ""} ${ago}`;
-      if (totalLen + entry.length + 3 > 450) break;
+      if (totalLen + entry.length + 3 > WHISPER_MAX_CHARS) break;
       parts.push(entry);
       totalLen += entry.length + 3;
     }

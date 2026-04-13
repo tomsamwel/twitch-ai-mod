@@ -4,7 +4,7 @@
 
 ```bash
 npm run check            # TypeScript type check
-npm test                 # 174 unit tests (~1.5s), node:test framework
+npm test                 # 199 unit tests (~1.5s), node:test framework
 npm run build            # Compile to dist/
 npm run eval:scenarios   # 77 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
 npm run eval:candidates  # List production decisions worth promoting to eval scenarios
@@ -32,7 +32,7 @@ Supporting: `control/` (whisper commands), `runtime/` (message processor), `stor
 
 Deterministic rules always run before AI. Bot-authored messages are snapshotted then skipped.
 
-In live mode, AI reviews go through a bounded queue (`AiReviewQueue` in `src/runtime/ai-review-queue.ts`) with configurable capacity, concurrency, and staleness eviction (`ai.queue` in app.yaml). Eval/replay scripts bypass the queue — `MessageProcessor.processAiReview()` is called directly.
+In live mode, AI reviews go through a bounded queue (`AiReviewQueue` in `src/runtime/ai-review-queue.ts`) with configurable capacity, concurrency, and staleness eviction (`ai.queue` in app.yaml). The queue supports per-user coalescing: rapid messages from the same chatter merge into a single queue entry, keeping the riskiest message (by URL/caps/mentions/length score) and injecting a `coalescedCount` signal into the AI prompt. Eval/replay scripts bypass the queue — `MessageProcessor.processAiReview()` is called directly.
 
 ## Config System — Key Gotchas
 
@@ -72,7 +72,7 @@ When bot=broadcaster, whisper control doesn't work — use admin panel at `local
 
 **Whisper command aliases**: `aim`=ai-moderation, `live`=live-moderation, `dry`=dry-run, `soc`=social. New commands: `recent [N]`, `stats`, `exempt`/`unexempt`, `block`/`unblock`.
 
-**Permission tiers** (in `control-plane.yaml`): `broadcaster` (everything), `admin` (all toggles + management), `mod` (status + exempt + block only). Config uses `trustedControllers: [{login, role}]` format; old `trustedControllerLogins` still works (all default to admin).
+**Permission tiers** (in `control-plane.yaml`): `broadcaster` (everything), `admin` (all toggles + management), `mod` (status + exempt + block only). Config uses `trustedControllers: [{login, role}]`.
 
 ## Prompt System
 
@@ -97,12 +97,14 @@ Three kinds: `say` (social reply), `warn` (public moderation notice), `timeout` 
 - Parser auto-injects companion `warn` if AI returns only `timeout`
 - Companion `warn` is skipped if the timeout itself was skipped/failed
 - Cooldowns are per-user AND global — both must pass
+- Reply fallback: if a `say`/`warn` reply-parent was purged (e.g. by a preceding timeout), the message is retried without the reply thread
+- Skipped actions now log a `skipReason` field for easier debugging
 
 ## Eval System
 
 77 YAML scenarios across 13 suites: `adversarial`, `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `irl-safety`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
 
-Scenarios support `seed` history + `steps[]` with expected outcomes. Legacy single-turn format auto-converted.
+Scenarios use `seed` history + `steps[]` with expected outcomes.
 
 Approval is precision-first: wrongful timeouts and blocking missed timeouts fail approval. Abstains and social-quality misses are advisory.
 

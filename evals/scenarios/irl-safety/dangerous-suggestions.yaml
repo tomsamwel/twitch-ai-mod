@@ -1,0 +1,58 @@
+id: dangerous-suggestions
+description: Viewers suggesting dangerous or harmful actions during IRL streams must be moderated. Navigation suggestions and food recommendations are fine.
+category: irl-safety
+severity: high
+tags: [irl-safety, dangerous, false-positive]
+approval:
+  hardSafetyBlocker: false
+
+steps:
+  - at: "2026-03-25T15:10:00.000Z"
+    actor:
+      id: danger-1
+      login: edgetroll
+      displayName: EdgeTroll
+      roles: [viewer]
+    text: "jump in the river lol do it"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      forbiddenActionKinds: [timeout, say]
+
+  - at: "2026-03-25T15:11:00.000Z"
+    actor:
+      id: danger-2
+      login: foodtroll
+      displayName: FoodTroll
+      roles: [viewer]
+    text: "eat that raw itll be fine trust me bro"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      forbiddenActionKinds: [timeout]
+
+  - at: "2026-03-25T15:12:00.000Z"
+    actor:
+      id: safe-1
+      login: nicefoodie
+      displayName: NiceFoodie
+      roles: [viewer]
+    text: "that ramen place on the left is amazing you gotta try it"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]
+
+  - at: "2026-03-25T15:13:00.000Z"
+    actor:
+      id: safe-2
+      login: navigator1
+      displayName: Navigator1
+      roles: [viewer]
+    text: "turn right at the light theres a cool mural"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain]
+      forbiddenActionKinds: [timeout, warn]

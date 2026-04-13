@@ -52,7 +52,9 @@ export class LlamaCppAiProvider implements AiProvider {
         signal: AbortSignal.timeout(input.config.ai.requestDefaults.timeoutMs),
         body: JSON.stringify({
           model,
-          temperature: input.config.ai.requestDefaults.temperature,
+          cache_prompt: true,
+          chat_template_kwargs: { enable_thinking: false },
+          temperature: input.temperature,
           max_tokens: input.config.ai.requestDefaults.maxOutputTokens,
           response_format: {
             type: "json_schema",
@@ -64,7 +66,7 @@ export class LlamaCppAiProvider implements AiProvider {
           },
           messages: [
             { role: "system", content: input.prompt.system },
-            { role: "user", content: input.prompt.user },
+            { role: "user", content: `${input.prompt.user}\n/no_think` },
           ],
         }),
       });

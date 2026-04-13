@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 
 import { ActionExecutor } from "../actions/action-executor.js";
 import { getConfiguredModel } from "../ai/provider-config.js";
-import { getAiFailureMetadata } from "../ai/failure-metadata.js";
+import { getAiFailureMetadata, type AiFailureMetadata } from "../ai/failure-metadata.js";
 import { AiContextBuilder } from "../ai/context-builder.js";
 import { AiProviderRegistry } from "../ai/provider-registry.js";
 import { buildAiDecisionInput } from "../ai/prompt.js";
@@ -328,7 +328,7 @@ function evaluateScenarioStepResult(
   result: MessageProcessingResult,
   replyExcerpt: string | null,
   scenarioHardSafetyBlocker: boolean,
-): { passed: boolean; failures: string[]; issues: ScenarioEvaluationIssue[] } {
+): { passed: boolean; failures: string[]; issues: ScenarioEvaluationIssue[]; aiFailure: AiFailureMetadata } {
   const actualOutcome = deriveActualOutcome(result);
   const actualActionKinds = [
     ...(result.ruleDecision?.actions ?? []),
@@ -484,6 +484,7 @@ function evaluateScenarioStepResult(
     passed: issues.length === 0,
     failures: issues.map((issue) => issue.message),
     issues,
+    aiFailure,
   };
 }
 
@@ -571,7 +572,7 @@ export async function runScenarioEvaluation(
         createSyntheticEvent(historyMessage, bot, broadcaster, historyEventId),
         new Date(historyMessage.at),
       );
-      database.recordMessageSnapshot(normalized, bot);
+      database.recordMessageSnapshot(normalized, bot, { processingMode: "scenario" });
     }
 
     for (const interaction of scenario.seed.botInteractions) {
@@ -595,9 +596,12 @@ export async function runScenarioEvaluation(
       );
       const input = buildAiDecisionInput(
         incomingMessage,
-        contextBuilder.build(incomingMessage, bot),
+        contextBuilder.build(incomingMessage, bot, "scenario"),
         config,
         bot,
+        undefined,
+        undefined,
+        Date.parse(step.at),
       );
       const result = await processor.process(incomingMessage, {
         botIdentity: bot,
@@ -621,7 +625,6 @@ export async function runScenarioEvaluation(
         replyExcerpt,
         scenario.approval.hardSafetyBlocker,
       );
-      const aiFailure = getAiFailureMetadata(result.aiDecision);
       const timeoutRequired = isTimeoutRequired(step);
       const timeoutRequirementSeverity = timeoutRequired
         ? resolveMissedTimeoutSeverity(step, scenario.approval.hardSafetyBlocker)
@@ -644,9 +647,9 @@ export async function runScenarioEvaluation(
         moderationCategory: result.aiDecision?.moderationCategory ?? null,
         confidence: result.aiDecision?.confidence ?? null,
         replyExcerpt,
-        providerFailureKind: aiFailure.failureKind,
-        providerErrorType: aiFailure.errorType,
-        providerFailureReason: aiFailure.failureKind ? (result.aiDecision?.reason ?? null) : null,
+        providerFailureKind: evaluation.aiFailure.failureKind,
+        providerErrorType: evaluation.aiFailure.errorType,
+        providerFailureReason: evaluation.aiFailure.failureKind ? (result.aiDecision?.reason ?? null) : null,
         blockingIssueCount,
         advisoryIssueCount,
         passed: evaluation.passed,
@@ -678,8 +681,8 @@ export async function runScenarioEvaluation(
       selectedMode: lastStep.selectedMode,
       promptChars: Math.max(...stepResults.map((step) => step.promptChars)),
       actualOutcome: lastStep.actualOutcome,
-      actualActionKinds: stepResults.flatMap((step) => step.actualActionKinds),
-      actualActionStatuses: stepResults.flatMap((step) => step.actualActionStatuses),
+      actualActionKinds: lastStep.actualActionKinds,
+      actualActionStatuses: lastStep.actualActionStatuses,
       replyExcerpt: lastStep.replyExcerpt,
       providerFailureKind: firstProviderFailure?.providerFailureKind ?? null,
       providerErrorType: firstProviderFailure?.providerErrorType ?? null,

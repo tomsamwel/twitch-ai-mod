@@ -33,7 +33,20 @@ const aiDecisionPayloadBaseSchema = z
   })
   .strict();
 
-export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((payload, context) => {
+export function createAiDecisionPayloadSchema(options?: { isFirstTimeChatter?: boolean; greetingEnabled?: boolean }) {
+  return aiDecisionPayloadBaseSchema.superRefine((payload, context) => {
+    _validateAiDecisionPayload(payload, context, options?.isFirstTimeChatter ?? false, options?.greetingEnabled ?? true);
+  });
+}
+
+export const aiDecisionPayloadSchema = createAiDecisionPayloadSchema();
+
+function _validateAiDecisionPayload(
+  payload: z.infer<typeof aiDecisionPayloadBaseSchema>,
+  context: z.RefinementCtx,
+  isFirstTimeChatter: boolean,
+  greetingEnabled: boolean = true,
+): void {
   if (payload.actions.length > 2) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -115,7 +128,8 @@ export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((
     return;
   }
 
-  if (payload.actions.length === 1 && firstAction.kind !== "warn") {
+  const allowGreetingSay = isFirstTimeChatter && greetingEnabled && firstAction.kind === "say" && payload.moderationCategory === "none";
+  if (payload.actions.length === 1 && firstAction.kind !== "warn" && !allowGreetingSay) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       message: 'single moderation actions must use kind "warn"',
@@ -132,9 +146,7 @@ export const aiDecisionPayloadSchema = aiDecisionPayloadBaseSchema.superRefine((
       });
     }
   }
-});
-
-export type AiDecisionPayload = z.infer<typeof aiDecisionPayloadSchema>;
+}
 
 export const aiDecisionJsonSchema = (function stripSchemaMeta(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -171,7 +183,7 @@ export function buildAbstainDecision(
 }
 
 export function payloadToAiDecision(
-  payload: AiDecisionPayload,
+  payload: z.infer<typeof aiDecisionPayloadSchema>,
   source: AiProviderKind,
   input: AiDecisionInput,
 ): AiDecision {
@@ -181,17 +193,17 @@ export function payloadToAiDecision(
         kind: action.kind,
         reason: action.reason,
         message: action.message!,
-        targetUserId: action.targetUserId ?? input.message.chatterId,
-        targetUserName: action.targetUserName ?? input.message.chatterLogin,
-        replyParentMessageId: action.replyParentMessageId ?? input.message.sourceMessageId,
+        targetUserId: input.message.chatterId,
+        targetUserName: input.message.chatterLogin,
+        replyParentMessageId: input.message.sourceMessageId,
       };
     }
 
     return {
       kind: "timeout",
       reason: action.reason,
-      targetUserId: action.targetUserId ?? input.message.chatterId,
-      targetUserName: action.targetUserName ?? input.message.chatterLogin,
+      targetUserId: input.message.chatterId,
+      targetUserName: input.message.chatterLogin,
       durationSeconds:
         action.durationSeconds ?? input.config.moderationPolicy.deterministicRules.timeoutSeconds,
     };

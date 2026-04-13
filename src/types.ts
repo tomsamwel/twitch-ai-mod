@@ -3,7 +3,7 @@ import { z } from "zod";
 export const logLevelSchema = z.enum(["fatal", "error", "warn", "info", "debug", "trace"]);
 export type LogLevel = z.infer<typeof logLevelSchema>;
 
-export const AI_PROVIDER_KINDS = ["ollama", "openai", "llama-cpp"] as const;
+export const AI_PROVIDER_KINDS = ["ollama", "openai", "azure-foundry", "llama-cpp"] as const;
 export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
 export type AiMode = "social" | "moderation";
 export const moderationCategorySchema = z.enum([
@@ -24,10 +24,14 @@ export type RuntimeOverrideKey =
   | "aiEnabled"
   | "aiModerationEnabled"
   | "socialRepliesEnabled"
+  | "greetingsEnabled"
+  | "greetFirstMessage"
+  | "greetOnJoin"
   | "dryRun"
   | "liveModerationEnabled"
   | "promptPack"
   | "modelPreset";
+export type ControlChangeKey = RuntimeOverrideKey | "runtimeExemptions" | "runtimeBlockedTerms";
 
 export type ActionKind = "say" | "warn" | "timeout";
 export type ReviewVerdict =
@@ -59,6 +63,10 @@ export interface NormalizedChatMessage {
   chatterDisplayName: string;
   text: string;
   normalizedText: string;
+  urlResult: {
+    detected: boolean;
+    urls: string[];
+  };
   color: string | null;
   messageType: string;
   badges: Record<string, string>;
@@ -206,17 +214,21 @@ export interface ConfigSnapshot {
     dryRun: boolean;
     logLevel: LogLevel;
     tokenValidationIntervalMinutes: number;
+    eventSubDisconnectGraceSeconds: number;
+    exitOnEventSubStall: boolean;
   };
   storage: {
     sqlitePath: string;
   };
   secrets: {
     openaiApiKey?: string;
+    azureFoundryApiKey?: string;
   };
   twitch: {
     broadcasterLogin: string;
     botLogin: string;
     requiredScopes: string[];
+    channelRules: string[];
     clientId: string;
     clientSecret: string;
     redirectUri: string;
@@ -229,8 +241,7 @@ export interface ConfigSnapshot {
   controlPlane: {
     enabled: boolean;
     commandPrefix: string;
-    trustedControllerLogins: string[];
-    trustedControllers?: Array<{ login: string; role: "admin" | "mod" }>;
+    trustedControllers: Array<{ login: string; role: "admin" | "mod" }>;
     broadcasterAlwaysAllowed: boolean;
     allowedPromptPacks: string[];
     modelPresets: Record<
@@ -248,6 +259,7 @@ export interface ConfigSnapshot {
     promptPack: string;
     requestDefaults: {
       temperature: number;
+      socialTemperature?: number;
       maxOutputTokens: number;
       timeoutMs: number;
     };
@@ -267,6 +279,11 @@ export interface ConfigSnapshot {
       baseUrl: string;
       model: string;
     };
+    azureFoundry?: {
+      baseUrl: string;
+      deployment: string;
+      apiStyle: "chat-completions";
+    } | undefined;
     llamaCpp?: {
       baseUrl: string;
       model: string;
@@ -287,6 +304,17 @@ export interface ConfigSnapshot {
   actions: {
     allowLiveChatMessages: boolean;
     allowLiveModeration: boolean;
+  };
+  social?: {
+    greetings: {
+      enabled: boolean;
+      onFirstMessage: boolean;
+      onChatterJoin: boolean;
+      chatterPollIntervalMs: number;
+      maxQueueDepth: number;
+      rateLimitMs: number;
+      greetingCooldownMs: number;
+    };
   };
   cooldowns: {
     chat: {
@@ -367,6 +395,9 @@ export interface AiPromptPayload {
 
 export interface AiDecisionInput {
   mode: AiMode;
+  temperature: number;
+  isFirstTimeChatter: boolean;
+  greetingEnabled: boolean;
   message: NormalizedChatMessage;
   context: AiContextSnapshot;
   config: ConfigSnapshot;
@@ -379,9 +410,24 @@ export interface TwitchIdentity {
   displayName: string;
 }
 
+export interface TwitchUserResolver {
+  resolveUserByLogin(login: string): Promise<TwitchIdentity | null>;
+}
+
 export interface TwitchGatewayContext {
   broadcaster: TwitchIdentity;
   bot: TwitchIdentity;
+}
+
+export interface EventSubConnectionStatus {
+  connected: boolean;
+  reconnectGraceSeconds: number;
+  exitOnStall: boolean;
+  stale: boolean;
+  disconnectCount: number;
+  lastConnectAt: string | null;
+  lastDisconnectAt: string | null;
+  lastDisconnectError: string | null;
 }
 
 export interface WhisperMessage {
@@ -402,6 +448,7 @@ export interface PersistedMessageSnapshot {
   chatterId: string;
   chatterLogin: string;
   receivedAt: string;
+  processingMode: ProcessingMode;
   botIdentity: TwitchIdentity;
   message: NormalizedChatMessage;
   createdAt: string;
@@ -509,8 +556,31 @@ export interface TrustedController {
   userId: string;
   login: string;
   displayName: string;
-  source: "config" | "broadcaster";
+  source: "config" | "broadcaster" | "runtime";
   role: ControllerRole;
+}
+
+export interface RuntimeControllerRecord {
+  login: string;
+  userId: string | null;
+  displayName: string | null;
+  role: "admin" | "mod";
+  addedByLogin: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RuntimeControllerUpsert {
+  login: string;
+  userId: string;
+  displayName: string | null;
+  role: "admin" | "mod";
+  addedByLogin: string;
+}
+
+export interface RuntimeControllerIdentifier {
+  userId?: string | null;
+  login?: string | null;
 }
 
 export type ControlCommand =
@@ -519,6 +589,9 @@ export type ControlCommand =
   | { kind: "set-ai"; enabled: boolean }
   | { kind: "set-ai-moderation"; enabled: boolean }
   | { kind: "set-social"; enabled: boolean }
+  | { kind: "set-greetings"; enabled: boolean }
+  | { kind: "set-greet-first-message"; enabled: boolean }
+  | { kind: "set-greet-on-join"; enabled: boolean }
   | { kind: "set-dry-run"; enabled: boolean }
   | { kind: "set-live-moderation"; enabled: boolean }
   | { kind: "set-pack"; packName: string }
@@ -540,7 +613,7 @@ export interface ControlCommandResult {
   commandSummary: string;
   highRisk: boolean;
   changes: Array<{
-    key: RuntimeOverrideKey;
+    key: ControlChangeKey;
     previousValue: unknown;
     nextValue: unknown;
   }>;
@@ -550,6 +623,9 @@ export interface RuntimeOverrideSnapshot {
   aiEnabled?: boolean;
   aiModerationEnabled?: boolean;
   socialRepliesEnabled?: boolean;
+  greetingsEnabled?: boolean;
+  greetFirstMessage?: boolean;
+  greetOnJoin?: boolean;
   dryRun?: boolean;
   liveModerationEnabled?: boolean;
   promptPack?: string;
@@ -563,6 +639,9 @@ export interface EffectiveRuntimeSettings {
   aiEnabled: boolean;
   aiModerationEnabled: boolean;
   socialRepliesEnabled: boolean;
+  greetingsEnabled: boolean;
+  greetFirstMessage: boolean;
+  greetOnJoin: boolean;
   dryRun: boolean;
   liveModerationEnabled: boolean;
   promptPack: string;

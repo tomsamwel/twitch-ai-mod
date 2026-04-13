@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { createPriorityClassifier } from "../src/runtime/priority-classifier.js";
+import {
+  createPriorityClassifier,
+  workItemCoalesceKey,
+  coalesceWorkItems,
+  messageRiskScore,
+} from "../src/runtime/priority-classifier.js";
 import type { PriorityClassifierDeps } from "../src/runtime/priority-classifier.js";
 import type { AiReviewWorkItem } from "../src/runtime/message-processor.js";
 import type { NormalizedChatMessage, NormalizedMessagePart, TwitchIdentity } from "../src/types.js";
+import { DEFAULT_URL_RESULT } from "./helpers.js";
 
 const botIdentity: TwitchIdentity = { id: "bot-1", login: "testbot", displayName: "TestBot" };
 
@@ -24,6 +30,7 @@ function makeMessage(overrides: Partial<NormalizedChatMessage> = {}): Normalized
     chatterDisplayName: "ViewerOne",
     text: "hello world",
     normalizedText: "hello world",
+    urlResult: { ...DEFAULT_URL_RESULT },
     color: "#00FF00",
     messageType: "text",
     badges: {},
@@ -75,6 +82,7 @@ function makeWorkItem(overrides: {
         broadcasterAddressed: false,
       },
     },
+    coalescedCount: 1,
   };
 }
 
@@ -103,7 +111,7 @@ test("moderation + repeat offender is high priority", () => {
 test("moderation + URL detected is high priority", () => {
   const classify = createPriorityClassifier(stubDeps(0));
   const item = makeWorkItem({
-    message: { text: "check this out https://free-skins.com", normalizedText: "check this out https://free-skins.com" },
+    message: { text: "check this out https://free-skins.com", normalizedText: "check this out https://free-skins.com", urlResult: { detected: true, urls: ["https://free-skins.com"] } },
   });
   assert.equal(classify(item), "high");
 });
@@ -162,6 +170,7 @@ test("moderation + subscriber WITH URL risk signal stays high", () => {
       roles: ["subscriber"],
       text: "check https://sketchy-link.com",
       normalizedText: "check https://sketchy-link.com",
+      urlResult: { detected: true, urls: ["https://sketchy-link.com"] },
     },
   });
   assert.equal(classify(item), "high");
@@ -175,12 +184,12 @@ test("moderation + repeat offender WITH trust signals stays high", () => {
   assert.equal(classify(item), "high");
 });
 
-test("moderation + plain viewer with no signals is high (default)", () => {
+test("moderation + plain viewer with no signals is normal (default)", () => {
   const classify = createPriorityClassifier(stubDeps(0));
   const item = makeWorkItem({
     message: { text: "hello chat", normalizedText: "hello chat" },
   });
-  assert.equal(classify(item), "high");
+  assert.equal(classify(item), "normal");
 });
 
 test("short caps text is not flagged as risk (below alpha threshold)", () => {
@@ -190,4 +199,75 @@ test("short caps text is not flagged as risk (below alpha threshold)", () => {
   });
   // Only 6 alpha chars, below CAPS_MIN_ALPHA of 8 — trust demotion applies
   assert.equal(classify(item), "normal");
+});
+
+// --- Coalesce key tests ---
+
+test("workItemCoalesceKey returns chatterId for moderation mode", () => {
+  const item = makeWorkItem({ mode: "moderation" });
+  assert.equal(workItemCoalesceKey(item), item.message.chatterId);
+});
+
+test("workItemCoalesceKey returns undefined for social mode", () => {
+  const item = makeWorkItem({ mode: "social" });
+  assert.equal(workItemCoalesceKey(item), undefined);
+});
+
+// --- Coalesce strategy tests ---
+
+test("coalesceWorkItems keeps riskier message", () => {
+  const clean = makeWorkItem({ message: { text: "hello", normalizedText: "hello" } });
+  const risky = makeWorkItem({
+    message: { text: "CHECK THIS OUT https://scam.com BUY NOW", normalizedText: "check this out https://scam.com buy now", urlResult: { detected: true, urls: ["https://scam.com"] } },
+  });
+
+  const result = coalesceWorkItems(clean, risky, 1);
+  assert.equal(result.merged.message.text, risky.message.text, "riskier incoming wins");
+  assert.equal(result.count, 2);
+});
+
+test("coalesceWorkItems keeps existing when it is riskier", () => {
+  const risky = makeWorkItem({
+    message: { text: "CHECK THIS OUT https://scam.com BUY NOW", normalizedText: "check this out https://scam.com buy now", urlResult: { detected: true, urls: ["https://scam.com"] } },
+  });
+  const clean = makeWorkItem({ message: { text: "hello", normalizedText: "hello" } });
+
+  const result = coalesceWorkItems(risky, clean, 2);
+  assert.equal(result.merged.message.text, risky.message.text, "riskier existing wins");
+  assert.equal(result.count, 3);
+});
+
+test("coalesceWorkItems prefers incoming on equal risk", () => {
+  const a = makeWorkItem({ message: { text: "msg a", normalizedText: "msg a" } });
+  const b = makeWorkItem({ message: { text: "msg b", normalizedText: "msg b" } });
+
+  const result = coalesceWorkItems(a, b, 1);
+  assert.equal(result.merged.message.text, "msg b", "latest (incoming) wins on tie");
+});
+
+test("coalesceWorkItems updates nowMs to incoming", () => {
+  const old = makeWorkItem({});
+  old.nowMs = 1000;
+  const fresh = makeWorkItem({});
+  fresh.nowMs = 5000;
+
+  const result = coalesceWorkItems(old, fresh, 1);
+  assert.equal(result.merged.nowMs, 5000);
+});
+
+// --- Risk score tests ---
+
+test("messageRiskScore is 0 for plain text", () => {
+  const msg = makeMessage({ text: "hello", normalizedText: "hello" });
+  assert.equal(messageRiskScore(msg), 0);
+});
+
+test("messageRiskScore scores URLs highest", () => {
+  const msg = makeMessage({ text: "check https://scam.com", normalizedText: "check https://scam.com", urlResult: { detected: true, urls: ["https://scam.com"] } });
+  assert.ok(messageRiskScore(msg) >= 4);
+});
+
+test("messageRiskScore scores all-caps", () => {
+  const msg = makeMessage({ text: "AAAAAAAAAA", normalizedText: "aaaaaaaaaa" });
+  assert.ok(messageRiskScore(msg) >= 3);
 });

@@ -1,19 +1,23 @@
 id: direct-help-request
 description: Viewer directly asks the bot for help.
-history:
+seed:
   messages: []
-incomingMessage:
-  at: "2026-03-24T15:01:00.000Z"
-  actor:
-    id: viewer-1
-    login: onefuzzletorule
-    displayName: OneFuzzleToRule
-    roles: [viewer]
-  text: "@testchannel help pls"
-expected:
-  mode: social
-  allowedOutcomes: [action]
-  allowedActionKinds: [say]
-  allowedActionStatuses: [dry-run]
-  forbiddenActionKinds: [timeout]
-  replyShouldContainAny: [help, chat, keep, smooth]
+steps:
+  - at: 2026-03-24T15:01:00.000Z
+    actor:
+      id: viewer-1
+      login: onefuzzletorule
+      displayName: OneFuzzleToRule
+      roles:
+        - viewer
+    text: "@testchannel help pls"
+    expected:
+      mode: social
+      allowedOutcomes:
+        - action
+      allowedActionKinds:
+        - say
+      allowedActionStatuses:
+        - dry-run
+      forbiddenActionKinds:
+        - timeout

@@ -15,9 +15,9 @@ steps:
       roles: [viewer]
     text: "@testchannel @testchannel @testchannel"
     expected:
-      mode: social
+      mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [say]
+      allowedActionKinds: [warn]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]
   - id: mention-spam-2
@@ -29,7 +29,7 @@ steps:
       roles: [viewer]
     text: "@testchannel @testchannel @testchannel @testchannel @testchannel"
     expected:
-      mode: social
+      mode: moderation
       allowedOutcomes: [action]
       allowedActionKinds: [timeout, warn]
       requiredActionKinds: [timeout, warn]

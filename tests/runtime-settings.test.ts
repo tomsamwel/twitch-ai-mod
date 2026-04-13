@@ -48,8 +48,13 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
       setRuntimeOverride(key, value) {
         writes.push({ key, value });
       },
-      clearRuntimeOverrides() {
+      clearRuntimeControlState() {
         cleared = true;
+        return {
+          overrides: persistedOverrides.length,
+          exemptUsers: 0,
+          blockedTerms: 0,
+        };
       },
     },
     new Map([
@@ -76,9 +81,14 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
   });
   assert.deepEqual(writes, [{ key: "modelPreset", value: "local-fast" }]);
 
-  store.reset({
+  const resetSummary = store.reset({
     userId: "user-1",
     login: "streamer",
+  });
+  assert.deepEqual(resetSummary, {
+    overrides: persistedOverrides.length,
+    exemptUsers: 0,
+    blockedTerms: 0,
   });
 
   const resetEffective = store.getEffectiveSettings();
@@ -116,4 +126,20 @@ test("createFixedRuntimeSettings and createEffectiveConfig produce a consistent 
   assert.equal(effectiveConfig.actions.allowLiveModeration, true);
   assert.equal(effectiveConfig.ai.ollama.model, "qwen2.5:1.5b");
   assert.equal(effective.aiModerationEnabled, false);
+});
+
+test("createEffectiveConfig maps Azure AI Foundry runtime settings onto deployment config", () => {
+  const config = createTestConfig();
+  const runtimeSettings = createFixedRuntimeSettings(config, {
+    provider: "azure-foundry",
+    providerBaseUrl: "https://custom-resource.openai.azure.com/openai/v1/",
+    model: "mod-bot-prod",
+  });
+
+  const effectiveConfig = createEffectiveConfig(config, runtimeSettings.getEffectiveSettings());
+
+  assert.equal(effectiveConfig.ai.provider, "azure-foundry");
+  assert.equal(effectiveConfig.ai.azureFoundry?.baseUrl, "https://custom-resource.openai.azure.com/openai/v1/");
+  assert.equal(effectiveConfig.ai.azureFoundry?.deployment, "mod-bot-prod");
+  assert.equal(effectiveConfig.ai.azureFoundry?.apiStyle, "chat-completions");
 });
