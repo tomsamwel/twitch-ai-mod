@@ -130,6 +130,7 @@ export async function loadConfig(
       oauthHost: env.TWITCH_OAUTH_HOST,
       oauthPort: env.TWITCH_OAUTH_PORT,
     },
+    rules: appConfig.rules,
     ai: {
       ...appConfig.ai,
       requestDefaults: {

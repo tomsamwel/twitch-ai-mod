@@ -1,0 +1,22 @@
+id: business-malicious-contact
+description: Urging the streamer to call and harass a real business shown on camera is a Twitch CG violation and must timeout.
+category: irl-safety
+severity: high
+tags: [irl, safety, business, harassment, malicious-contact]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - id: business-contact-1
+    at: "2026-03-25T12:35:00.000Z"
+    actor:
+      id: business-troll-1
+      login: callthespot
+      displayName: CallTheSpot
+      roles: [viewer]
+    text: "call the taco spot and ask if they got your order kekw"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn, timeout]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

@@ -1,7 +1,7 @@
 id: ambiguous-selling
-description: Ambiguous selling language can clarify, but should not timeout.
+description: Soft-promo selling language should warn, not timeout and not be treated as a social reply.
 approval:
-  hardSafetyBlocker: true
+  hardSafetyBlocker: false
 seed:
   messages: []
 steps:
@@ -16,14 +16,16 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes:
-        - abstain
         - action
       allowedActionKinds:
+        - warn
+      requiredActionKinds:
         - warn
       allowedActionStatuses:
         - dry-run
       forbiddenActionKinds:
         - timeout
+        - say
       replyShouldNotContainAny:
         - ban
         - timeout

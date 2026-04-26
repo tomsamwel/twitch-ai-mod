@@ -3,11 +3,14 @@ app:
   environment: development
 
 runtime:
-  dryRun: false
   logLevel: info
   tokenValidationIntervalMinutes: 60
   eventSubDisconnectGraceSeconds: 600
   exitOnEventSubStall: true
+
+# Deterministic rules (blocked terms, spam heuristics, visual spam). Always safe to run.
+rules:
+  enabled: true
 
 storage:
   sqlitePath: ./data/twitch-ai-mod.sqlite
@@ -35,7 +38,15 @@ twitch:
 
 ai:
   enabled: true
-  provider: llama-cpp
+  # AI social replies (say actions)
+  social:
+    enabled: true
+  # AI moderation (warn + timeout). moderation.enabled is the master for AI acting on moderation decisions.
+  moderation:
+    enabled: false  # OFF by default — explicit opt-in so AI timeouts never fire without user consent
+    warn: true      # when moderation.enabled, AI-issued warns execute
+    timeout: true   # when moderation.enabled, AI-issued timeouts execute
+  provider: azure-foundry
   requestDefaults:
     temperature: 0
     socialTemperature: 0.7
@@ -55,8 +66,8 @@ ai:
     baseUrl: https://api.openai.com/v1
     model: gpt-4o-mini
   azureFoundry:
-    baseUrl: https://your-resource.openai.azure.com/openai/v1/
-    deployment: your-model-deployment
+    baseUrl: https://tsamwel-ai-foundry.services.ai.azure.com/api/projects/tsamwel-ai-foundry-default-project/openai/v1/
+    deployment: gpt-5.4-nano
     apiStyle: chat-completions
   llamaCpp:
     baseUrl: http://localhost:8081
@@ -76,8 +87,8 @@ admin:
   port: 3001
 
 actions:
+  # Gates the Twitch chat-send client itself. Keep true in production; false blocks all outbound messages.
   allowLiveChatMessages: true
-  allowLiveModeration: false
 
 social:
   greetings:

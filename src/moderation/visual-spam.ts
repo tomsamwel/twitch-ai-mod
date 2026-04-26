@@ -14,7 +14,11 @@ export interface VisualSpamAnalysis {
 }
 
 function countVisibleCharacters(text: string): number {
-  return [...text].filter((character) => !/\s/u.test(character)).length;
+  let count = 0;
+  for (const ch of text) {
+    if (!/\s/u.test(ch)) count++;
+  }
+  return count;
 }
 
 function countNaturalWords(text: string): number {
@@ -22,7 +26,11 @@ function countNaturalWords(text: string): number {
 }
 
 function countSymbolCharacters(text: string): number {
-  return [...text].filter((character) => /[^\p{L}\p{N}\s]/u.test(character)).length;
+  let count = 0;
+  for (const ch of text) {
+    if (/[^\p{L}\p{N}\s]/u.test(ch)) count++;
+  }
+  return count;
 }
 
 function longestDenseSymbolRun(text: string): number {
@@ -56,10 +64,8 @@ function countRepeatedVisualLines(lines: string[], minimumSymbolDensity: number)
     }
 
     const normalized = trimmed.replace(/\s+/gu, " ");
-    const symbolDensity =
-      countVisibleCharacters(normalized) === 0
-        ? 0
-        : countSymbolCharacters(normalized) / countVisibleCharacters(normalized);
+    const visibleChars = countVisibleCharacters(normalized);
+    const symbolDensity = visibleChars === 0 ? 0 : countSymbolCharacters(normalized) / visibleChars;
 
     if (symbolDensity < lineSymbolDensityThreshold) {
       continue;

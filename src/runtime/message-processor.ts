@@ -53,6 +53,8 @@ export interface AiReviewWorkItem {
   isPollGreeting?: boolean;
   /** Whether the AI should attempt to greet this chatter (separate from isFirstTimeChatter which also drives scam escalation). */
   greetingEnabled?: boolean;
+  /** For poll-path greetings: all viewer IDs in the batch. Marked greeted only after the handler runs, so a dropped work item leaves no DB cooldown row behind. */
+  pollGreetingViewerIds?: string[];
 }
 
 interface OutboundMessageTrackerLike {
@@ -83,7 +85,7 @@ function annotateAiActionForExecution(
       moderationCategory: decision.moderationCategory,
       targetIsPrivileged: message.isPrivileged,
       targetIsSelfAuthored: message.chatterId === botIdentity.id,
-      hasRepeatedUserEvidence: context.recentUserMessages.length > 0,
+      hasRecentUserActivity: context.recentUserMessages.length >= 2,
       hasRecentBotCorrectiveInteraction: context.recentBotInteractions.some(
         (interaction) =>
           (interaction.kind === "warn" || interaction.kind === "timeout") && interaction.status !== "failed",
@@ -235,7 +237,7 @@ export class MessageProcessor {
 
     const effectiveSettings = this.runtimeSettings.getEffectiveSettings();
 
-    if (!effectiveSettings.aiEnabled || !this.config.moderationPolicy.aiPolicy.enabled) {
+    if (!effectiveSettings.ai.enabled || !this.config.moderationPolicy.aiPolicy.enabled) {
       return {
         status: "processed",
         ruleDecision,
@@ -258,8 +260,13 @@ export class MessageProcessor {
           mode: aiMode.mode,
           signals: { ...aiMode.signals, isFirstTimeChatter: true },
         };
-        // Mark greeted immediately so the poll path doesn't also greet.
-        this.sessionChatterTracker.markGreeted(message.chatterId, nowMs);
+        // Block the poll path from also enqueueing a greeting for this
+        // chatter by marking them in the in-memory "seen" set. Do NOT write
+        // to DB yet — that only happens after the queued greeting actually
+        // runs (see processAiReview). If the queued item is dropped, no DB
+        // record is left behind and the user can still be greeted next
+        // session.
+        this.sessionChatterTracker.markSeen(message.chatterId);
         this.logger.info(
           { chatterId: message.chatterId, chatter: message.chatterLogin, mode: aiMode.mode },
           "first-time chatter this session — tagged for moderation + greeting",
@@ -270,10 +277,24 @@ export class MessageProcessor {
     // Fast path: skip AI for messages that are clearly safe — no risk signals,
     // not addressing the bot, and no hard-violation keywords. The deterministic
     // rule engine already ran above, so blocked terms/spam/visual spam are handled.
-    if (aiMode.mode === "social" && !effectiveSettings.socialRepliesEnabled) {
+    if (aiMode.mode === "social" && !effectiveSettings.ai.social.enabled) {
       this.logger.debug(
         { chatterId: message.chatterId, eventId: message.eventId, processingMode },
-        "skipping social AI review because social replies are disabled",
+        "skipping social AI review because ai.social is disabled",
+      );
+
+      return {
+        status: "processed",
+        ruleDecision,
+        aiDecision: null,
+        actionResults,
+      };
+    }
+
+    if (aiMode.mode === "moderation" && !effectiveSettings.ai.moderation.enabled) {
+      this.logger.debug(
+        { chatterId: message.chatterId, eventId: message.eventId, processingMode },
+        "skipping moderation AI review because ai.moderation is disabled",
       );
 
       return {
@@ -378,7 +399,7 @@ export class MessageProcessor {
     const aiProvider = await this.aiProviders.getProvider(effectiveConfig);
     let aiDecision = await aiProvider.decide(aiInput);
 
-    if (!effectiveSettings.socialRepliesEnabled) {
+    if (!effectiveSettings.ai.social.enabled) {
       const filteredActions = aiDecision.actions.filter((action) => action.kind !== "say");
       if (filteredActions.length !== aiDecision.actions.length) {
         aiDecision = {
@@ -438,7 +459,11 @@ export class MessageProcessor {
 
     // Mark greeted after executing actions so the rate limit and de-dupe are
     // only consumed when the work actually ran (not just on enqueue).
-    if (work.aiMode.signals.isFirstTimeChatter) {
+    if (work.isPollGreeting && work.pollGreetingViewerIds) {
+      for (const viewerId of work.pollGreetingViewerIds) {
+        this.sessionChatterTracker?.markGreeted(viewerId, work.nowMs);
+      }
+    } else if (work.aiMode.signals.isFirstTimeChatter) {
       this.sessionChatterTracker?.markGreeted(work.message.chatterId, work.nowMs);
     }
 
@@ -559,6 +584,7 @@ export class MessageProcessor {
       coalescedCount: 1,
       isPollGreeting: true,
       greetingEnabled: true,
+      pollGreetingViewerIds: viewers.map((v) => v.id),
     };
 
     this.aiReviewQueue.enqueue(workItem);

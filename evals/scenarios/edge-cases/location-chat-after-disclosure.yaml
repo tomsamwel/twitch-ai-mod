@@ -1,0 +1,29 @@
+id: location-chat-after-disclosure
+description: Generic city chatter after the streamer voluntarily disclosed the city must not trigger any moderation action.
+category: edge-cases
+severity: low
+tags: [irl, location, false-positive-guard]
+approval:
+  hardSafetyBlocker: false
+seed:
+  messages:
+    - at: "2026-03-25T12:50:00.000Z"
+      actor:
+        id: broadcaster-1
+        login: testchannel
+        displayName: TestChannel
+        roles: [broadcaster]
+      text: "im in seattle this week btw"
+steps:
+  - id: location-chat-1
+    at: "2026-03-25T12:51:20.000Z"
+    actor:
+      id: friendlyviewer-1
+      login: seattlerain
+      displayName: SeattleRain
+      roles: [viewer]
+    text: "seattle rain arc again Pog"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, no_action]
+      forbiddenActionKinds: [warn, timeout, say]

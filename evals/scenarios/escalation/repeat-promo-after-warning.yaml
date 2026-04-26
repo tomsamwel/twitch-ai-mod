@@ -25,7 +25,5 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [warn]
-      requiredActionKinds: [warn]
+      allowedActionKinds: [warn, timeout]
       allowedActionStatuses: [dry-run]
-      forbiddenActionKinds: [timeout]

@@ -67,10 +67,8 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
   }
 
   const ALIASES: Record<string, string> = {
-    aim: "ai-moderation",
-    live: "live-moderation",
-    dry: "dry-run",
     soc: "social",
+    moderation: "mod",
     greet: "greetings",
     greeting: "greetings",
     gfm: "greet-first-message",
@@ -94,28 +92,24 @@ export function parseControlCommand(input: string, prefix: string): ControlComma
         throw new Error(`Usage: ${fmt(prefix, "status")}`);
       }
       return { kind: "status" };
+    case "rules":
+      return { kind: "set-rules", enabled: parseToggle(tokens.length, value, fmt(prefix, "rules on|off")) };
     case "ai":
       return { kind: "set-ai", enabled: parseToggle(tokens.length, value, fmt(prefix, "ai on|off")) };
-    case "ai-moderation":
-      return {
-        kind: "set-ai-moderation",
-        enabled: parseToggle(tokens.length, value, fmt(prefix, "ai-moderation on|off")),
-      };
     case "social":
       return { kind: "set-social", enabled: parseToggle(tokens.length, value, fmt(prefix, "social on|off")) };
+    case "mod":
+      return { kind: "set-mod", enabled: parseToggle(tokens.length, value, fmt(prefix, "mod on|off")) };
+    case "warn":
+      return { kind: "set-warn", enabled: parseToggle(tokens.length, value, fmt(prefix, "warn on|off")) };
+    case "timeout":
+      return { kind: "set-timeout", enabled: parseToggle(tokens.length, value, fmt(prefix, "timeout on|off")) };
     case "greetings":
       return { kind: "set-greetings", enabled: parseToggle(tokens.length, value, fmt(prefix, "greet on|off")) };
     case "greet-first-message":
       return { kind: "set-greet-first-message", enabled: parseToggle(tokens.length, value, fmt(prefix, "greet-first-message on|off")) };
     case "greet-on-join":
       return { kind: "set-greet-on-join", enabled: parseToggle(tokens.length, value, fmt(prefix, "greet-on-join on|off")) };
-    case "dry-run":
-      return { kind: "set-dry-run", enabled: parseToggle(tokens.length, value, fmt(prefix, "dry-run on|off")) };
-    case "live-moderation":
-      return {
-        kind: "set-live-moderation",
-        enabled: parseToggle(tokens.length, value, fmt(prefix, "live-moderation on|off")),
-      };
     case "pack":
       if (tokens.length !== 3 || !value) {
         throw new Error(`Usage: ${fmt(prefix, "pack <pack-name>")}`);

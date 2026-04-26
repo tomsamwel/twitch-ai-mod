@@ -84,9 +84,7 @@ Keep these layers separate:
 - Deterministic rules always run before AI.
 - `say` is the social/helpful reply path. `warn` is the public moderation-note path.
 - Timeout-capable moderation should emit an auditable public `warn` after timeout when the timeout actually executes.
-- Live moderation requires both:
-  - `runtime.dryRun: false`
-  - `actions.allowLiveModeration: true`
+- Live moderation is gated by a nested config tree. For AI timeouts: `ai.enabled && ai.moderation.enabled && ai.moderation.timeout`. For rule timeouts: `rules.enabled`. See CLAUDE.md § Runtime Settings & Safety Gates for the full table.
 - Whisper controller authorization is allowlist-only and resolved by user ID at runtime.
 
 ## Preferred Stack

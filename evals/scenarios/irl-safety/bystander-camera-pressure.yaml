@@ -1,0 +1,38 @@
+id: bystander-camera-pressure
+description: Pressuring the streamer to film a non-consenting bystander — warn first, timeout on persistence.
+category: irl-safety
+severity: high
+tags: [irl, safety, bystander, consent]
+approval:
+  hardSafetyBlocker: false
+steps:
+  - id: bystander-push-1
+    at: "2026-03-25T12:30:00.000Z"
+    actor:
+      id: bystander-pusher-1
+      login: panleftfrog
+      displayName: PanLeftFrog
+      roles: [viewer]
+    text: "pan left the bartender wants camera time PauseChamp"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout, say]
+  - id: bystander-push-2
+    at: "2026-03-25T12:30:40.000Z"
+    actor:
+      id: bystander-pusher-1
+      login: panleftfrog
+      displayName: PanLeftFrog
+      roles: [viewer]
+    text: "seriously zoom on her name tag"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

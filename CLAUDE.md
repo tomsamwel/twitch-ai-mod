@@ -4,9 +4,9 @@
 
 ```bash
 npm run check            # TypeScript type check
-npm test                 # 199 unit tests (~1.5s), node:test framework
+npm test                 # 240 unit tests (~4s), node:test framework
 npm run build            # Compile to dist/
-npm run eval:scenarios   # 77 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
+npm run eval:scenarios   # 95 AI scenarios via llama-server (several minutes, exit code 1 = some failures, expected)
 npm run eval:candidates  # List production decisions worth promoting to eval scenarios
 npm run eval:compare -- --baseline safer-control --candidate witty-mod
 npm run approve:pilot    # Final gate before live AI moderation
@@ -59,18 +59,39 @@ Three providers: `llama-cpp` (default), `ollama`, `openai` — all behind `AiPro
 
 ## Runtime Settings & Safety Gates
 
-Seven overridable settings (SQLite-persisted, survive restart):
-`aiEnabled`, `aiModerationEnabled`, `socialRepliesEnabled`, `dryRun`, `liveModerationEnabled`, `promptPack`, `modelPreset`
+Config shape is a nested tree. Each toggle does exactly what its name says — no truth tables:
 
-Runtime exemptions (`exempt_users` table) and blocked terms (`runtime_blocked_terms` table) are also SQLite-persisted and managed via whisper commands or admin panel.
+```
+rules.enabled              # deterministic rules may execute warns + timeouts
+ai.enabled                 # master AI toggle (kills social + moderation)
+  ai.social.enabled        # AI replies (say actions) execute
+  ai.moderation.enabled    # AI moderation mode runs at all
+    ai.moderation.warn     # AI-issued warns execute
+    ai.moderation.timeout  # AI-issued timeouts execute
+```
 
-**`aiModerationEnabled` defaults to `false`** — this is a separate safety gate from `allowLiveModeration` in app.yaml. Both must be on for AI timeouts to execute.
+Plus `promptPack` and `modelPreset`. All SQLite-persisted, survive restart. Override keys use dotted paths (e.g. `ai.moderation.timeout`). Runtime exemptions (`exempt_users` table) and blocked terms (`runtime_blocked_terms` table) are also SQLite-persisted.
 
-Live AI timeout execution requires ALL of: `dryRun: false` + `allowLiveModeration: true` + `aiModerationEnabled: true` + confidence >= 0.90 + category in allowlist + target not privileged + spam-escalation needs prior evidence.
+**Defaults (fresh install)**: `rules.enabled=true`, `ai.enabled=true`, `ai.social.enabled=true`, `ai.moderation.enabled=false` (explicit opt-in), `warn=true`, `timeout=true`. Flipping `ai.moderation.enabled: true` is the single deliberate step to go live.
+
+**Gate table**:
+
+| Action | Source | Gates required (all) |
+|--------|--------|---------------------|
+| `say` | AI | `ai.enabled` + `ai.social.enabled` |
+| `warn` | AI | `ai.enabled` + `ai.moderation.enabled` + `ai.moderation.warn` |
+| `timeout` | AI | `ai.enabled` + `ai.moderation.enabled` + `ai.moderation.timeout` |
+| `warn`/`timeout` | rules | `rules.enabled` |
+
+AI timeouts additionally require: confidence ≥ 0.90, category in allowlist, target not privileged, spam-escalation needs prior evidence.
+
+`ai.moderation.enabled: false` skips the moderation AI call entirely (saves a provider round-trip). To observe AI moderation decisions without acting, set `enabled: true, warn: false, timeout: false`.
+
+There is no `dryRun` runtime toggle anymore. Eval/replay/approval scripts get dry-run behavior via `processingMode !== "live"` (set automatically by `applyNonLiveScriptOverrides`).
 
 When bot=broadcaster, whisper control doesn't work — use admin panel at `localhost:3001`.
 
-**Whisper command aliases**: `aim`=ai-moderation, `live`=live-moderation, `dry`=dry-run, `soc`=social. New commands: `recent [N]`, `stats`, `exempt`/`unexempt`, `block`/`unblock`.
+**Whisper commands**: `rules on|off`, `ai on|off`, `social on|off`, `mod on|off`, `warn on|off`, `timeout on|off`. Aliases: `soc`=social, `moderation`=mod. Batch commands: `panic` (everything on), `chill` (rules+social on, moderation off), `off` (rules+ai both off). Other commands: `recent [N]`, `stats`, `exempt`/`unexempt`, `block`/`unblock`, `pack`, `model`, `reset`.
 
 **Permission tiers** (in `control-plane.yaml`): `broadcaster` (everything), `admin` (all toggles + management), `mod` (status + exempt + block only). Config uses `trustedControllers: [{login, role}]`.
 
@@ -102,7 +123,7 @@ Three kinds: `say` (social reply), `warn` (public moderation notice), `timeout` 
 
 ## Eval System
 
-77 YAML scenarios across 13 suites: `adversarial`, `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `irl-safety`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
+95 YAML scenarios across 13 suites: `adversarial`, `edge-cases`, `escalation`, `future-warn-candidates`, `harassment-sexual`, `irl-safety`, `loops-cooldowns`, `moderation`, `privileged-safety`, `promo-scam`, `social`, `social-direct`, `social-quiet`.
 
 Scenarios use `seed` history + `steps[]` with expected outcomes.
 

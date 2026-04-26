@@ -185,7 +185,7 @@ export function buildAbstainDecision(
 export function payloadToAiDecision(
   payload: z.infer<typeof aiDecisionPayloadSchema>,
   source: AiProviderKind,
-  input: AiDecisionInput,
+  input: Pick<AiDecisionInput, "mode" | "message" | "config">,
 ): AiDecision {
   const actions = payload.actions.map((action): ProposedAction => {
     if (action.kind === "say" || action.kind === "warn") {

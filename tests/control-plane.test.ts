@@ -47,14 +47,15 @@ function createRuntimeSettingsState(config = createTestConfig()): {
 } {
   return {
     effective: {
-      aiEnabled: true,
-      aiModerationEnabled: false,
-      socialRepliesEnabled: true,
+      rules: { enabled: true },
+      ai: {
+        enabled: true,
+        social: { enabled: true },
+        moderation: { enabled: false, warn: true, timeout: true },
+      },
       greetingsEnabled: false,
       greetFirstMessage: true,
       greetOnJoin: false,
-      dryRun: true,
-      liveModerationEnabled: false,
       promptPack: config.ai.promptPack,
       prompts: config.prompts,
       modelPreset: "local-default",
@@ -241,12 +242,12 @@ test("WhisperControlPlane applies trusted commands and replies with status", asy
         };
 
         if (typeof value === "boolean") {
-          if (key === "aiEnabled") {
-            state.effective.aiEnabled = value;
+          if (key === "ai.enabled") {
+            state.effective.ai.enabled = value;
           }
 
-          if (key === "aiModerationEnabled") {
-            state.effective.aiModerationEnabled = value;
+          if (key === "ai.moderation.enabled") {
+            state.effective.ai.moderation.enabled = value;
           }
         }
       },
@@ -277,17 +278,17 @@ test("WhisperControlPlane applies trusted commands and replies with status", asy
     },
   );
 
-  await controlPlane.processWhisper(createWhisper({ text: "aimod ai-moderation on" }));
+  await controlPlane.processWhisper(createWhisper({ text: "aimod mod on" }));
   await controlPlane.processWhisper(createWhisper({ id: "whisper-2", text: "aimod ai off" }));
   await controlPlane.processWhisper(createWhisper({ id: "whisper-3", text: "aimod status" }));
 
-  assert.equal(state.effective.aiEnabled, false);
-  assert.equal(state.effective.aiModerationEnabled, true);
-  assert.equal(sentReplies[0], "ai-moderation on applied.");
+  assert.equal(state.effective.ai.enabled, false);
+  assert.equal(state.effective.ai.moderation.enabled, true);
+  assert.equal(sentReplies[0], "mod on applied.");
   assert.equal(sentReplies[1], "ai off applied.");
   assert.match(sentReplies[2] ?? "", /ai=off/u);
-  assert.match(sentReplies[2] ?? "", /ai-moderation=on/u);
-  assert.deepEqual(audits, ["ai-moderation on", "ai off", "status"]);
+  assert.match(sentReplies[2] ?? "", /mod=on/u);
+  assert.deepEqual(audits, ["mod on", "ai off", "status"]);
 });
 
 test("WhisperControlPlane ignores duplicate whisper IDs", async () => {
@@ -350,7 +351,7 @@ test("WhisperControlPlane ignores duplicate whisper IDs", async () => {
   assert.equal(auditCount, 1);
 });
 
-test("WhisperControlPlane panic command enables AI + moderation + live-mod and disables dry-run", async () => {
+test("WhisperControlPlane panic command enables every gate in the tree", async () => {
   const logger = createLogger("info", "test");
   const state = createRuntimeSettingsState();
   const sentReplies: string[] = [];
@@ -392,10 +393,12 @@ test("WhisperControlPlane panic command enables AI + moderation + live-mod and d
 
   assert.match(sentReplies[0] ?? "", /PANIC MODE/u);
   assert.deepEqual(appliedOverrides, [
-    { key: "aiEnabled", value: true },
-    { key: "aiModerationEnabled", value: true },
-    { key: "liveModerationEnabled", value: true },
-    { key: "dryRun", value: false },
+    { key: "rules.enabled", value: true },
+    { key: "ai.enabled", value: true },
+    { key: "ai.social.enabled", value: true },
+    { key: "ai.moderation.enabled", value: true },
+    { key: "ai.moderation.warn", value: true },
+    { key: "ai.moderation.timeout", value: true },
   ]);
 });
 
@@ -441,9 +444,10 @@ test("WhisperControlPlane chill command enables AI + social, disables moderation
 
   assert.match(sentReplies[0] ?? "", /CHILL MODE/u);
   assert.deepEqual(appliedOverrides, [
-    { key: "aiEnabled", value: true },
-    { key: "socialRepliesEnabled", value: true },
-    { key: "aiModerationEnabled", value: false },
+    { key: "rules.enabled", value: true },
+    { key: "ai.enabled", value: true },
+    { key: "ai.social.enabled", value: true },
+    { key: "ai.moderation.enabled", value: false },
   ]);
 });
 
@@ -487,8 +491,11 @@ test("WhisperControlPlane off command disables AI", async () => {
 
   await controlPlane.processWhisper(createWhisper({ text: "aimod off" }));
 
-  assert.match(sentReplies[0] ?? "", /AI disabled/u);
-  assert.deepEqual(appliedOverrides, [{ key: "aiEnabled", value: false }]);
+  assert.match(sentReplies[0] ?? "", /OFF/u);
+  assert.deepEqual(appliedOverrides, [
+    { key: "rules.enabled", value: false },
+    { key: "ai.enabled", value: false },
+  ]);
 });
 
 test("mod role is denied from set-ai but allowed for status", async () => {

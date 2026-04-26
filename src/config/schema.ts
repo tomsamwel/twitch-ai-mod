@@ -21,12 +21,14 @@ export const appConfigSchema = z.object({
     environment: z.string().min(1),
   }),
   runtime: z.object({
-    dryRun: z.boolean(),
     logLevel: logLevelSchema,
     tokenValidationIntervalMinutes: z.number().int().positive(),
     eventSubDisconnectGraceSeconds: z.number().int().positive().default(600),
     exitOnEventSubStall: z.boolean().default(true),
   }),
+  rules: z.object({
+    enabled: z.boolean().default(true),
+  }).default({ enabled: true }),
   storage: z.object({
     sqlitePath: z.string().min(1),
   }),
@@ -41,6 +43,14 @@ export const appConfigSchema = z.object({
   }),
   ai: z.object({
     enabled: z.boolean(),
+    social: z.object({
+      enabled: z.boolean().default(true),
+    }).default({ enabled: true }),
+    moderation: z.object({
+      enabled: z.boolean().default(false),
+      warn: z.boolean().default(true),
+      timeout: z.boolean().default(true),
+    }).default({ enabled: false, warn: true, timeout: true }),
     provider: z.enum(AI_PROVIDER_KINDS),
     requestDefaults: z.object({
       temperature: z.number().min(0).max(2),
@@ -88,7 +98,6 @@ export const appConfigSchema = z.object({
   }).optional(),
   actions: z.object({
     allowLiveChatMessages: z.boolean(),
-    allowLiveModeration: z.boolean(),
   }),
   social: z.object({
     greetings: z.object({

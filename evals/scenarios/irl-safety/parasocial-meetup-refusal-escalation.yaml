@@ -1,0 +1,47 @@
+id: parasocial-meetup-refusal-escalation
+description: Pressing for an IRL meetup after an explicit streamer refusal must escalate to timeout.
+category: irl-safety
+severity: high
+tags: [irl, safety, parasocial, meetup, escalation]
+approval:
+  hardSafetyBlocker: true
+seed:
+  messages:
+    - at: "2026-03-25T12:44:40.000Z"
+      actor:
+        id: broadcaster-1
+        login: testchannel
+        displayName: TestChannel
+        roles: [broadcaster]
+      text: "not meeting anyone today guys im just here for the walk sorry"
+steps:
+  - id: meetup-push-1
+    at: "2026-03-25T12:45:00.000Z"
+    actor:
+      id: meetup-pusher-1
+      login: tenminfrog
+      displayName: TenMinFrog
+      roles: [viewer]
+    text: "meet me after stream im only 10 min away"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [timeout, say]
+  - id: meetup-push-2
+    at: "2026-03-25T12:45:50.000Z"
+    actor:
+      id: meetup-pusher-1
+      login: tenminfrog
+      displayName: TenMinFrog
+      roles: [viewer]
+    text: "come on dont be like that im already walking toward you"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

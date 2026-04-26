@@ -421,6 +421,34 @@
     margin-right: 0.3rem;
   }
 
+  /* ── Rules top-level group (green, always on is safe) ── */
+  .rules-group {
+    border-left: 2px solid rgba(0, 230, 118, 0.25);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    margin: 0.2rem 0;
+    padding-left: 0.75rem;
+    transition: border-color 0.3s ease;
+  }
+  .rules-group.rules-active { border-left-color: rgba(0, 230, 118, 0.5); }
+
+  /* ── Moderation sub-sub-group (amber — the risky branch) ── */
+  .mod-sub-group {
+    margin-top: 0.3rem;
+    margin-left: 0.75rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid rgba(240, 165, 0, 0.25);
+    background: rgba(240, 165, 0, 0.03);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    transition: opacity 0.3s ease;
+  }
+  .mod-sub-group.mod-sub-dim { opacity: 0.38; }
+  .mod-sub-row { padding-left: 0.5rem; }
+  .mod-sub-label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    margin-right: 0.3rem;
+  }
+
   /* ── Status indicators ── */
   .status-row {
     display: flex;
@@ -784,7 +812,7 @@
   .filter-bar select {
     min-width: 90px;
     background: var(--bg-surface);
-    color: var(--text-base);
+    color: var(--text);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.3rem 0.4rem;
@@ -1286,7 +1314,7 @@
   /* ── Role select (controller table) ── */
   .role-select {
     background: var(--bg-surface);
-    color: var(--text-base);
+    color: var(--text);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.15rem 0.3rem;
@@ -1334,7 +1362,7 @@
     background: var(--bg-surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    color: var(--text-base);
+    color: var(--text);
     transition: border-color 0.2s;
   }
   .hud-search:focus {
@@ -1406,6 +1434,43 @@
     user-select: none;
   }
   .panel-link:hover { opacity: 1; }
+
+  /* ── Toast notifications ── */
+  .toast-stack {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    z-index: 9998;
+    pointer-events: none;
+  }
+  .toast {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-glow);
+    color: var(--text);
+    padding: 0.5rem 0.8rem;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45), 0 0 12px rgba(0,240,255,0.06);
+    min-width: 180px;
+    max-width: 320px;
+    animation: toast-in 0.22s ease-out;
+    pointer-events: auto;
+  }
+  .toast.toast-ok { border-color: rgba(0,230,118,0.35); color: var(--green); }
+  .toast.toast-err { border-color: rgba(229,57,53,0.4); color: var(--red); }
+  .toast.toast-out { animation: toast-out 0.2s ease-in forwards; }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateX(12px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes toast-out {
+    from { opacity: 1; transform: translateX(0); }
+    to   { opacity: 0; transform: translateX(12px); }
+  }
 </style>
 </head>
 <body>
@@ -1418,11 +1483,11 @@
       twitch-ai-mod
     </div>
     <div class="hud-search-wrap" id="global-search-wrap">
-      <input type="text" class="hud-search" id="global-search" placeholder="@user..." autocomplete="off">
+      <input type="text" class="hud-search" id="global-search" placeholder="@user..." autocomplete="off" autocapitalize="off" spellcheck="false">
     </div>
     <div class="hud-quick-actions">
-      <button class="hud-toggle off" id="hud-qk-dryrun" onclick="quickToggle('dryRun')">Dry Run: --</button>
-      <button class="hud-toggle off" id="hud-qk-aimod" onclick="quickToggle('aiModerationEnabled')">AI Mod: --</button>
+      <button class="hud-toggle off" id="hud-qk-mod" onclick="quickToggle('ai.moderation.enabled')">Mod: --</button>
+      <button class="hud-toggle off" id="hud-qk-timeout" onclick="quickToggle('ai.moderation.timeout')">Timeout: --</button>
     </div>
     <div class="hud-indicators">
       <span class="hud-status-tag err" id="hud-ai-tag">AI OFF</span>
@@ -1479,7 +1544,7 @@
           <div class="filter-group">
             <label class="filter-label">User</label>
             <div class="autocomplete-wrap" id="act-chatter-wrap">
-              <input type="text" id="act-chatter" placeholder="@chatter" autocomplete="off">
+              <input type="text" id="act-chatter" placeholder="@chatter" autocomplete="off" autocapitalize="off" spellcheck="false">
             </div>
           </div>
           <div class="filter-group">
@@ -1525,7 +1590,7 @@
       <h2>Controllers</h2>
       <div class="inline-form">
         <div class="autocomplete-wrap" id="ctrl-login-wrap">
-          <input type="text" id="ctrl-login" placeholder="login" autocomplete="off">
+          <input type="text" id="ctrl-login" placeholder="login" autocomplete="off" autocapitalize="off" spellcheck="false">
         </div>
         <select id="ctrl-role"><option value="admin">admin</option><option value="mod">mod</option></select>
         <button class="btn" onclick="addController()">Add</button>
@@ -1536,7 +1601,7 @@
       <h2>Exempt Users</h2>
       <div class="inline-form">
         <div class="autocomplete-wrap" id="exempt-login-wrap">
-          <input type="text" id="exempt-login" placeholder="login to exempt" autocomplete="off">
+          <input type="text" id="exempt-login" placeholder="login to exempt" autocomplete="off" autocapitalize="off" spellcheck="false">
         </div>
         <button class="btn" onclick="addExemption()">Add</button>
       </div>
@@ -1567,6 +1632,8 @@
 
 </div><!-- .hud-shell -->
 
+<div class="toast-stack" id="toast-stack" aria-live="polite" aria-atomic="true"></div>
+
 <script>
 const API = '';
 let activityOffset = 0;
@@ -1587,6 +1654,27 @@ function timeAgo(iso) {
   if (s < 86400) return Math.floor(s / 3600) + 'h ago';
   if (s < 604800) return Math.floor(s / 86400) + 'd ago';
   return Math.floor(s / 604800) + 'w ago';
+}
+
+function absoluteTime(iso) {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch { return ''; }
+}
+
+function toast(msg, kind) {
+  const stack = document.getElementById('toast-stack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind === 'ok' ? ' toast-ok' : kind === 'err' ? ' toast-err' : '');
+  el.textContent = msg;
+  stack.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('toast-out');
+    setTimeout(() => el.remove(), 220);
+  }, 2600);
 }
 
 function jsonPost(url, body) {
@@ -1661,13 +1749,18 @@ document.addEventListener('click', (e) => {
   const copyBtn = e.target.closest('.copy-reason-btn');
   if (exemptBtn) {
     const login = exemptBtn.closest('.quick-btns')?.dataset.login;
-    if (login) { jsonPost('/api/exemptions', { login }).then(() => { loadExemptions(); alert('Exempted: @' + login); }).catch(() => alert('Failed')); }
+    if (login) {
+      jsonPost('/api/exemptions', { login })
+        .then(() => { loadExemptions(); toast('Exempted @' + login, 'ok'); })
+        .catch(() => toast('Exempt failed', 'err'));
+    }
   }
   if (copyBtn) {
     const reason = copyBtn.closest('.quick-btns')?.dataset.reason || '';
-    navigator.clipboard.writeText(reason).catch(() => {
+    navigator.clipboard.writeText(reason).then(() => toast('Reason copied', 'ok')).catch(() => {
       const el = document.createElement('textarea'); el.value = reason;
       document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+      toast('Reason copied', 'ok');
     });
   }
 });
@@ -1786,7 +1879,8 @@ function renderActivityHtml(items, compact) {
       : ` onclick="this.classList.toggle('expanded')"`;
     const delay = compact ? '' : ` style="animation: panel-in 0.3s ease-out ${idx * 0.02}s both"`;
     const outcome = esc(a.outcome);
-    return `<div class="activity-item" data-outcome="${outcome}"${onclick}${delay}>${quickBtns}${userLink(a.chatter)}${flagHtml} ${outcomeBadge} ${acts}${catBadge}${textSnip}<div class="activity-meta-line">${esc(a.mode || a.stage)} &middot; ${timeAgo(a.createdAt)}</div>${expandHtml}</div>`;
+    const absTime = esc(absoluteTime(a.createdAt));
+    return `<div class="activity-item" data-outcome="${outcome}"${onclick}${delay}>${quickBtns}${userLink(a.chatter)}${flagHtml} ${outcomeBadge} ${acts}${catBadge}${textSnip}<div class="activity-meta-line" title="${absTime}">${esc(a.mode || a.stage)} &middot; ${timeAgo(a.createdAt)}</div>${expandHtml}</div>`;
   }).join('');
 }
 
@@ -1867,50 +1961,50 @@ function renderToggle(key, label, desc, value, safety) {
   const cls = safety
     ? (value ? 'toggle-btn safety-on' : 'toggle-btn safety-off')
     : (value ? 'toggle-btn on' : 'toggle-btn off');
-  return `<div class="toggle-row"><div class="toggle-label">${label}<small>${desc}</small></div><button class="${cls}" data-key="${key}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button></div>`;
+  return `<div class="toggle-row"><div class="toggle-label">${label}<small>${desc}</small></div><button class="${cls}" data-key="${key}" aria-pressed="${value}" aria-label="${label}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button></div>`;
+}
+
+function toggleBtnHtml(key, value, extraClass) {
+  const stateClass = value ? 'on' : 'off';
+  const cls = ['toggle-btn', stateClass, extraClass].filter(Boolean).join(' ');
+  return `<button class="${cls}" data-key="${key}" aria-pressed="${value}" onclick="setSetting('${key}', ${!value})">${value ? 'ON' : 'OFF'}</button>`;
+}
+
+function renderRulesGroup(s) {
+  return `<div class="rules-group${s.rules.enabled ? ' rules-active' : ''}"><div class="toggle-row"><div class="toggle-label">Rules<small>Deterministic rules (blocked terms, spam heuristics) can issue warns and timeouts</small></div>${toggleBtnHtml('rules.enabled', s.rules.enabled)}</div></div>`;
 }
 
 function renderAiGroup(s) {
-  const masterCls = s.aiEnabled ? 'toggle-btn on' : 'toggle-btn off';
-  const masterRow = `<div class="toggle-row ai-master-row"><div class="toggle-label">AI Enabled<small>Master AI toggle</small></div><button class="${masterCls}" data-key="aiEnabled" onclick="setSetting('aiEnabled', ${!s.aiEnabled})">${s.aiEnabled ? 'ON' : 'OFF'}</button></div>`;
+  const masterRow = `<div class="toggle-row ai-master-row"><div class="toggle-label">AI<small>Master AI toggle — affects social replies and moderation</small></div>${toggleBtnHtml('ai.enabled', s.ai.enabled)}</div>`;
+  const socialRow = `<div class="toggle-row ai-sub-row"><div class="toggle-label"><span class="ai-sub-label">↳</span>Social<small>AI replies in chat (say actions)</small></div>${toggleBtnHtml('ai.social.enabled', s.ai.social.enabled)}</div>`;
+  const modRow = `<div class="toggle-row ai-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="ai-sub-label">↳</span>Moderation<small>AI reviews messages and proposes moderation actions</small></div>${toggleBtnHtml('ai.moderation.enabled', s.ai.moderation.enabled)}</div>`;
 
-  const aimCls = s.aiModerationEnabled ? 'toggle-btn on' : 'toggle-btn off';
-  const socCls = s.socialRepliesEnabled ? 'toggle-btn on' : 'toggle-btn off';
-  const subRows = [
-    `<div class="toggle-row ai-sub-row"><div class="toggle-label"><span class="ai-sub-label">↳</span>AI Moderation<small>Allow AI to propose timeouts and warns</small></div><button class="${aimCls}" data-key="aiModerationEnabled" onclick="setSetting('aiModerationEnabled', ${!s.aiModerationEnabled})">${s.aiModerationEnabled ? 'ON' : 'OFF'}</button></div>`,
-    `<div class="toggle-row ai-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="ai-sub-label">↳</span>Social Replies<small>Allow social chat responses</small></div><button class="${socCls}" data-key="socialRepliesEnabled" onclick="setSetting('socialRepliesEnabled', ${!s.socialRepliesEnabled})">${s.socialRepliesEnabled ? 'ON' : 'OFF'}</button></div>`,
-  ].join('');
+  const modDimCls = s.ai.moderation.enabled ? '' : ' mod-sub-dim';
+  const modSubGroup = `<div class="mod-sub-group${modDimCls}">` +
+    `<div class="toggle-row mod-sub-row"><div class="toggle-label"><span class="mod-sub-label">↳</span>Warn<small>AI-issued public warns execute</small></div>${toggleBtnHtml('ai.moderation.warn', s.ai.moderation.warn)}</div>` +
+    `<div class="toggle-row mod-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="mod-sub-label">↳</span>Timeout<small>AI-issued timeouts execute. Off = AI can warn but not timeout</small></div>${toggleBtnHtml('ai.moderation.timeout', s.ai.moderation.timeout)}</div>` +
+    `</div>`;
 
-  const dimCls = s.aiEnabled ? '' : ' ai-sub-dim';
-  return `<div class="ai-group${s.aiEnabled ? ' ai-active' : ''}">${masterRow}<div class="ai-sub-group${dimCls}">${subRows}</div></div>`;
+  const subDim = s.ai.enabled ? '' : ' ai-sub-dim';
+  return `<div class="ai-group${s.ai.enabled ? ' ai-active' : ''}">${masterRow}<div class="ai-sub-group${subDim}">${socialRow}${modRow}${modSubGroup}</div></div>`;
 }
 
 function renderGreetingsGroup(s) {
-  const masterCls = s.greetingsEnabled ? 'toggle-btn on' : 'toggle-btn off';
-  const masterRow = `<div class="toggle-row greet-master-row"><div class="toggle-label">Greetings<small>AI greetings for new viewers — master switch</small></div><button class="${masterCls}" data-key="greetingsEnabled" onclick="setSetting('greetingsEnabled', ${!s.greetingsEnabled})">${s.greetingsEnabled ? 'ON' : 'OFF'}</button></div>`;
-
-  const fmCls = s.greetFirstMessage ? 'toggle-btn on' : 'toggle-btn off';
-  const ojCls = s.greetOnJoin ? 'toggle-btn on' : 'toggle-btn off';
+  const masterRow = `<div class="toggle-row greet-master-row"><div class="toggle-label">Greetings<small>AI greetings for new viewers — master switch</small></div>${toggleBtnHtml('greetingsEnabled', s.greetingsEnabled)}</div>`;
   const subRows = [
-    `<div class="toggle-row greet-sub-row"><div class="toggle-label"><span class="greet-sub-label">↳</span>First Message<small>Greet on their first chat message this session</small></div><button class="${fmCls}" data-key="greetFirstMessage" onclick="setSetting('greetFirstMessage', ${!s.greetFirstMessage})">${s.greetFirstMessage ? 'ON' : 'OFF'}</button></div>`,
-    `<div class="toggle-row greet-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="greet-sub-label">↳</span>On Join<small>Greet silent viewers detected by chat poll</small></div><button class="${ojCls}" data-key="greetOnJoin" onclick="setSetting('greetOnJoin', ${!s.greetOnJoin})">${s.greetOnJoin ? 'ON' : 'OFF'}</button></div>`,
+    `<div class="toggle-row greet-sub-row"><div class="toggle-label"><span class="greet-sub-label">↳</span>First Message<small>Greet on their first chat message this session</small></div>${toggleBtnHtml('greetFirstMessage', s.greetFirstMessage)}</div>`,
+    `<div class="toggle-row greet-sub-row" style="border-bottom:none"><div class="toggle-label"><span class="greet-sub-label">↳</span>On Join<small>Greet silent viewers detected by chat poll</small></div>${toggleBtnHtml('greetOnJoin', s.greetOnJoin)}</div>`,
   ].join('');
-
   const dimCls = s.greetingsEnabled ? '' : ' greet-sub-dim';
   return `<div class="greet-group${s.greetingsEnabled ? ' greet-active' : ''}">${masterRow}<div class="greet-sub-group${dimCls}">${subRows}</div></div>`;
 }
 
 function renderSettings(s) {
-  const regular = [
+  document.getElementById('settings').innerHTML = [
+    renderRulesGroup(s),
     renderAiGroup(s),
     renderGreetingsGroup(s),
   ].join('');
-  const safety = [
-    renderToggle('liveModerationEnabled', 'Live Moderation', 'Execute real moderation actions', s.liveModerationEnabled, true),
-    renderToggle('dryRun', 'Dry Run', 'Prevent all real actions', s.dryRun, true),
-  ].join('');
-  document.getElementById('settings').innerHTML = regular +
-    `<div class="safety-toggles"><div class="safety-label">Safety Controls</div>${safety}</div>`;
 }
 
 // --- Status Strip & Quick Actions ---
@@ -1922,14 +2016,15 @@ function updateStatusStrip(data) {
   // AI status tag
   const aiTag = document.getElementById('hud-ai-tag');
   if (aiTag) {
-    aiTag.textContent = s.aiEnabled ? 'AI ON' : 'AI OFF';
-    aiTag.className = 'hud-status-tag ' + (s.aiEnabled ? 'ok' : 'err');
+    aiTag.textContent = s.ai.enabled ? 'AI ON' : 'AI OFF';
+    aiTag.className = 'hud-status-tag ' + (s.ai.enabled ? 'ok' : 'err');
   }
 
-  // Dry run tag
+  // Dry mod tag — warn when moderation is off (AI can't act)
   const dryTag = document.getElementById('hud-dry-tag');
   if (dryTag) {
-    dryTag.className = 'hud-status-tag ' + (s.dryRun ? 'warn' : 'hidden');
+    dryTag.textContent = s.ai.moderation.enabled ? '' : 'MOD OFF';
+    dryTag.className = 'hud-status-tag ' + (s.ai.moderation.enabled ? 'hidden' : 'warn');
   }
 
   // LLM indicator
@@ -1950,29 +2045,35 @@ function updateStatusStrip(data) {
   if (qInd) { qInd.title = q ? `High-priority: ${q.highDepth}, Normal: ${q.normalDepth}` : ''; }
 
   // Quick toggles
-  const dryBtn = document.getElementById('hud-qk-dryrun');
-  if (dryBtn) {
-    dryBtn.textContent = s.dryRun ? 'Dry Run: ON' : 'Dry Run: OFF';
-    dryBtn.className = 'hud-toggle ' + (s.dryRun ? 'caution-on' : 'off');
+  const modBtn = document.getElementById('hud-qk-mod');
+  if (modBtn) {
+    modBtn.textContent = s.ai.moderation.enabled ? 'Mod: ON' : 'Mod: OFF';
+    modBtn.className = 'hud-toggle ' + (s.ai.moderation.enabled ? 'on' : 'off');
+    modBtn.setAttribute('aria-pressed', String(s.ai.moderation.enabled));
   }
-  const aiModBtn = document.getElementById('hud-qk-aimod');
-  if (aiModBtn) {
-    aiModBtn.textContent = s.aiModerationEnabled ? 'AI Mod: ON' : 'AI Mod: OFF';
-    aiModBtn.className = 'hud-toggle ' + (s.aiModerationEnabled ? 'on' : 'off');
+  const timeoutBtn = document.getElementById('hud-qk-timeout');
+  if (timeoutBtn) {
+    timeoutBtn.textContent = s.ai.moderation.timeout ? 'Timeout: ON' : 'Timeout: OFF';
+    timeoutBtn.className = 'hud-toggle ' + (s.ai.moderation.timeout ? 'on' : 'off');
+    timeoutBtn.setAttribute('aria-pressed', String(s.ai.moderation.timeout));
   }
+}
+
+function lookupNested(obj, key) {
+  return key.split('.').reduce((acc, part) => (acc == null ? acc : acc[part]), obj);
 }
 
 async function quickToggle(key) {
   const data = await fetchStatus();
   if (!data) return;
-  const current = data.settings[key];
+  const current = lookupNested(data.settings, key);
   await jsonPost('/api/settings', { key, value: !current });
   // Immediately refresh strip and dashboard if visible
   const fresh = await fetchStatus();
   if (fresh) updateStatusStrip(fresh);
   if (document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard();
   // Flash the quick-toggle button
-  const btnId = key === 'dryRun' ? 'hud-qk-dryrun' : key === 'aiModerationEnabled' ? 'hud-qk-aimod' : null;
+  const btnId = key === 'ai.moderation.enabled' ? 'hud-qk-mod' : key === 'ai.moderation.timeout' ? 'hud-qk-timeout' : null;
   if (btnId) {
     const btn = document.getElementById(btnId);
     if (btn) { btn.classList.add('toggle-flash'); setTimeout(() => btn.classList.remove('toggle-flash'), 600); }
@@ -2149,7 +2250,7 @@ async function loadActivity(reset, more) {
 
 function startActivityPoll() {
   stopActivityPoll();
-  actPollTimer = setInterval(pollNewDecisions, 10000);
+  actPollTimer = setInterval(() => { if (!document.hidden) pollNewDecisions(); }, 10000);
 }
 
 function stopActivityPoll() {
@@ -2199,7 +2300,7 @@ async function loadAudit(more) {
     const container = document.getElementById('audit-feed');
     if (auditOffset === 0) container.innerHTML = '';
     if (data.rows.length === 0 && auditOffset === 0) { container.innerHTML = '<div class="activity-meta">No audit entries</div>'; return; }
-    const rowsHtml = data.rows.map(a => `<tr${a.success ? '' : ' class="audit-fail"'}><td>${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : '<span style="color:var(--red)">FAIL</span>'}</td><td>${a.highRisk ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--text-muted)">\u2013</span>'}</td></tr>`).join('');
+    const rowsHtml = data.rows.map(a => `<tr${a.success ? '' : ' class="audit-fail"'}><td title="${esc(absoluteTime(a.createdAt))}">${timeAgo(a.createdAt)}</td><td>${userLink(a.actorLogin)}</td><td>${esc(a.command)}</td><td>${a.success ? 'OK' : '<span style="color:var(--red)">FAIL</span>'}</td><td>${a.highRisk ? '<span style="color:var(--red)">YES</span>' : '<span style="color:var(--text-muted)">\u2013</span>'}</td></tr>`).join('');
     if (auditOffset === 0) {
       container.innerHTML = `<table><thead><tr><th>Time</th><th>Actor</th><th>Command</th><th>Status</th><th>High Risk</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
     } else {
@@ -2291,10 +2392,11 @@ async function addController() {
   const response = await jsonPost('/api/controllers', { login, role });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
-    alert(data?.error || 'Failed to add controller');
+    toast(data?.error || 'Failed to add controller', 'err');
     return;
   }
   document.getElementById('ctrl-login').value = '';
+  toast('Controller added', 'ok');
   loadControllers();
 }
 
@@ -2455,10 +2557,23 @@ async function loadUserMini(login, container) {
       ${summaryParts.length ? `<div class="activity-meta">${summaryParts.join(' \u00b7 ')}</div>` : ''}
       ${msgsHtml}
       <div class="user-mini-actions">
-        ${!data.isExempt ? `<button class="user-mini-btn" onclick="event.stopPropagation();jsonPost('/api/exemptions',{login:'${esc(login)}'}).then(()=>{alert('Exempted: @${esc(login)}');userCache.delete('${esc(login)}')})">Exempt</button>` : ''}
+        ${!data.isExempt ? `<button class="user-mini-btn" onclick="event.stopPropagation();exemptFromMini(this,'${esc(login)}')">Exempt</button>` : ''}
         <button class="user-mini-btn" onclick="event.stopPropagation();switchToUserTab('${esc(login)}')">Full profile \u2192</button>
       </div>
     </div>`;
+}
+
+async function exemptFromMini(btn, login) {
+  try {
+    await jsonPost('/api/exemptions', { login });
+    userCache.delete(login);
+    toast('Exempted @' + login, 'ok');
+    const container = btn.closest('.user-mini')?.parentElement;
+    if (container) { container.dataset.loaded = ''; loadUserMini(login, container); }
+    loadExemptions();
+  } catch {
+    toast('Exempt failed', 'err');
+  }
 }
 
 function toggleUserMini(btn) {
@@ -2492,7 +2607,7 @@ const PROMPT_SECTION_META = {
 
 function parsePromptSections(text) {
   const sections = [];
-  const tagRe = /<(\w+)(?:\s[^>]*)?>([\\s\\S]*?)<\/\1>/g;
+  const tagRe = /<(\w+)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/g;
   let lastIndex = 0;
   let match;
   while ((match = tagRe.exec(text)) !== null) {
@@ -2615,13 +2730,21 @@ document.getElementById('block-term').addEventListener('keydown', (e) => { if (e
 document.getElementById('ctrl-login').addEventListener('keydown', (e) => { if (e.key === 'Enter') addController(); });
 
 refreshDashboard();
-setInterval(() => { if (document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard(); }, 3000);
+setInterval(() => {
+  if (document.hidden) return;
+  if (document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard();
+}, 3000);
 // Status strip poll — runs on all tabs so the top bar stays current
 setInterval(async () => {
+  if (document.hidden) return;
   if (document.getElementById('tab-dashboard').classList.contains('active')) return; // dashboard refresh already handles it
   const data = await fetchStatus();
   if (data) updateStatusStrip(data);
 }, 5000);
+// Refresh immediately when the tab becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && document.getElementById('tab-dashboard').classList.contains('active')) refreshDashboard();
+});
 </script>
 </body>
 </html>

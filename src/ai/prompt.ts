@@ -151,7 +151,7 @@ function formatDerivedSignals(
 }
 
 function greetingTaskInstruction(mode: AiMode, signals: AiModeSignals, greetingEnabled: boolean): string {
-  const greetCue = "welcome them using their display name. Mention that the streamer might not catch every message live but reads chat afterwards. Use a <unique phrasing -- never repeat a previous greeting>. Light Twitch emotes welcome. 1-2 sentences.";
+  const greetCue = "welcome them using their display name in one short sentence, observant and dry. Fresh phrasing each time, never repeat a previous greeting. 8 word target, 14 word ceiling. Do not explain how the streamer uses chat.";
 
   if (signals.pollGreetingNames && signals.pollGreetingNames.length > 0) {
     const names = signals.pollGreetingNames.join(", ");
@@ -320,7 +320,7 @@ function composeAiPrompt(
       `Only propose timeout for: ${config.moderationPolicy.aiPolicy.liveTimeouts.allowedCategories.join(", ")}.`,
       `Timeouts require confidence >= ${config.moderationPolicy.aiPolicy.liveTimeouts.minimumConfidence.toFixed(2)}. Below that, use warn.`,
       "spam-escalation timeout requires prior evidence (repeated user messages or prior bot correction in history). Without evidence, use warn.",
-      "The current message must independently contain a violation to act. Bad history alone is not grounds for action; apologies and de-escalation = abstain.",
+      "Apologies and de-escalation after a prior violation = abstain. Sustained hostility from the same user is itself a violation, even when each single message is ambiguous alone.",
       "If unsure, abstain.",
       mode === "social"
         ? 'reason: max 8 words. e.g. "direct question about bot".'

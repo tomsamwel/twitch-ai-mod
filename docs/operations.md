@@ -96,8 +96,12 @@ From the broadcaster or another trusted controller, whisper the bot account:
 aimod status
 aimod recent
 aimod stats
-aimod ai off
-aimod aim on
+aimod rules on
+aimod ai on
+aimod social on
+aimod mod on
+aimod warn on
+aimod timeout off
 aimod exempt someuser
 aimod block raid spam phrase
 aimod status
@@ -208,8 +212,8 @@ Enable sequence:
 
 ```text
 aimod status
-aimod live-moderation on
-aimod ai-moderation on
+aimod rules on
+aimod mod on
 aimod status
 ```
 
@@ -218,8 +222,9 @@ aimod status
 Only enable this intentionally.
 
 Required settings:
-- `runtime.dryRun: false`
-- `actions.allowLiveModeration: true`
+- `rules.enabled: true` (or `aimod rules on`)
+- `ai.moderation.enabled: true` (or `aimod mod on`)
+- `ai.moderation.timeout: true` (or `aimod timeout on` — default true when `mod` flips on)
 
 Prefer a short timeout duration during rehearsal and use a test chatter account in a controlled session.
 Remember that live AI timeouts are still hard-gated by confidence, moderation category, privileged/self protection, and spam-escalation repeat evidence.
@@ -278,10 +283,9 @@ Bot-authored messages should be snapshotted and then skipped for rules/AI. If se
 
 ### Live moderation never fires
 
-Check both gates:
-- `runtime.dryRun: false`
-- `actions.allowLiveModeration: true`
-- if the timeout came from AI, `aimod ai-moderation on`
+Check all the gates:
+- for rule-sourced timeouts: `rules.enabled: true` (or `aimod rules on`)
+- for AI-sourced timeouts: `ai.enabled: true` + `ai.moderation.enabled: true` + `ai.moderation.timeout: true` (or `aimod mod on` / `aimod timeout on`)
 
 Also verify the rule or AI path actually produced a moderation action.
 If the timeout came from AI, also verify:

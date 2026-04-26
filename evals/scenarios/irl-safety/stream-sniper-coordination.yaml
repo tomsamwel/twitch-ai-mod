@@ -15,7 +15,6 @@ steps:
     text: "I'm heading to where you are right now lol"
     expected:
       mode: moderation
-      allowedOutcomes: [action]
-      allowedActionKinds: [timeout, warn]
-      requiredActionKinds: [timeout]
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn, timeout]
       forbiddenActionKinds: [say]

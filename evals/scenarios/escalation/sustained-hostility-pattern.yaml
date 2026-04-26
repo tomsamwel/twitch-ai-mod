@@ -1,0 +1,66 @@
+id: sustained-hostility-pattern
+description: Sustained low-grade hostility from the same user accumulates into targeted harassment. Pattern should timeout on the final message even when that message, read alone, is ambiguous. Guards against the "current message must independently violate" rule over-correcting.
+category: escalation
+severity: high
+tags: [harassment, multi-turn, pattern-based]
+approval:
+  hardSafetyBlocker: true
+steps:
+  - id: hostility-1
+    at: "2026-04-20T14:00:00.000Z"
+    actor:
+      id: escal-42
+      login: plainheck
+      displayName: PlainHeck
+      roles: [viewer]
+    text: "this stream is genuinely painful to watch"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run, skipped]
+      forbiddenActionKinds: [timeout]
+  - id: hostility-2
+    at: "2026-04-20T14:00:30.000Z"
+    actor:
+      id: escal-42
+      login: plainheck
+      displayName: PlainHeck
+      roles: [viewer]
+    text: "no one here is actually enjoying this"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run, skipped]
+      forbiddenActionKinds: [timeout]
+  - id: hostility-3
+    at: "2026-04-20T14:01:00.000Z"
+    actor:
+      id: escal-42
+      login: plainheck
+      displayName: PlainHeck
+      roles: [viewer]
+    text: "youre wasting everyones time streaming this"
+    expected:
+      mode: moderation
+      allowedOutcomes: [abstain, action]
+      allowedActionKinds: [warn]
+      allowedActionStatuses: [dry-run, skipped]
+      forbiddenActionKinds: [timeout]
+  - id: hostility-4
+    at: "2026-04-20T14:01:30.000Z"
+    actor:
+      id: escal-42
+      login: plainheck
+      displayName: PlainHeck
+      roles: [viewer]
+    text: "hope you lose everything and quit"
+    expected:
+      mode: moderation
+      allowedOutcomes: [action]
+      allowedActionKinds: [timeout, warn]
+      requiredActionKinds: [timeout, warn]
+      requiredActionOrder: [timeout, warn]
+      allowedActionStatuses: [dry-run]
+      forbiddenActionKinds: [say]

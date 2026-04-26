@@ -10,10 +10,7 @@ test("ActionExecutor respects dry-run mode and does not call Twitch", async () =
   const config = createTestConfig();
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
-  const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: true,
-    liveModerationEnabled: false,
-  });
+  const runtimeSettings = createTestRuntimeSettings(config);
 
   let sendCalls = 0;
   let timeoutCalls = 0;
@@ -55,6 +52,7 @@ test("ActionExecutor respects dry-run mode and does not call Twitch", async () =
       source: "rules",
       sourceEventId: "event-1",
       sourceMessageId: "message-1",
+      dryRun: true,
     },
   );
 
@@ -68,13 +66,9 @@ test("ActionExecutor respects dry-run mode and does not call Twitch", async () =
 
 test("ActionExecutor enforces chat cooldowns for repeated live say actions", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
-  const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: false,
-  });
+  const runtimeSettings = createTestRuntimeSettings(config);
 
   let sendCalls = 0;
   let recordedActions = 0;
@@ -147,14 +141,14 @@ test("ActionExecutor enforces chat cooldowns for repeated live say actions", asy
 
 test("ActionExecutor blocks live AI timeout actions unless AI moderation is enabled", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
-  config.actions.allowLiveModeration = true;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: true,
-    aiModerationEnabled: false,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: false, warn: true, timeout: true },
+    },
   });
 
   let timeoutCalls = 0;
@@ -216,21 +210,21 @@ test("ActionExecutor blocks live AI timeout actions unless AI moderation is enab
   const ruleResult = await executor.execute(ruleRequest);
 
   assert.equal(aiResult.status, "skipped");
-  assert.match(aiResult.reason, /AI live moderation/u);
+  assert.match(aiResult.reason, /ai\.moderation is disabled/u);
   assert.equal(ruleResult.status, "executed");
   assert.equal(timeoutCalls, 1);
 });
 
 test("ActionExecutor blocks live AI timeout actions when the moderation category is not allowlisted", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
-  config.actions.allowLiveModeration = true;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: true,
-    aiModerationEnabled: true,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
 
   let timeoutCalls = 0;
@@ -266,7 +260,7 @@ test("ActionExecutor blocks live AI timeout actions when the moderation category
         moderationCategory: "soft-promo",
         targetIsPrivileged: false,
         targetIsSelfAuthored: false,
-        hasRepeatedUserEvidence: true,
+        hasRecentUserActivity: true,
         hasRecentBotCorrectiveInteraction: true,
       },
     },
@@ -282,20 +276,23 @@ test("ActionExecutor blocks live AI timeout actions when the moderation category
   const result = await executor.execute(request);
 
   assert.equal(result.status, "skipped");
-  assert.equal(result.reason, "AI timeout blocked by precision gate");
+  assert.equal(
+    result.reason,
+    "AI timeout blocked by precision gate: moderation category is not allowlisted for live timeout",
+  );
   assert.equal(timeoutCalls, 0);
 });
 
 test("ActionExecutor blocks live AI timeout actions when confidence is below the precision gate", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
-  config.actions.allowLiveModeration = true;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: true,
-    aiModerationEnabled: true,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
 
   let timeoutCalls = 0;
@@ -331,7 +328,7 @@ test("ActionExecutor blocks live AI timeout actions when confidence is below the
         moderationCategory: "scam",
         targetIsPrivileged: false,
         targetIsSelfAuthored: false,
-        hasRepeatedUserEvidence: true,
+        hasRecentUserActivity: true,
         hasRecentBotCorrectiveInteraction: true,
       },
     },
@@ -347,20 +344,23 @@ test("ActionExecutor blocks live AI timeout actions when confidence is below the
   const result = await executor.execute(request);
 
   assert.equal(result.status, "skipped");
-  assert.equal(result.reason, "AI timeout blocked by precision gate");
+  assert.equal(
+    result.reason,
+    "AI timeout blocked by precision gate: ai confidence below live timeout minimum",
+  );
   assert.equal(timeoutCalls, 0);
 });
 
 test("ActionExecutor blocks live AI timeout actions for privileged or self-authored targets", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
-  config.actions.allowLiveModeration = true;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: true,
-    aiModerationEnabled: true,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
 
   let timeoutCalls = 0;
@@ -396,7 +396,7 @@ test("ActionExecutor blocks live AI timeout actions for privileged or self-autho
         moderationCategory: "scam",
         targetIsPrivileged: true,
         targetIsSelfAuthored: false,
-        hasRepeatedUserEvidence: true,
+        hasRecentUserActivity: true,
         hasRecentBotCorrectiveInteraction: true,
       },
     },
@@ -420,7 +420,7 @@ test("ActionExecutor blocks live AI timeout actions for privileged or self-autho
         moderationCategory: "scam",
         targetIsPrivileged: false,
         targetIsSelfAuthored: true,
-        hasRepeatedUserEvidence: true,
+        hasRecentUserActivity: true,
         hasRecentBotCorrectiveInteraction: true,
       },
     },
@@ -438,21 +438,27 @@ test("ActionExecutor blocks live AI timeout actions for privileged or self-autho
 
   assert.equal(privilegedResult.status, "skipped");
   assert.equal(selfResult.status, "skipped");
-  assert.equal(privilegedResult.reason, "AI timeout blocked by precision gate");
-  assert.equal(selfResult.reason, "AI timeout blocked by precision gate");
+  assert.equal(
+    privilegedResult.reason,
+    "AI timeout blocked by precision gate: target is privileged or self-authored",
+  );
+  assert.equal(
+    selfResult.reason,
+    "AI timeout blocked by precision gate: target is privileged or self-authored",
+  );
   assert.equal(timeoutCalls, 0);
 });
 
 test("ActionExecutor requires repeat evidence before allowing spam-escalation timeouts", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
-  config.actions.allowLiveModeration = true;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: true,
-    aiModerationEnabled: true,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
 
   let timeoutCalls = 0;
@@ -488,7 +494,7 @@ test("ActionExecutor requires repeat evidence before allowing spam-escalation ti
         moderationCategory: "spam-escalation",
         targetIsPrivileged: false,
         targetIsSelfAuthored: false,
-        hasRepeatedUserEvidence: false,
+        hasRecentUserActivity: false,
         hasRecentBotCorrectiveInteraction: false,
       },
     },
@@ -512,7 +518,7 @@ test("ActionExecutor requires repeat evidence before allowing spam-escalation ti
         moderationCategory: "spam-escalation",
         targetIsPrivileged: false,
         targetIsSelfAuthored: false,
-        hasRepeatedUserEvidence: true,
+        hasRecentUserActivity: true,
         hasRecentBotCorrectiveInteraction: false,
       },
     },
@@ -529,19 +535,24 @@ test("ActionExecutor requires repeat evidence before allowing spam-escalation ti
   const allowedResult = await executor.execute(allowedRequest);
 
   assert.equal(blockedResult.status, "skipped");
-  assert.equal(blockedResult.reason, "AI timeout blocked by precision gate");
+  assert.equal(
+    blockedResult.reason,
+    "AI timeout blocked by precision gate: spam escalation lacks recent user activity or a prior corrective interaction",
+  );
   assert.equal(allowedResult.status, "executed");
   assert.equal(timeoutCalls, 1);
 });
 
 test("ActionExecutor treats warn actions as moderation notices with reply-parent defaulting and separate cooldowns", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: false,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
 
   const sentPayloads: Array<{ message: string; replyParentMessageId?: string }> = [];
@@ -616,13 +627,14 @@ test("ActionExecutor treats warn actions as moderation notices with reply-parent
 
 test("ActionExecutor skips timeout companion warns when the preceding timeout did not execute", async () => {
   const config = createTestConfig();
-  config.runtime.dryRun = false;
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: false,
-    liveModerationEnabled: true,
-    aiModerationEnabled: true,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
 
   let sendCalls = 0;
@@ -680,8 +692,11 @@ test("ActionExecutor allows timeout companion warns in dry-run flows when the ti
   const cooldowns = new CooldownManager(config.cooldowns);
   const logger = createLogger("info", "test");
   const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: true,
-    liveModerationEnabled: false,
+    ai: {
+      enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
 
   let sendCalls = 0;

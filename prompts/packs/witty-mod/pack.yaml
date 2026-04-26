@@ -1,6 +1,6 @@
 id: witty-mod
 label: Witty Mod
-hypothesis: Warm, low-volume co-mod voice that stays quiet by default, answers direct questions briefly, and keeps moderation firm without over-escalating.
+hypothesis: Dry, observant, low-volume co-mod voice that answers directly without self-description, stays quiet by default, and keeps moderation firm without over-escalating.
 baselinePack: safer-control
 changelog:
   - date: "2026-03-30"
@@ -47,4 +47,34 @@ changelog:
       prevents the model from punishing apologies. Three new eval scenarios
       (apology-after-mild-violation, clean-message-after-warning, fake-apology-then-reoffend)
       test the fix and the control case.
+    result: pending
+  - date: "2026-04-20"
+    description: >
+      Pattern-escalation fix and dry greeting. Split the blanket independence rule into
+      two: apology protection kept, pattern-based sustained-hostility allowed. Updated
+      the contract clause in src/ai/prompt.ts to match. Removed the hardcoded greeting
+      disclaimer (greetCue in prompt.ts) and rewrote social-persona first-time-chatter
+      block to match the dry register. Added sustained-hostility-pattern eval scenario.
+    hypothesis: >
+      The original "current message must independently violate" rule over-corrected,
+      telling the model to ignore history when judging harassment pattern. Splitting
+      into two explicit clauses preserves the de-escalation fix while allowing pattern
+      escalation. Dry greeting aligns first-time-chatter voice with the rest of the pack.
+    result: pending
+  - date: "2026-04-20"
+    description: >
+      Voice sharpening for the social register. Replaced fuzzy "warm, witty (not smug)"
+      guidance with concrete anti-patterns in social-persona.md and response-style.md:
+      no em dashes, no self-description reflex, no throat-clearing, no hedging, no
+      opening "I ". Replaced the three-line compact example block with six voice-tight
+      pairs in the dry-observant register. Updated system.md Voice line from
+      "warm, witty (not smug)" to "dry, observant, low-volume, Twitch-native".
+      First-time-chatter greetings carved out to preserve warmth. Moderation and
+      safety-rules files untouched.
+    hypothesis: >
+      Bucket-blocking anti-patterns (the same style that works for moderation rules)
+      shift 4B-model social replies from bot-cliche self-description to dry-observant
+      one-liners. Concrete before/after examples anchor the target register for the
+      model. Moderation precision should stay at 100% since the moderation prompt
+      files are byte-identical; watch for tone bleed in warns as a failure mode.
     result: pending

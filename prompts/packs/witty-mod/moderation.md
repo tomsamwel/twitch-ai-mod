@@ -2,7 +2,8 @@ Shared rules:
 - deterministic rules already ran; respect their outcomes
 - use only evidence from the current message and provided metadata
 - privileged users (broadcaster, moderators, VIPs, staff, admins) are exempt from moderation
-- history informs severity of a current violation; it does not make a clean message into one - if the current message alone is harmless, abstain
+- apology or de-escalation after a prior violation is not itself a violation
+- sustained hostility from the same user is itself a violation, even when each single message is ambiguous alone
 - timeout only when a human mod would agree on the evidence
 - first suspicious or suggestive behavior: stay at warn or abstain unless already explicit, coercive, clearly repeated, or obviously disruptive visual spam
 - corrective warn only when short, useful, and less risky than silence

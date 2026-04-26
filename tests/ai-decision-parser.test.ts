@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { parseAiDecisionText } from "../src/ai/decision-parser.js";
 import { createLogger } from "../src/storage/logger.js";
-import { createChatEvent, createEmptyContext, createTestConfig } from "./helpers.js";
+import { createChatEvent, createTestConfig } from "./helpers.js";
 import { normalizeChatMessage } from "../src/ingest/normalize-chat-message.js";
 
 test("parseAiDecisionText maps valid say action JSON into an AiDecision", () => {
@@ -29,15 +29,10 @@ test("parseAiDecisionText maps valid say action JSON into an AiDecision", () => 
     "ollama",
     {
       mode: "social",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );
@@ -59,15 +54,10 @@ test("parseAiDecisionText abstains on malformed JSON", () => {
     "openai",
     {
       mode: "moderation",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );
@@ -102,15 +92,10 @@ test("parseAiDecisionText normalizes abstain payloads that incorrectly include a
     "ollama",
     {
       mode: "moderation",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );
@@ -143,15 +128,10 @@ test("parseAiDecisionText preserves the application-selected mode even if the pr
     "ollama",
     {
       mode: "social",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );
@@ -186,15 +166,10 @@ test("parseAiDecisionText maps moderation warn actions into an AiDecision", () =
     "ollama",
     {
       mode: "moderation",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );
@@ -231,15 +206,10 @@ test("parseAiDecisionText accepts ordered timeout plus warn moderation actions",
     "ollama",
     {
       mode: "moderation",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );
@@ -273,15 +243,10 @@ test("parseAiDecisionText fills a generic warn fallback when moderation timeout 
     "ollama",
     {
       mode: "moderation",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );
@@ -321,15 +286,10 @@ test("parseAiDecisionText rejects invalid moderation action combos such as say p
     "ollama",
     {
       mode: "moderation",
-      temperature: 0,
       isFirstTimeChatter: false,
+      greetingEnabled: false,
       message,
-      context: createEmptyContext(),
       config,
-      prompt: {
-        system: "system",
-        user: "user",
-      },
     },
     logger,
   );

@@ -7,27 +7,15 @@ import type { RuntimeSettingsStore } from "../control/runtime-settings.js";
 import type { BotDatabase } from "../storage/database.js";
 import type { LlamaServerManager } from "./llama-server-manager.js";
 import type { AiReviewQueueStats } from "../runtime/ai-review-queue.js";
-import type {
-  EventSubConnectionStatus,
-  RuntimeControllerIdentifier,
-  RuntimeControllerRecord,
-  RuntimeOverrideKey,
-  TrustedController,
-  TwitchUserResolver,
+import {
+  RUNTIME_OVERRIDE_KEYS,
+  type EventSubConnectionStatus,
+  type RuntimeControllerIdentifier,
+  type RuntimeControllerRecord,
+  type RuntimeOverrideKey,
+  type TrustedController,
+  type TwitchUserResolver,
 } from "../types.js";
-
-const VALID_OVERRIDE_KEYS: readonly RuntimeOverrideKey[] = [
-  "aiEnabled",
-  "aiModerationEnabled",
-  "socialRepliesEnabled",
-  "greetingsEnabled",
-  "greetFirstMessage",
-  "greetOnJoin",
-  "dryRun",
-  "liveModerationEnabled",
-  "promptPack",
-  "modelPreset",
-];
 
 const ADMIN_ACTOR = { userId: "admin", login: "local-admin" };
 const TERMINAL_LINK_OPEN = "\u001B]8;;";
@@ -234,9 +222,9 @@ export class AdminServer {
       return;
     }
 
-    if (!parsed.key || !VALID_OVERRIDE_KEYS.includes(parsed.key as RuntimeOverrideKey)) {
+    if (!parsed.key || !RUNTIME_OVERRIDE_KEYS.includes(parsed.key as RuntimeOverrideKey)) {
       res.writeHead(400, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ error: `Invalid key. Valid keys: ${VALID_OVERRIDE_KEYS.join(", ")}` }));
+      res.end(JSON.stringify({ error: `Invalid key. Valid keys: ${RUNTIME_OVERRIDE_KEYS.join(", ")}` }));
       return;
     }
 

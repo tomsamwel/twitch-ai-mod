@@ -359,9 +359,17 @@ function evaluateScenarioStepResult(
   };
 
   if (aiFailure.failureKind) {
+    // Azure content-filter rejections that land on a scenario where abstain is an
+    // allowed outcome are not a moderation miss: the filter abstained on the model's
+    // behalf and the scenario accepts abstain. Downgrade to advisory so the scenario
+    // can still pass on its actual outcome.
+    const isBenignContentFilter =
+      aiFailure.failureKind === "content_filter" &&
+      step.expected.allowedOutcomes.includes("abstain") &&
+      !timeoutRequired;
     addIssue(
       "provider_failure",
-      "blocking",
+      isBenignContentFilter ? "advisory" : "blocking",
       result.aiDecision?.reason ?? "provider failure during scenario evaluation",
     );
   }
@@ -508,9 +516,7 @@ export async function runScenarioEvaluation(
 ): Promise<ScenarioEvaluationResult> {
   const scenario = normalizeScenarioFile(scenarioInput);
   const config = structuredClone(options.config);
-  config.runtime.dryRun = true;
   config.actions.allowLiveChatMessages = false;
-  config.actions.allowLiveModeration = false;
 
   const database = new BotDatabase(":memory:");
   const cooldowns = new CooldownManager(config.cooldowns);
@@ -518,11 +524,12 @@ export async function runScenarioEvaluation(
   const outboundTracker = new OutboundMessageTracker();
   const contextBuilder = new AiContextBuilder(config, database);
   const runtimeSettings = createFixedRuntimeSettings(config, {
-    aiEnabled: config.ai.enabled,
-    aiModerationEnabled: false,
-    socialRepliesEnabled: true,
-    dryRun: true,
-    liveModerationEnabled: false,
+    rules: { enabled: true },
+    ai: {
+      enabled: config.ai.enabled,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
   const aiProviders = options.aiProvider
     ? {

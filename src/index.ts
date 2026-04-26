@@ -28,7 +28,14 @@ async function main(): Promise<void> {
 
   logger.info(
     {
-      dryRun: settings.dryRun,
+      gates: {
+        rules: settings.rules.enabled,
+        ai: settings.ai.enabled,
+        social: settings.ai.social.enabled,
+        moderation: settings.ai.moderation.enabled,
+        warn: settings.ai.moderation.warn,
+        timeout: settings.ai.moderation.timeout,
+      },
       broadcaster: twitchGateway.getContext().broadcaster.login,
       bot: twitchGateway.getContext().bot.login,
       aiProvider: settings.provider,

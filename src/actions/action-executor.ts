@@ -61,6 +61,9 @@ export class ActionExecutor {
     const replyParentMessageId =
       action.replyParentMessageId ?? (action.kind === "warn" ? input.sourceMessageId : undefined);
 
+    const processingMode = input.processingMode ?? "live";
+    const dryRun = input.dryRun ?? processingMode !== "live";
+
     return {
       ...action,
       ...(replyParentMessageId ? { replyParentMessageId } : {}),
@@ -68,9 +71,9 @@ export class ActionExecutor {
       source: input.source,
       sourceEventId: input.sourceEventId,
       sourceMessageId: input.sourceMessageId,
-      processingMode: input.processingMode ?? "live",
+      processingMode,
       ...(input.runId ? { runId: input.runId } : {}),
-      dryRun: input.dryRun ?? this.runtimeSettings.getEffectiveSettings().dryRun,
+      dryRun,
       initiatedAt: input.initiatedAt ?? new Date().toISOString(),
     };
   }
@@ -132,6 +135,11 @@ export class ActionExecutor {
       return buildResult(action, "skipped", { reason: chatGate.reason ?? "chat cooldown active" });
     }
 
+    const gateSkip = this.gateSay(action);
+    if (gateSkip) {
+      return buildResult(action, "skipped", { reason: gateSkip });
+    }
+
     if (action.dryRun) {
       return buildResult(action, "dry-run");
     }
@@ -177,6 +185,11 @@ export class ActionExecutor {
       return buildResult(action, "skipped", { reason: chatGate.reason ?? "moderation notice cooldown active" });
     }
 
+    const gateSkip = this.gateWarn(action);
+    if (gateSkip) {
+      return buildResult(action, "skipped", { reason: gateSkip });
+    }
+
     if (action.dryRun) {
       return buildResult(action, "dry-run");
     }
@@ -211,26 +224,23 @@ export class ActionExecutor {
       return buildResult(action, "skipped", { reason: moderationGate.reason ?? "moderation cooldown active" });
     }
 
-    if (action.dryRun) {
-      return buildResult(action, "dry-run");
-    }
-
-    const runtimeSettings = this.runtimeSettings.getEffectiveSettings();
-
-    if (!runtimeSettings.liveModerationEnabled) {
-      return buildResult(action, "skipped", { reason: "live moderation actions are disabled in config" });
-    }
-
-    if (action.source === "ai" && !runtimeSettings.aiModerationEnabled) {
-      return buildResult(action, "skipped", { reason: "AI live moderation actions are disabled by runtime control" });
+    const gateSkip = this.gateTimeout(action);
+    if (gateSkip) {
+      return buildResult(action, "skipped", { reason: gateSkip });
     }
 
     if (action.source === "ai") {
       const precisionGateFailure = this.getAiTimeoutPrecisionGateFailure(action);
 
       if (precisionGateFailure) {
-        return buildResult(action, "skipped", { reason: "AI timeout blocked by precision gate" });
+        return buildResult(action, "skipped", {
+          reason: `AI timeout blocked by precision gate: ${precisionGateFailure}`,
+        });
       }
+    }
+
+    if (action.dryRun) {
+      return buildResult(action, "dry-run");
     }
 
     const effectiveDuration = this.resolveProgressiveDuration(action);
@@ -275,7 +285,7 @@ export class ActionExecutor {
       typeof candidate.moderationCategory === "string" ? candidate.moderationCategory : null;
     const targetIsPrivileged = candidate.targetIsPrivileged === true;
     const targetIsSelfAuthored = candidate.targetIsSelfAuthored === true;
-    const hasRepeatedUserEvidence = candidate.hasRepeatedUserEvidence === true;
+    const hasRecentUserActivity = candidate.hasRecentUserActivity === true;
     const hasRecentBotCorrectiveInteraction = candidate.hasRecentBotCorrectiveInteraction === true;
     const liveTimeouts = this.config.moderationPolicy.aiPolicy.liveTimeouts;
 
@@ -293,12 +303,42 @@ export class ActionExecutor {
 
     if (
       moderationCategory === "spam-escalation" &&
-      !hasRepeatedUserEvidence &&
+      !hasRecentUserActivity &&
       !hasRecentBotCorrectiveInteraction
     ) {
-      return "spam escalation lacks repeat evidence or a prior corrective interaction";
+      return "spam escalation lacks recent user activity or a prior corrective interaction";
     }
 
+    return null;
+  }
+
+  private gateSay(action: ActionRequest): string | null {
+    if (action.source !== "ai") return null;
+    const { ai } = this.runtimeSettings.getEffectiveSettings();
+    if (!ai.enabled) return "ai is disabled";
+    if (!ai.social.enabled) return "ai.social is disabled";
+    return null;
+  }
+
+  private gateWarn(action: ActionRequest): string | null {
+    const { rules, ai } = this.runtimeSettings.getEffectiveSettings();
+    if (action.source === "rules") {
+      return rules.enabled ? null : "rules are disabled";
+    }
+    if (!ai.enabled) return "ai is disabled";
+    if (!ai.moderation.enabled) return "ai.moderation is disabled";
+    if (!ai.moderation.warn) return "ai.moderation.warn is disabled";
+    return null;
+  }
+
+  private gateTimeout(action: ActionRequest): string | null {
+    const { rules, ai } = this.runtimeSettings.getEffectiveSettings();
+    if (action.source === "rules") {
+      return rules.enabled ? null : "rules are disabled";
+    }
+    if (!ai.enabled) return "ai is disabled";
+    if (!ai.moderation.enabled) return "ai.moderation is disabled";
+    if (!ai.moderation.timeout) return "ai.moderation.timeout is disabled";
     return null;
   }
 

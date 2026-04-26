@@ -4,12 +4,17 @@ import { aiDecisionPayloadSchema, createAiDecisionPayloadSchema, buildAbstainDec
 import type { AiDecision, AiDecisionInput, AiProviderKind } from "../types.js";
 import { asRecord } from "../utils.js";
 
+export type AiDecisionParseContext = Pick<
+  AiDecisionInput,
+  "mode" | "config" | "isFirstTimeChatter" | "greetingEnabled" | "message"
+>;
+
 interface NormalizationResult {
   value: unknown;
   injectedMissingWarn: boolean;
 }
 
-function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): NormalizationResult {
+function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionParseContext): NormalizationResult {
   const candidate = asRecord(parsed);
   if (!candidate) {
     return { value: parsed, injectedMissingWarn: false };
@@ -17,6 +22,17 @@ function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): 
 
   if (typeof candidate.mode === "string" && candidate.mode !== input.mode) {
     candidate.mode = input.mode;
+  }
+
+  // Some models (observed on GPT-4.1) emit the action kind as the top-level outcome
+  // (e.g. {"outcome":"warn",...,"actions":[{"kind":"warn",...}]}). When the outcome
+  // string matches a known action kind and actions are present, coerce to "action".
+  if (
+    (candidate.outcome === "warn" || candidate.outcome === "timeout" || candidate.outcome === "say") &&
+    Array.isArray(candidate.actions) &&
+    candidate.actions.length > 0
+  ) {
+    candidate.outcome = "action";
   }
 
   if (candidate.outcome === "abstain") {
@@ -82,7 +98,7 @@ function normalizeCommonModelMistakes(parsed: unknown, input: AiDecisionInput): 
 export function parseAiDecisionText(
   rawText: string,
   source: AiProviderKind,
-  input: AiDecisionInput,
+  input: AiDecisionParseContext,
   logger: Logger,
 ): AiDecision {
   try {

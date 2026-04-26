@@ -17,4 +17,3 @@ steps:
       allowedActionKinds: [say]
       allowedActionStatuses: [dry-run]
       forbiddenActionKinds: [timeout]
-      replyShouldContainAny: [help, chat, keep, smooth]

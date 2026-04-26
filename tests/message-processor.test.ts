@@ -119,10 +119,7 @@ test("MessageProcessor replays AI decisions through the shared action flow in dr
   );
   const createdRequests: ActionRequest[] = [];
   const recordedContexts: Array<{ stage: "rules" | "ai"; processingMode?: string; runId?: string }> = [];
-  const runtimeSettings = createTestRuntimeSettings(config, {
-    dryRun: true,
-    liveModerationEnabled: false,
-  });
+  const runtimeSettings = createTestRuntimeSettings(config);
 
   const processor = new MessageProcessor(
     config,
@@ -181,7 +178,7 @@ test("MessageProcessor replays AI decisions through the shared action flow in dr
           sourceMessageId: input.sourceMessageId,
           processingMode: input.processingMode ?? "live",
           ...(input.runId ? { runId: input.runId } : {}),
-          dryRun: input.dryRun ?? config.runtime.dryRun,
+          dryRun: input.dryRun ?? (input.processingMode ?? "live") !== "live",
           initiatedAt: input.initiatedAt ?? new Date().toISOString(),
         };
         createdRequests.push(request);
@@ -341,7 +338,11 @@ test("MessageProcessor skips social AI review before building context when socia
     new Date("2026-03-24T12:42:00.000Z"),
   );
   const runtimeSettings = createTestRuntimeSettings(config, {
-    socialRepliesEnabled: false,
+    ai: {
+      enabled: true,
+      social: { enabled: false },
+      moderation: { enabled: false, warn: true, timeout: true },
+    },
   });
 
   const processor = new MessageProcessor(
@@ -632,8 +633,23 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
     listRecentUserMessageSnapshots() {
       return [
         {
-          eventId: "prior-user-message",
-          sourceMessageId: "prior-user-message",
+          eventId: "prior-user-message-1",
+          sourceMessageId: "prior-user-message-1",
+          chatterId: "user-1",
+          chatterLogin: "viewerone",
+          receivedAt: "2026-03-24T12:53:00.000Z",
+          processingMode: "live",
+          botIdentity: {
+            id: "bot-1",
+            login: "testbot",
+            displayName: "TestBot",
+          },
+          message: normalizeChatMessage(createChatEvent(), new Date("2026-03-24T12:53:00.000Z")),
+          createdAt: "2026-03-24T12:53:00.000Z",
+        },
+        {
+          eventId: "prior-user-message-2",
+          sourceMessageId: "prior-user-message-2",
           chatterId: "user-1",
           chatterLogin: "viewerone",
           receivedAt: "2026-03-24T12:54:00.000Z",
@@ -763,7 +779,7 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
           sourceEventId: input.sourceEventId,
           sourceMessageId: input.sourceMessageId,
           processingMode: input.processingMode ?? "live",
-          dryRun: input.dryRun ?? config.runtime.dryRun,
+          dryRun: input.dryRun ?? (input.processingMode ?? "live") !== "live",
           initiatedAt: input.initiatedAt ?? new Date().toISOString(),
         };
         createdRequests.push(request);
@@ -799,7 +815,7 @@ test("MessageProcessor annotates AI timeout actions with precision-gate metadata
     moderationCategory: "spam-escalation",
     targetIsPrivileged: false,
     targetIsSelfAuthored: false,
-    hasRepeatedUserEvidence: true,
+    hasRecentUserActivity: true,
     hasRecentBotCorrectiveInteraction: true,
   });
 });
@@ -1106,7 +1122,7 @@ function buildGreetingProcessor(config: ReturnType<typeof buildGreetingConfig>, 
     listRecentUserMessageSnapshots() { return []; },
     listRecentBotInteractions() { return []; },
   });
-  const runtimeSettings = createTestRuntimeSettings(config, { socialRepliesEnabled: true, ...runtimeOverrides });
+  const runtimeSettings = createTestRuntimeSettings(config, runtimeOverrides);
 
   const capturedModes: string[] = [];
   const capturedFirstTimeChatter: boolean[] = [];
@@ -1337,4 +1353,127 @@ test("MessageProcessor marks chatter as greeted after executing greeting actions
   });
 
   assert.equal(greetedUsers.has("new-user-5"), true);
+});
+
+test("MessageProcessor.enqueuePollGreeting does NOT mark viewers greeted synchronously (only after handler runs)", () => {
+  const config = buildGreetingConfig();
+  const greetedUsers = new Set<string>();
+  const tracker = new SessionChatterTracker({
+    isRecentlyGreeted: (userId) => greetedUsers.has(userId),
+    recordGreeted: (userId) => { greetedUsers.add(userId); },
+  });
+
+  const captured: import("../src/runtime/message-processor.js").AiReviewWorkItem[] = [];
+  const queue = { enqueue: (item: import("../src/runtime/message-processor.js").AiReviewWorkItem) => { captured.push(item); } };
+
+  const logger = createLogger("fatal", "test");
+  const cooldowns = new CooldownManager(config.cooldowns);
+  const ruleEngine = new RuleEngine(config, cooldowns);
+  const contextBuilder = new AiContextBuilder(config, {
+    listRecentRoomMessageSnapshots() { return []; },
+    listRecentUserMessageSnapshots() { return []; },
+    listRecentBotInteractions() { return []; },
+  });
+  const runtimeSettings = createTestRuntimeSettings(config);
+
+  const processor = new MessageProcessor(
+    config, logger,
+    { registerIngestedEvent() { return true; }, recordMessageSnapshot() {}, recordRuleDecision() {}, recordAiDecision() {} },
+    cooldowns, ruleEngine, contextBuilder, runtimeSettings,
+    { createEffectiveConfig() { return config; }, async getProvider() { throw new Error("unused"); } },
+    { createActionRequest() { throw new Error("unused"); }, async execute() { throw new Error("unused"); } },
+    undefined,
+    queue,
+    tracker,
+    () => 0,
+  );
+
+  processor.enqueuePollGreeting(
+    [
+      { id: "viewer-a", login: "alpha", displayName: "Alpha" },
+      { id: "viewer-b", login: "bravo", displayName: "Bravo" },
+      { id: "viewer-c", login: "charlie", displayName: "Charlie" },
+    ],
+    { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    { id: "broadcaster-1", login: "testchannel", displayName: "TestChannel" },
+  );
+
+  assert.equal(captured.length, 1, "one batch work item enqueued");
+  assert.deepEqual(captured[0]!.pollGreetingViewerIds, ["viewer-a", "viewer-b", "viewer-c"]);
+  assert.equal(greetedUsers.size, 0, "no DB rows written before handler runs (drop-safe)");
+});
+
+test("MessageProcessor.processAiReview marks all poll-greeting viewers after the batch is processed", async () => {
+  const config = buildGreetingConfig();
+  const greetedUsers = new Set<string>();
+  const tracker = new SessionChatterTracker({
+    isRecentlyGreeted: (userId) => greetedUsers.has(userId),
+    recordGreeted: (userId) => { greetedUsers.add(userId); },
+  });
+
+  const captured: import("../src/runtime/message-processor.js").AiReviewWorkItem[] = [];
+  const queue = { enqueue: (item: import("../src/runtime/message-processor.js").AiReviewWorkItem) => { captured.push(item); } };
+
+  const logger = createLogger("fatal", "test");
+  const cooldowns = new CooldownManager(config.cooldowns);
+  const ruleEngine = new RuleEngine(config, cooldowns);
+  const contextBuilder = new AiContextBuilder(config, {
+    listRecentRoomMessageSnapshots() { return []; },
+    listRecentUserMessageSnapshots() { return []; },
+    listRecentBotInteractions() { return []; },
+  });
+  const runtimeSettings = createTestRuntimeSettings(config);
+
+  const processor = new MessageProcessor(
+    config, logger,
+    { registerIngestedEvent() { return true; }, recordMessageSnapshot() {}, recordRuleDecision() {}, recordAiDecision() {} },
+    cooldowns, ruleEngine, contextBuilder, runtimeSettings,
+    {
+      createEffectiveConfig() { return config; },
+      async getProvider() {
+        return {
+          kind: "ollama" as const,
+          async healthCheck() {},
+          async decide(): Promise<AiDecision> {
+            return {
+              source: "ollama",
+              outcome: "action",
+              reason: "batch greeting",
+              confidence: 0.9,
+              mode: "social",
+              moderationCategory: "none",
+              actions: [{ kind: "say", reason: "greeting", message: "Welcome everyone!" }],
+            };
+          },
+        };
+      },
+    },
+    {
+      createActionRequest(action, input) {
+        return {
+          ...action, id: "a", source: input.source, sourceEventId: input.sourceEventId,
+          sourceMessageId: input.sourceMessageId, processingMode: input.processingMode ?? "live",
+          dryRun: true, initiatedAt: new Date().toISOString(),
+        };
+      },
+      async execute(req) {
+        return { id: req.id, kind: req.kind, status: "dry-run", dryRun: true, reason: req.reason };
+      },
+    },
+    undefined, queue, tracker, () => 0,
+  );
+
+  processor.enqueuePollGreeting(
+    [
+      { id: "viewer-a", login: "alpha", displayName: "Alpha" },
+      { id: "viewer-b", login: "bravo", displayName: "Bravo" },
+      { id: "viewer-c", login: "charlie", displayName: "Charlie" },
+    ],
+    { id: "bot-1", login: "testbot", displayName: "TestBot" },
+    { id: "broadcaster-1", login: "testchannel", displayName: "TestChannel" },
+  );
+
+  await processor.processAiReview(captured[0]!);
+
+  assert.deepEqual([...greetedUsers].sort(), ["viewer-a", "viewer-b", "viewer-c"]);
 });

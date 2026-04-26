@@ -20,17 +20,20 @@ export const moderationCategorySchema = z.enum([
 export type ModerationCategory = z.infer<typeof moderationCategorySchema>;
 export type ProcessingMode = "live" | "replay" | "scenario";
 export type ControllerRole = "broadcaster" | "admin" | "mod";
-export type RuntimeOverrideKey =
-  | "aiEnabled"
-  | "aiModerationEnabled"
-  | "socialRepliesEnabled"
-  | "greetingsEnabled"
-  | "greetFirstMessage"
-  | "greetOnJoin"
-  | "dryRun"
-  | "liveModerationEnabled"
-  | "promptPack"
-  | "modelPreset";
+export const RUNTIME_OVERRIDE_KEYS = [
+  "rules.enabled",
+  "ai.enabled",
+  "ai.social.enabled",
+  "ai.moderation.enabled",
+  "ai.moderation.warn",
+  "ai.moderation.timeout",
+  "greetingsEnabled",
+  "greetFirstMessage",
+  "greetOnJoin",
+  "promptPack",
+  "modelPreset",
+] as const;
+export type RuntimeOverrideKey = (typeof RUNTIME_OVERRIDE_KEYS)[number];
 export type ControlChangeKey = RuntimeOverrideKey | "runtimeExemptions" | "runtimeBlockedTerms";
 
 export type ActionKind = "say" | "warn" | "timeout";
@@ -211,11 +214,13 @@ export interface ConfigSnapshot {
     environment: string;
   };
   runtime: {
-    dryRun: boolean;
     logLevel: LogLevel;
     tokenValidationIntervalMinutes: number;
     eventSubDisconnectGraceSeconds: number;
     exitOnEventSubStall: boolean;
+  };
+  rules: {
+    enabled: boolean;
   };
   storage: {
     sqlitePath: string;
@@ -255,6 +260,14 @@ export interface ConfigSnapshot {
   };
   ai: {
     enabled: boolean;
+    social: {
+      enabled: boolean;
+    };
+    moderation: {
+      enabled: boolean;
+      warn: boolean;
+      timeout: boolean;
+    };
     provider: AiProviderKind;
     promptPack: string;
     requestDefaults: {
@@ -303,7 +316,6 @@ export interface ConfigSnapshot {
   } | undefined;
   actions: {
     allowLiveChatMessages: boolean;
-    allowLiveModeration: boolean;
   };
   social?: {
     greetings: {
@@ -586,14 +598,15 @@ export interface RuntimeControllerIdentifier {
 export type ControlCommand =
   | { kind: "help" }
   | { kind: "status" }
+  | { kind: "set-rules"; enabled: boolean }
   | { kind: "set-ai"; enabled: boolean }
-  | { kind: "set-ai-moderation"; enabled: boolean }
   | { kind: "set-social"; enabled: boolean }
+  | { kind: "set-mod"; enabled: boolean }
+  | { kind: "set-warn"; enabled: boolean }
+  | { kind: "set-timeout"; enabled: boolean }
   | { kind: "set-greetings"; enabled: boolean }
   | { kind: "set-greet-first-message"; enabled: boolean }
   | { kind: "set-greet-on-join"; enabled: boolean }
-  | { kind: "set-dry-run"; enabled: boolean }
-  | { kind: "set-live-moderation"; enabled: boolean }
   | { kind: "set-pack"; packName: string }
   | { kind: "set-model"; presetName: string }
   | { kind: "reset" }
@@ -620,14 +633,19 @@ export interface ControlCommandResult {
 }
 
 export interface RuntimeOverrideSnapshot {
-  aiEnabled?: boolean;
-  aiModerationEnabled?: boolean;
-  socialRepliesEnabled?: boolean;
+  rules?: { enabled?: boolean };
+  ai?: {
+    enabled?: boolean;
+    social?: { enabled?: boolean };
+    moderation?: {
+      enabled?: boolean;
+      warn?: boolean;
+      timeout?: boolean;
+    };
+  };
   greetingsEnabled?: boolean;
   greetFirstMessage?: boolean;
   greetOnJoin?: boolean;
-  dryRun?: boolean;
-  liveModerationEnabled?: boolean;
   promptPack?: string;
   modelPreset?: string;
   updatedAt: string | null;
@@ -636,14 +654,19 @@ export interface RuntimeOverrideSnapshot {
 }
 
 export interface EffectiveRuntimeSettings {
-  aiEnabled: boolean;
-  aiModerationEnabled: boolean;
-  socialRepliesEnabled: boolean;
+  rules: { enabled: boolean };
+  ai: {
+    enabled: boolean;
+    social: { enabled: boolean };
+    moderation: {
+      enabled: boolean;
+      warn: boolean;
+      timeout: boolean;
+    };
+  };
   greetingsEnabled: boolean;
   greetFirstMessage: boolean;
   greetOnJoin: boolean;
-  dryRun: boolean;
-  liveModerationEnabled: boolean;
   promptPack: string;
   prompts: PromptSnapshot;
   modelPreset: string | null;

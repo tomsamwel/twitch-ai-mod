@@ -14,7 +14,7 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
   const logger = createLogger("info", "test");
   const persistedOverrides = [
     {
-      key: "aiEnabled" as const,
+      key: "ai.enabled" as const,
       value: false,
       updatedAt: "2026-03-24T10:00:00.000Z",
       updatedByUserId: "user-1",
@@ -28,7 +28,7 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
       updatedByLogin: "streamer",
     },
     {
-      key: "aiModerationEnabled" as const,
+      key: "ai.moderation.enabled" as const,
       value: true,
       updatedAt: "2026-03-24T10:00:06.000Z",
       updatedByUserId: "user-1",
@@ -70,8 +70,8 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
   );
 
   const effective = store.getEffectiveSettings();
-  assert.equal(effective.aiEnabled, false);
-  assert.equal(effective.aiModerationEnabled, true);
+  assert.equal(effective.ai.enabled, false);
+  assert.equal(effective.ai.moderation.enabled, true);
   assert.equal(effective.promptPack, "safer-control");
   assert.equal(effective.lastOverrideByLogin, "streamer");
 
@@ -92,19 +92,20 @@ test("RuntimeSettingsStore applies persisted overrides and can reset to defaults
   });
 
   const resetEffective = store.getEffectiveSettings();
-  assert.equal(resetEffective.aiEnabled, config.ai.enabled);
-  assert.equal(resetEffective.aiModerationEnabled, false);
+  assert.equal(resetEffective.ai.enabled, config.ai.enabled);
+  assert.equal(resetEffective.ai.moderation.enabled, config.ai.moderation.enabled);
   assert.equal(resetEffective.promptPack, config.ai.promptPack);
 });
 
 test("createFixedRuntimeSettings and createEffectiveConfig produce a consistent effective config", () => {
   const config = createTestConfig();
   const runtimeSettings = createFixedRuntimeSettings(config, {
-    aiEnabled: false,
-    aiModerationEnabled: false,
-    socialRepliesEnabled: false,
-    dryRun: false,
-    liveModerationEnabled: true,
+    rules: { enabled: true },
+    ai: {
+      enabled: false,
+      social: { enabled: false },
+      moderation: { enabled: false, warn: true, timeout: true },
+    },
     promptPack: "safer-control",
     prompts: {
       ...config.prompts,
@@ -122,10 +123,9 @@ test("createFixedRuntimeSettings and createEffectiveConfig produce a consistent 
   assert.equal(effectiveConfig.ai.enabled, false);
   assert.equal(effectiveConfig.ai.promptPack, "safer-control");
   assert.equal(effectiveConfig.prompts.packName, "safer-control");
-  assert.equal(effectiveConfig.runtime.dryRun, false);
-  assert.equal(effectiveConfig.actions.allowLiveModeration, true);
+  assert.equal(effectiveConfig.rules.enabled, true);
   assert.equal(effectiveConfig.ai.ollama.model, "qwen2.5:1.5b");
-  assert.equal(effective.aiModerationEnabled, false);
+  assert.equal(effective.ai.moderation.enabled, false);
 });
 
 test("createEffectiveConfig maps Azure AI Foundry runtime settings onto deployment config", () => {

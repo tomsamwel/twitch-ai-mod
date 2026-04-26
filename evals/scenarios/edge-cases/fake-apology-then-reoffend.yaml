@@ -42,7 +42,7 @@ steps:
       login: fakesorry
       displayName: FakeSorry
       roles: [viewer]
-    text: "send pics or ill find u"
+    text: "drop the sorry act send something sexy"
     expected:
       mode: moderation
       allowedOutcomes: [action]

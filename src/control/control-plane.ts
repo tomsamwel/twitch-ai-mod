@@ -20,6 +20,33 @@ import type { TwurpleTwitchGateway } from "../twitch/twitch-gateway.js";
 /** Twitch whispers are capped at 500 chars; leave headroom for framing. */
 const WHISPER_MAX_CHARS = 450;
 
+function lookupByKey(source: unknown, key: string): unknown {
+  return key.split(".").reduce<unknown>((acc, part) => {
+    if (acc && typeof acc === "object" && part in acc) {
+      return (acc as Record<string, unknown>)[part];
+    }
+    return undefined;
+  }, source);
+}
+
+function flattenOverrides(
+  source: Record<string, unknown>,
+  skipKeys: Set<string>,
+  prefix = "",
+): Array<[string, unknown]> {
+  const out: Array<[string, unknown]> = [];
+  for (const [key, value] of Object.entries(source)) {
+    if (skipKeys.has(key) || value === undefined) continue;
+    const dotted = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      out.push(...flattenOverrides(value as Record<string, unknown>, skipKeys, dotted));
+    } else {
+      out.push([dotted, value]);
+    }
+  }
+  return out;
+}
+
 function formatTimeAgo(isoTimestamp: string): string {
   const seconds = Math.floor((Date.now() - new Date(isoTimestamp).getTime()) / 1000);
   if (seconds < 60) return `${seconds}s`;
@@ -31,9 +58,9 @@ export class WhisperControlPlane {
   private readonly controllersByUserId: Map<string, TrustedController>;
 
   private static readonly FULL_ACCESS: Set<ControlCommand["kind"]> = new Set([
-    "help", "status", "set-ai", "set-ai-moderation", "set-social", "set-greetings",
-    "set-greet-first-message", "set-greet-on-join", "set-dry-run",
-    "set-live-moderation", "set-pack", "set-model", "reset", "panic", "chill", "off",
+    "help", "status", "set-rules", "set-ai", "set-social", "set-mod", "set-warn",
+    "set-timeout", "set-greetings", "set-greet-first-message", "set-greet-on-join",
+    "set-pack", "set-model", "reset", "panic", "chill", "off",
     "recent", "stats", "exempt", "block", "purge",
   ]);
 
@@ -165,11 +192,12 @@ export class WhisperControlPlane {
             `${this.commandPrefix} status`,
             `${this.commandPrefix} recent [N]`,
             `${this.commandPrefix} stats`,
+            `${this.commandPrefix} rules on|off`,
             `${this.commandPrefix} ai on|off`,
-            `${this.commandPrefix} aim on|off`,
-            `${this.commandPrefix} soc on|off`,
-            `${this.commandPrefix} dry on|off`,
-            `${this.commandPrefix} live on|off`,
+            `${this.commandPrefix} social on|off`,
+            `${this.commandPrefix} mod on|off`,
+            `${this.commandPrefix} warn on|off`,
+            `${this.commandPrefix} timeout on|off`,
             `${this.commandPrefix} pack|model <name>`,
             `${this.commandPrefix} exempt|unexempt <user>`,
             `${this.commandPrefix} block|unblock <term>`,
@@ -180,23 +208,17 @@ export class WhisperControlPlane {
           changes: [],
         };
       case "status": {
-        const liveModerationEffective = settings.liveModerationEnabled && !settings.dryRun;
-        const aiModerationEffective =
-          settings.aiEnabled &&
-          settings.aiModerationEnabled &&
-          settings.liveModerationEnabled &&
-          !settings.dryRun;
         const modelLabel = settings.modelPreset ?? `${settings.provider}:${settings.model}`;
+        const modOn = settings.ai.moderation.enabled;
         return {
           accepted: true,
           success: true,
           commandSummary: "status",
           replyMessage: [
-            `ai=${settings.aiEnabled ? "on" : "off"}`,
-            `ai-moderation=${settings.aiModerationEnabled ? "on" : "off"} (effective ${aiModerationEffective ? "on" : "off"})`,
-            `social=${settings.socialRepliesEnabled ? "on" : "off"}`,
-            `dry-run=${settings.dryRun ? "on" : "off"}`,
-            `live-moderation=${settings.liveModerationEnabled ? "on" : "off"} (effective ${liveModerationEffective ? "on" : "off"})`,
+            `rules=${settings.rules.enabled ? "on" : "off"}`,
+            `ai=${settings.ai.enabled ? "on" : "off"}`,
+            `social=${settings.ai.social.enabled ? "on" : "off"}`,
+            `mod=${modOn ? "on" : "off"} (warn=${settings.ai.moderation.warn ? "on" : "off"} timeout=${settings.ai.moderation.timeout ? "on" : "off"})`,
             `pack=${settings.promptPack}`,
             `model=${modelLabel}`,
             `last-override=${settings.lastOverrideAt ?? "none"}`,
@@ -205,39 +227,73 @@ export class WhisperControlPlane {
           changes: [],
         };
       }
+      case "set-rules":
+        return this.applyOverride(
+          "rules.enabled",
+          command.enabled,
+          actor,
+          `rules ${command.enabled ? "on" : "off"}`,
+          true,
+        );
       case "set-ai":
         return this.applyOverride(
-          "aiEnabled",
+          "ai.enabled",
           command.enabled,
           actor,
           `ai ${command.enabled ? "on" : "off"}`,
         );
-      case "set-ai-moderation": {
-        const result = this.applyOverride(
-          "aiModerationEnabled",
+      case "set-social":
+        return this.applyOverride(
+          "ai.social.enabled",
           command.enabled,
           actor,
-          `ai-moderation ${command.enabled ? "on" : "off"}`,
+          `social ${command.enabled ? "on" : "off"}`,
+        );
+      case "set-mod": {
+        const result = this.applyOverride(
+          "ai.moderation.enabled",
+          command.enabled,
+          actor,
+          `mod ${command.enabled ? "on" : "off"}`,
           true,
         );
         this.logger.warn(
           {
             actorLogin: message.senderUserLogin,
             actorUserId: message.senderUserId,
-            previousValue: settings.aiModerationEnabled,
+            previousValue: settings.ai.moderation.enabled,
             nextValue: command.enabled,
           },
-          "AI live moderation runtime setting changed via whisper control",
+          "AI moderation master runtime setting changed via whisper control",
         );
         return result;
       }
-      case "set-social":
+      case "set-warn":
         return this.applyOverride(
-          "socialRepliesEnabled",
+          "ai.moderation.warn",
           command.enabled,
           actor,
-          `social ${command.enabled ? "on" : "off"}`,
+          `warn ${command.enabled ? "on" : "off"}`,
         );
+      case "set-timeout": {
+        const result = this.applyOverride(
+          "ai.moderation.timeout",
+          command.enabled,
+          actor,
+          `timeout ${command.enabled ? "on" : "off"}`,
+          true,
+        );
+        this.logger.warn(
+          {
+            actorLogin: message.senderUserLogin,
+            actorUserId: message.senderUserId,
+            previousValue: settings.ai.moderation.timeout,
+            nextValue: command.enabled,
+          },
+          "AI timeout gate runtime setting changed via whisper control",
+        );
+        return result;
+      }
       case "set-greetings":
         return this.applyOverride(
           "greetingsEnabled",
@@ -259,32 +315,6 @@ export class WhisperControlPlane {
           actor,
           `greet-on-join ${command.enabled ? "on" : "off"}`,
         );
-      case "set-dry-run":
-        return this.applyOverride(
-          "dryRun",
-          command.enabled,
-          actor,
-          `dry-run ${command.enabled ? "on" : "off"}`,
-        );
-      case "set-live-moderation": {
-        const result = this.applyOverride(
-          "liveModerationEnabled",
-          command.enabled,
-          actor,
-          `live-moderation ${command.enabled ? "on" : "off"}`,
-          true,
-        );
-        this.logger.warn(
-          {
-            actorLogin: message.senderUserLogin,
-            actorUserId: message.senderUserId,
-            previousValue: settings.liveModerationEnabled,
-            nextValue: command.enabled,
-          },
-          "live moderation runtime setting changed via whisper control",
-        );
-        return result;
-      }
       case "set-pack": {
         if (!this.runtimeSettings.listAvailablePromptPacks().includes(command.packName)) {
           return {
@@ -331,10 +361,12 @@ export class WhisperControlPlane {
       case "panic": {
         const changes = this.applyBatch(
           [
-            ["aiEnabled", true],
-            ["aiModerationEnabled", true],
-            ["liveModerationEnabled", true],
-            ["dryRun", false],
+            ["rules.enabled", true],
+            ["ai.enabled", true],
+            ["ai.social.enabled", true],
+            ["ai.moderation.enabled", true],
+            ["ai.moderation.warn", true],
+            ["ai.moderation.timeout", true],
           ],
           settings,
           actor,
@@ -343,7 +375,7 @@ export class WhisperControlPlane {
           accepted: true,
           success: true,
           commandSummary: "panic",
-          replyMessage: "PANIC MODE: AI + moderation + live-mod ON, dry-run OFF.",
+          replyMessage: "PANIC MODE: everything ON.",
           highRisk: true,
           changes,
         };
@@ -351,9 +383,10 @@ export class WhisperControlPlane {
       case "chill": {
         const changes = this.applyBatch(
           [
-            ["aiEnabled", true],
-            ["socialRepliesEnabled", true],
-            ["aiModerationEnabled", false],
+            ["rules.enabled", true],
+            ["ai.enabled", true],
+            ["ai.social.enabled", true],
+            ["ai.moderation.enabled", false],
           ],
           settings,
           actor,
@@ -362,14 +395,17 @@ export class WhisperControlPlane {
           accepted: true,
           success: true,
           commandSummary: "chill",
-          replyMessage: "CHILL MODE: AI + social ON, moderation OFF.",
+          replyMessage: "CHILL MODE: rules + social ON, moderation OFF.",
           highRisk: false,
           changes,
         };
       }
       case "off": {
         const changes = this.applyBatch(
-          [["aiEnabled", false]],
+          [
+            ["rules.enabled", false],
+            ["ai.enabled", false],
+          ],
           settings,
           actor,
         );
@@ -377,7 +413,7 @@ export class WhisperControlPlane {
           accepted: true,
           success: true,
           commandSummary: "off",
-          replyMessage: "AI disabled.",
+          replyMessage: "OFF: rules + AI both disabled.",
           highRisk: false,
           changes,
         };
@@ -430,13 +466,13 @@ export class WhisperControlPlane {
     previousExemptUsers: Array<{ userLogin: string }>,
     previousBlockedTerms: Array<{ term: string }>,
   ): ControlCommandResult["changes"] {
-    const changes: ControlCommandResult["changes"] = Object.entries(previousOverrides)
-      .filter(([key, value]) => !["updatedAt", "updatedByUserId", "updatedByLogin"].includes(key) && value !== undefined)
-      .map(([key, value]) => ({
-        key: key as RuntimeOverrideKey,
-        previousValue: value,
-        nextValue: null,
-      }));
+    const metaKeys = new Set(["updatedAt", "updatedByUserId", "updatedByLogin"]);
+    const flat = flattenOverrides(previousOverrides as unknown as Record<string, unknown>, metaKeys);
+    const changes: ControlCommandResult["changes"] = flat.map(([key, value]) => ({
+      key: key as RuntimeOverrideKey,
+      previousValue: value,
+      nextValue: null,
+    }));
 
     if (previousExemptUsers.length > 0) {
       changes.push({
@@ -574,12 +610,13 @@ export class WhisperControlPlane {
 
   private applyBatch(
     overrides: Array<[RuntimeOverrideKey, boolean]>,
-    settings: { [K in RuntimeOverrideKey]?: unknown },
+    settings: unknown,
     actor: { userId: string; login: string },
   ): ControlCommandResult["changes"] {
     const changes: ControlCommandResult["changes"] = [];
+    const currentOverrides = this.runtimeSettings.getOverrides();
     for (const [key, value] of overrides) {
-      const previousValue = this.runtimeSettings.getOverrides()[key] ?? settings[key];
+      const previousValue = lookupByKey(currentOverrides, key) ?? lookupByKey(settings, key);
       this.runtimeSettings.setOverride(key, value, actor);
       changes.push({ key, previousValue, nextValue: value });
     }
@@ -593,7 +630,9 @@ export class WhisperControlPlane {
     commandSummary: string,
     highRisk = false,
   ): ControlCommandResult {
-    const previousValue = this.runtimeSettings.getOverrides()[key] ?? this.runtimeSettings.getEffectiveSettings()[key];
+    const previousValue =
+      lookupByKey(this.runtimeSettings.getOverrides(), key) ??
+      lookupByKey(this.runtimeSettings.getEffectiveSettings(), key);
     this.runtimeSettings.setOverride(key, value, actor);
 
     return {

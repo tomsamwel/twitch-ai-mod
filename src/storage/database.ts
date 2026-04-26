@@ -1214,14 +1214,14 @@ export class BotDatabase {
   public addRuntimeBlockedTerm(term: string, actorLogin: string): boolean {
     const result = this.database
       .prepare(`INSERT OR IGNORE INTO runtime_blocked_terms (term, added_by_login, created_at) VALUES (?, ?, ?)`)
-      .run(normalizeLogin(term), actorLogin, new Date().toISOString());
+      .run(term.trim(), actorLogin, new Date().toISOString());
     return result.changes > 0;
   }
 
   public removeRuntimeBlockedTerm(term: string): boolean {
     const result = this.database
       .prepare(`DELETE FROM runtime_blocked_terms WHERE term = ?`)
-      .run(normalizeLogin(term));
+      .run(term.trim());
     return result.changes > 0;
   }
 

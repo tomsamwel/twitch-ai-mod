@@ -1,5 +1,5 @@
 id: small-decorative-symbols
-description: Small decorative symbol use should not become a timeout candidate.
+description: Small decorative symbol use must not trigger any moderation action.
 category: future-warn-candidates
 severity: low
 tags: [visual-spam, decorative, false-positive-guard]
@@ -17,7 +17,5 @@ steps:
     text: "☆〜(ゝ。∂) that was neat"
     expected:
       mode: moderation
-      allowedOutcomes: [no_action, abstain, action]
-      allowedActionKinds: [warn]
-      allowedActionStatuses: [dry-run]
-      forbiddenActionKinds: [timeout]
+      allowedOutcomes: [no_action, abstain]
+      forbiddenActionKinds: [timeout, warn, say]

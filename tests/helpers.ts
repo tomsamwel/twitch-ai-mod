@@ -20,11 +20,13 @@ export function createTestConfig(): ConfigSnapshot {
       environment: "test",
     },
     runtime: {
-      dryRun: true,
       logLevel: "info",
       tokenValidationIntervalMinutes: 60,
       eventSubDisconnectGraceSeconds: 600,
       exitOnEventSubStall: true,
+    },
+    rules: {
+      enabled: true,
     },
     storage: {
       sqlitePath: "/tmp/twitch-ai-mod-test/data/test.sqlite",
@@ -68,6 +70,8 @@ export function createTestConfig(): ConfigSnapshot {
     },
     ai: {
       enabled: true,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
       provider: "ollama",
       promptPack: "witty-mod",
       requestDefaults: {
@@ -104,7 +108,6 @@ export function createTestConfig(): ConfigSnapshot {
     },
     actions: {
       allowLiveChatMessages: true,
-      allowLiveModeration: false,
     },
     cooldowns: {
       chat: {

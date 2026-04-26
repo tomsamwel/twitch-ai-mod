@@ -161,7 +161,6 @@ app:
   name: twitch-ai-mod
   environment: test
 runtime:
-  dryRun: true
   logLevel: info
   tokenValidationIntervalMinutes: 60
 storage:
@@ -195,7 +194,6 @@ ai:
     model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
 `,
     );
 
@@ -229,7 +227,6 @@ app:
   name: twitch-ai-mod
   environment: test
 runtime:
-  dryRun: true
   logLevel: info
   tokenValidationIntervalMinutes: 60
 storage:
@@ -261,7 +258,6 @@ ai:
     model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
 `,
     );
 
@@ -286,7 +282,6 @@ app:
   name: twitch-ai-mod
   environment: test
 runtime:
-  dryRun: true
   logLevel: info
   tokenValidationIntervalMinutes: 60
 storage:
@@ -320,7 +315,6 @@ ai:
     model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
 `,
     );
 
@@ -348,7 +342,6 @@ app:
   name: twitch-ai-mod
   environment: test
 runtime:
-  dryRun: true
   logLevel: info
   tokenValidationIntervalMinutes: 60
 storage:
@@ -386,7 +379,6 @@ ai:
     apiStyle: chat-completions
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
 `,
     );
 
@@ -412,7 +404,6 @@ app:
   name: twitch-ai-mod
   environment: test
 runtime:
-  dryRun: true
   logLevel: info
   tokenValidationIntervalMinutes: 60
 storage:
@@ -446,7 +437,6 @@ ai:
     model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
 `,
     );
 
@@ -473,7 +463,6 @@ app:
   name: twitch-ai-mod
   environment: test
 runtime:
-  dryRun: true
   logLevel: info
   tokenValidationIntervalMinutes: 60
 storage:
@@ -508,7 +497,6 @@ ai:
     model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
 `,
     );
 
@@ -534,7 +522,6 @@ app:
   name: twitch-ai-mod
   environment: test
 runtime:
-  dryRun: true
   logLevel: info
   tokenValidationIntervalMinutes: 60
 storage:
@@ -568,7 +555,6 @@ ai:
     model: gpt-4o-mini
 actions:
   allowLiveChatMessages: true
-  allowLiveModeration: false
 `,
     );
 

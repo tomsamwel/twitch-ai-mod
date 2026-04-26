@@ -57,19 +57,31 @@ Login overrides apply only when running the live bot (`npm run dev`). Eval, repl
   Broadcaster login, bot login, required scopes, channel rules.
 - `ai`
   Provider selection, request defaults, context limits, provider-specific endpoints/models.
+- `rules`
+  Deterministic rules gate (`rules.enabled`).
 - `actions`
-  Live chat send and live moderation gates.
+  Twitch chat-send gate (`actions.allowLiveChatMessages`).
 
-Important live flags:
+Live behavior is controlled by a nested tree of toggles. Each does exactly what its name says:
 
-- `runtime.dryRun: true`
-  No real send or moderation actions.
-- `runtime.dryRun: false` and `actions.allowLiveChatMessages: true`
-  Allows real chat sends.
-- `runtime.dryRun: false` and `actions.allowLiveModeration: true`
-  Allows real timeout actions.
+```yaml
+rules:
+  enabled: true          # deterministic rules may execute warns + timeouts
+ai:
+  enabled: true          # master AI toggle
+  social:
+    enabled: true        # AI replies in chat
+  moderation:
+    enabled: false       # default OFF — explicit opt-in
+    warn: true           # when moderation.enabled, AI warns execute
+    timeout: true        # when moderation.enabled, AI timeouts execute
+actions:
+  allowLiveChatMessages: true  # master Twitch chat-send gate
+```
 
-For safe rollout, enable chat send before moderation.
+Flipping `ai.moderation.enabled: true` is the single deliberate step to enable AI moderation. To observe AI moderation decisions without acting, set `moderation.enabled: true, warn: false, timeout: false` — the AI will still produce decisions for the review inbox.
+
+There is no `runtime.dryRun` flag — eval/replay/approval scripts automatically get dry-run status via `processingMode !== "live"`.
 
 EventSub resilience settings:
 - `runtime.eventSubDisconnectGraceSeconds`

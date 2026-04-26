@@ -123,12 +123,34 @@ test("addRuntimeBlockedTerm inserts and listRuntimeBlockedTerms returns it", () 
   }
 });
 
-test("addRuntimeBlockedTerm normalizes to lowercase", () => {
+test("addRuntimeBlockedTerm preserves case (rule engine matches case-insensitively at runtime)", () => {
   const { db, cleanup } = createTempDb();
   try {
     db.addRuntimeBlockedTerm("BUY CHEAP FOLLOWERS", "mod");
     const list = db.listRuntimeBlockedTerms();
-    assert.equal(list[0]!.term, "buy cheap followers");
+    assert.equal(list[0]!.term, "BUY CHEAP FOLLOWERS");
+  } finally {
+    cleanup();
+  }
+});
+
+test("addRuntimeBlockedTerm trims surrounding whitespace", () => {
+  const { db, cleanup } = createTempDb();
+  try {
+    db.addRuntimeBlockedTerm("  spammy phrase  ", "mod");
+    const list = db.listRuntimeBlockedTerms();
+    assert.equal(list[0]!.term, "spammy phrase");
+  } finally {
+    cleanup();
+  }
+});
+
+test("removeRuntimeBlockedTerm matches exact stored casing", () => {
+  const { db, cleanup } = createTempDb();
+  try {
+    db.addRuntimeBlockedTerm("ScaM!!!", "mod");
+    assert.equal(db.removeRuntimeBlockedTerm("ScaM!!!"), true);
+    assert.equal(db.listRuntimeBlockedTerms().length, 0);
   } finally {
     cleanup();
   }
@@ -159,7 +181,7 @@ test("removeRuntimeBlockedTerm removes and returns true, then false", () => {
 test("clearRuntimeControlState clears overrides, exemptions, and blocked terms but preserves runtime controllers", () => {
   const { db, cleanup } = createTempDb();
   try {
-    db.setRuntimeOverride("aiEnabled", false, { userId: "admin-1", login: "local-admin" });
+    db.setRuntimeOverride("ai.enabled", false, { userId: "admin-1", login: "local-admin" });
     db.addExemptUser("vipviewer", "local-admin");
     db.addRuntimeBlockedTerm("spam phrase", "local-admin");
     db.upsertRuntimeController({

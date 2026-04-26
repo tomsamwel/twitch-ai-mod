@@ -17,8 +17,8 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [abstain, action]
-      allowedActionKinds: [warn]
-      forbiddenActionKinds: [timeout, say]
+      allowedActionKinds: [warn, timeout]
+      forbiddenActionKinds: [say]
 
   - at: "2026-03-25T17:21:00.000Z"
     actor:
@@ -30,5 +30,5 @@ steps:
     expected:
       mode: moderation
       allowedOutcomes: [action, abstain]
-      allowedActionKinds: [warn]
+      allowedActionKinds: [warn, timeout]
       forbiddenActionKinds: [say]

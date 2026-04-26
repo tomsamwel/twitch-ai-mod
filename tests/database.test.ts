@@ -50,7 +50,7 @@ test("BotDatabase persists runtime overrides across reopen", async () => {
   const firstDatabase = new BotDatabase(sqlitePath);
 
   try {
-    firstDatabase.setRuntimeOverride("aiEnabled", false, {
+    firstDatabase.setRuntimeOverride("ai.enabled", false, {
       userId: "user-1",
       login: "streamer",
     });
@@ -67,7 +67,7 @@ test("BotDatabase persists runtime overrides across reopen", async () => {
   try {
     const overrides = secondDatabase.listRuntimeOverrides();
     assert.equal(overrides.length, 2);
-    assert.equal(overrides[0]?.key, "aiEnabled");
+    assert.equal(overrides[0]?.key, "ai.enabled");
     assert.equal(overrides[0]?.value, false);
     assert.equal(overrides[1]?.key, "modelPreset");
     assert.equal(overrides[1]?.value, "local-fast");

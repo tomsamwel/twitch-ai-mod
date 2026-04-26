@@ -201,7 +201,7 @@ export function buildReviewInboxReport(options: {
         action.kind === "timeout" &&
         action.source === "ai" &&
         action.status === "skipped" &&
-        effectiveReason === "AI timeout blocked by precision gate"
+        effectiveReason.startsWith("AI timeout blocked by precision gate")
       ) {
         reasons.add("precision-gated-timeout");
       }

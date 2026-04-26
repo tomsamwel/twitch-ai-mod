@@ -18,4 +18,4 @@ steps:
       allowedOutcomes: [abstain, action]
       allowedActionKinds: [warn]
       allowedActionStatuses: [dry-run]
-      forbiddenActionKinds: [timeout]
+      forbiddenActionKinds: [timeout, say]

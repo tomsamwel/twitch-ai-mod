@@ -2,9 +2,11 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { Logger } from "pino";
 
-import { getConfiguredModel } from "../ai/provider-config.js";
+import { getProviderSettings, withProviderSettings } from "../ai/provider-config.js";
 import { LlamaServerManager } from "../admin/llama-server-manager.js";
 import type { AiProviderKind, ConfigSnapshot } from "../types.js";
+
+export { getConfiguredModel as getActiveModel } from "../ai/provider-config.js";
 
 export interface NonLiveScriptOptions {
   provider?: AiProviderKind;
@@ -19,30 +21,25 @@ export function applyNonLiveScriptOverrides(
   const provider = options.provider ?? nextConfig.ai.provider;
 
   nextConfig.ai.provider = provider;
-  nextConfig.runtime.dryRun = true;
+  nextConfig.rules.enabled = false;
+  nextConfig.ai.social.enabled = false;
+  nextConfig.ai.moderation.enabled = false;
+  nextConfig.ai.moderation.warn = false;
+  nextConfig.ai.moderation.timeout = false;
   nextConfig.actions.allowLiveChatMessages = false;
-  nextConfig.actions.allowLiveModeration = false;
 
   if (options.model) {
-    if (provider === "ollama") {
-      nextConfig.ai.ollama.model = options.model;
-    } else if (provider === "azure-foundry") {
-      if (!nextConfig.ai.azureFoundry) {
-        throw new Error("ai.azureFoundry configuration is required when provider is azure-foundry");
-      }
-      nextConfig.ai.azureFoundry.deployment = options.model;
-    } else if (provider === "llama-cpp" && nextConfig.ai.llamaCpp) {
-      nextConfig.ai.llamaCpp.model = options.model;
-    } else {
-      nextConfig.ai.openai.model = options.model;
+    const current = getProviderSettings(nextConfig, provider);
+    if (!current) {
+      throw new Error(`ai.${provider === "azure-foundry" ? "azureFoundry" : "llamaCpp"} configuration is required when provider is ${provider}`);
     }
+    nextConfig.ai = withProviderSettings(nextConfig.ai, provider, {
+      baseUrl: current.baseUrl,
+      model: options.model,
+    });
   }
 
   return nextConfig;
-}
-
-export function getActiveModel(config: Pick<ConfigSnapshot, "ai">): string {
-  return getConfiguredModel(config);
 }
 
 export async function ensureLlamaServer(

@@ -79,7 +79,6 @@ export class ChatterPollService {
 
       if (!this.tracker.shouldGreet(id, nowMs, this.getQueueDepth(), this.greetingConfig)) continue;
 
-      this.tracker.markGreeted(id, nowMs);
       toGreet.push({ id, login: chatter.userName, displayName: chatter.userDisplayName });
     }
 

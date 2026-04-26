@@ -136,7 +136,7 @@ Review/inbox and admin activity views default to live-mode rows. Replay and scen
 ## Operational Notes
 
 - Twurple `8.x` is ESM-only, so the project uses `NodeNext`/ESM.
-- Real moderation requires both `dryRun: false` and `allowLiveModeration: true`.
+- Real moderation is gated by the nested config tree: rules-sourced timeouts need `rules.enabled`; AI-sourced timeouts additionally need `ai.enabled && ai.moderation.enabled && ai.moderation.timeout`.
 - Live AI timeout execution is narrower than general AI moderation:
   only allowlisted moderation categories with sufficient confidence can execute, and spam-escalation also needs repeat evidence or a recent corrective interaction.
 - Scenario approval is precision-first:

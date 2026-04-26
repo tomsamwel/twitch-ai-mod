@@ -34,7 +34,7 @@ steps:
         - action
       allowedActionKinds:
         - warn
+        - timeout
       allowedActionStatuses:
         - dry-run
-      forbiddenActionKinds:
-        - timeout
+        - skipped

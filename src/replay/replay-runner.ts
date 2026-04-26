@@ -62,11 +62,12 @@ export async function runReplayEvaluation(options: ReplayEvaluationOptions): Pro
   const ruleEngine = new RuleEngine(options.config, cooldowns);
   const contextBuilder = new AiContextBuilder(options.config, options.database);
   const runtimeSettings = createFixedRuntimeSettings(options.config, {
-    aiEnabled: options.config.ai.enabled,
-    aiModerationEnabled: false,
-    socialRepliesEnabled: true,
-    dryRun: true,
-    liveModerationEnabled: false,
+    rules: { enabled: true },
+    ai: {
+      enabled: options.config.ai.enabled,
+      social: { enabled: true },
+      moderation: { enabled: true, warn: true, timeout: true },
+    },
   });
   const aiProviders = options.aiProvider
     ? {

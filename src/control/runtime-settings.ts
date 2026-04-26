@@ -1,5 +1,6 @@
 import type { Logger } from "pino";
 
+import { getProviderSettings, withProviderSettings } from "../ai/provider-config.js";
 import type { BotDatabase } from "../storage/database.js";
 import type {
   ConfigSnapshot,
@@ -9,29 +10,11 @@ import type {
   RuntimeOverrideSnapshot,
 } from "../types.js";
 
-function getProviderConfig(
-  config: ConfigSnapshot,
-  provider: ConfigSnapshot["ai"]["provider"],
-): { baseUrl: string; model: string } | undefined {
-  if (provider === "ollama") return config.ai.ollama;
-  if (provider === "llama-cpp") return config.ai.llamaCpp;
-  if (provider === "azure-foundry") {
-    return config.ai.azureFoundry
-      ? {
-          baseUrl: config.ai.azureFoundry.baseUrl,
-          model: config.ai.azureFoundry.deployment,
-        }
-      : undefined;
-  }
-  if (provider === "openai") return config.ai.openai;
-  return undefined;
-}
-
 function matchesModelPreset(
   config: ConfigSnapshot,
   preset: { provider: ConfigSnapshot["ai"]["provider"]; baseUrl: string; model: string },
 ): boolean {
-  const providerConfig = getProviderConfig(config, preset.provider);
+  const providerConfig = getProviderSettings(config, preset.provider);
   if (!providerConfig) return false;
   return (
     config.ai.provider === preset.provider &&
@@ -62,19 +45,28 @@ export function buildEffectiveRuntimeSettings(
   const selectedPreset = rawPreset && rawPreset in baseConfig.controlPlane.modelPresets ? rawPreset : null;
   const preset = selectedPreset ? baseConfig.controlPlane.modelPresets[selectedPreset] : null;
   const provider = preset?.provider ?? baseConfig.ai.provider;
-  const defaultProviderConfig = getProviderConfig(baseConfig, provider);
+  const defaultProviderConfig = getProviderSettings(baseConfig, provider);
   const providerBaseUrl = preset?.baseUrl ?? defaultProviderConfig?.baseUrl ?? baseConfig.ai.ollama.baseUrl;
   const model = preset?.model ?? defaultProviderConfig?.model ?? baseConfig.ai.ollama.model;
 
   return {
-    aiEnabled: overrides.aiEnabled ?? baseConfig.ai.enabled,
-    aiModerationEnabled: overrides.aiModerationEnabled ?? false,
-    socialRepliesEnabled: overrides.socialRepliesEnabled ?? true,
+    rules: {
+      enabled: overrides.rules?.enabled ?? baseConfig.rules.enabled,
+    },
+    ai: {
+      enabled: overrides.ai?.enabled ?? baseConfig.ai.enabled,
+      social: {
+        enabled: overrides.ai?.social?.enabled ?? baseConfig.ai.social.enabled,
+      },
+      moderation: {
+        enabled: overrides.ai?.moderation?.enabled ?? baseConfig.ai.moderation.enabled,
+        warn: overrides.ai?.moderation?.warn ?? baseConfig.ai.moderation.warn,
+        timeout: overrides.ai?.moderation?.timeout ?? baseConfig.ai.moderation.timeout,
+      },
+    },
     greetingsEnabled: overrides.greetingsEnabled ?? (baseConfig.social?.greetings?.enabled ?? false),
     greetFirstMessage: overrides.greetFirstMessage ?? (baseConfig.social?.greetings?.onFirstMessage ?? true),
     greetOnJoin: overrides.greetOnJoin ?? (baseConfig.social?.greetings?.onChatterJoin ?? false),
-    dryRun: overrides.dryRun ?? baseConfig.runtime.dryRun,
-    liveModerationEnabled: overrides.liveModerationEnabled ?? baseConfig.actions.allowLiveModeration,
     promptPack: promptPackName,
     prompts,
     modelPreset: selectedPreset,
@@ -90,54 +82,21 @@ export function createEffectiveConfig(
   baseConfig: ConfigSnapshot,
   settings: EffectiveRuntimeSettings,
 ): ConfigSnapshot {
+  const aiWithProvider = withProviderSettings(baseConfig.ai, settings.provider, {
+    baseUrl: settings.providerBaseUrl,
+    model: settings.model,
+  });
   return {
     ...baseConfig,
-    runtime: {
-      ...baseConfig.runtime,
-      dryRun: settings.dryRun,
-    },
     prompts: settings.prompts,
+    rules: settings.rules,
     ai: {
-      ...baseConfig.ai,
-      enabled: settings.aiEnabled,
+      ...aiWithProvider,
+      enabled: settings.ai.enabled,
+      social: settings.ai.social,
+      moderation: settings.ai.moderation,
       promptPack: settings.promptPack,
       provider: settings.provider,
-      ollama:
-        settings.provider === "ollama"
-          ? {
-              ...baseConfig.ai.ollama,
-              baseUrl: settings.providerBaseUrl,
-              model: settings.model,
-            }
-          : baseConfig.ai.ollama,
-      openai:
-        settings.provider === "openai"
-          ? {
-              ...baseConfig.ai.openai,
-              baseUrl: settings.providerBaseUrl,
-              model: settings.model,
-            }
-          : baseConfig.ai.openai,
-      azureFoundry:
-        settings.provider === "azure-foundry"
-          ? {
-              baseUrl: settings.providerBaseUrl,
-              deployment: settings.model,
-              apiStyle: baseConfig.ai.azureFoundry?.apiStyle ?? "chat-completions",
-            }
-          : baseConfig.ai.azureFoundry,
-      llamaCpp:
-        settings.provider === "llama-cpp" && baseConfig.ai.llamaCpp
-          ? {
-              ...baseConfig.ai.llamaCpp,
-              baseUrl: settings.providerBaseUrl,
-              model: settings.model,
-            }
-          : baseConfig.ai.llamaCpp,
-    },
-    actions: {
-      ...baseConfig.actions,
-      allowLiveModeration: settings.liveModerationEnabled,
     },
   };
 }
@@ -269,14 +228,35 @@ export class RuntimeSettingsStore {
 
     for (const row of rows) {
       switch (row.key) {
-        case "aiEnabled":
-          snapshot.aiEnabled = row.value as boolean;
+        case "rules.enabled":
+          snapshot.rules = { ...(snapshot.rules ?? {}), enabled: row.value as boolean };
           break;
-        case "aiModerationEnabled":
-          snapshot.aiModerationEnabled = row.value as boolean;
+        case "ai.enabled":
+          snapshot.ai = { ...(snapshot.ai ?? {}), enabled: row.value as boolean };
           break;
-        case "socialRepliesEnabled":
-          snapshot.socialRepliesEnabled = row.value as boolean;
+        case "ai.social.enabled":
+          snapshot.ai = {
+            ...(snapshot.ai ?? {}),
+            social: { enabled: row.value as boolean },
+          };
+          break;
+        case "ai.moderation.enabled":
+          snapshot.ai = {
+            ...(snapshot.ai ?? {}),
+            moderation: { ...(snapshot.ai?.moderation ?? {}), enabled: row.value as boolean },
+          };
+          break;
+        case "ai.moderation.warn":
+          snapshot.ai = {
+            ...(snapshot.ai ?? {}),
+            moderation: { ...(snapshot.ai?.moderation ?? {}), warn: row.value as boolean },
+          };
+          break;
+        case "ai.moderation.timeout":
+          snapshot.ai = {
+            ...(snapshot.ai ?? {}),
+            moderation: { ...(snapshot.ai?.moderation ?? {}), timeout: row.value as boolean },
+          };
           break;
         case "greetingsEnabled":
           snapshot.greetingsEnabled = row.value as boolean;
@@ -286,12 +266,6 @@ export class RuntimeSettingsStore {
           break;
         case "greetOnJoin":
           snapshot.greetOnJoin = row.value as boolean;
-          break;
-        case "dryRun":
-          snapshot.dryRun = row.value as boolean;
-          break;
-        case "liveModerationEnabled":
-          snapshot.liveModerationEnabled = row.value as boolean;
           break;
         case "promptPack":
           snapshot.promptPack = row.value as string;
